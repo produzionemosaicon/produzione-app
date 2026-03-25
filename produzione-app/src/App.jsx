@@ -323,7 +323,7 @@ export default function App() {
 
     try {
       el.style.display = "block";
-      el.style.width = "1320px";
+      el.style.width = "1480px";
 
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
