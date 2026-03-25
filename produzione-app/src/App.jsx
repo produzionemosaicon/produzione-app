@@ -790,30 +790,30 @@ function AnalisiTab({ stations, reports, anBrand, setAnBrand, anSid, setAnSid, a
 
 /* ═══ PRINT DOC ═══ */
 function PrintDoc({ date, stations, getV, getN }) {
-  const G = { display:"grid", gridTemplateColumns:"200px repeat(4,1fr)" };
+  const COL = "260px repeat(4, 1fr)";
   return (
-    <div style={{ fontFamily:FONT, background:"#fff", padding:"28px 32px" }}>
+    <div style={{ fontFamily: FONT, background: "#F0F4FA", padding: 32 }}>
 
-      {/* Header */}
-      <div data-print-row="true" style={{ background:"linear-gradient(135deg,#0A3D9C,#1A5CFF 55%,#009FCC)", padding:"20px 26px", marginBottom:28, borderRadius:14, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-          <span style={{ fontSize:36 }}>🏭</span>
+      {/* ── HEADER ── */}
+      <div data-print-row="true" style={{ background: "linear-gradient(135deg,#0A3D9C 0%,#1A5CFF 55%,#009FCC 100%)", borderRadius: 18, padding: "24px 32px", marginBottom: 32, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 8px 32px rgba(26,92,255,0.3)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+          <div style={{ width: 56, height: 56, borderRadius: 14, background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32 }}>🏭</div>
           <div>
-            <div style={{ fontSize:11, color:"rgba(255,255,255,0.65)", letterSpacing:"0.14em", textTransform:"uppercase", marginBottom:4 }}>Report Produzione Giornaliero</div>
-            <div style={{ fontSize:26, fontWeight:900, color:"#fff", letterSpacing:"0.08em" }}>MOSAICON + EMOS</div>
+            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", letterSpacing: "0.16em", textTransform: "uppercase", marginBottom: 4 }}>Report Produzione Giornaliero</div>
+            <div style={{ fontSize: 32, fontWeight: 900, color: "#fff", letterSpacing: "0.06em", lineHeight: 1 }}>MOSAICON + EMOS</div>
           </div>
         </div>
-        <div style={{ background:"rgba(255,255,255,0.2)", color:"#fff", fontFamily:MONO, fontSize:20, fontWeight:700, padding:"10px 22px", borderRadius:10 }}>{fmtD(date)}</div>
+        <div style={{ background: "rgba(255,255,255,0.2)", backdropFilter: "blur(8px)", color: "#fff", fontFamily: MONO, fontSize: 24, fontWeight: 800, padding: "12px 24px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.3)" }}>{fmtD(date)}</div>
       </div>
 
-      {["MOSAICON","EMOS"].map(brand => (
-        <div key={brand} style={{ marginBottom:32 }}>
+      {["MOSAICON", "EMOS"].map(brand => (
+        <div key={brand} style={{ marginBottom: 36, background: "#fff", borderRadius: 18, overflow: "hidden", boxShadow: "0 4px 24px rgba(13,27,42,0.08)", border: `1px solid ${BRD}` }}>
 
           {/* Brand header */}
-          <div data-print-row="true" style={{ ...G, background:bl(brand), borderLeft:`6px solid ${bc(brand)}`, padding:"12px 14px", borderRadius:"12px 12px 0 0" }}>
-            <div style={{ fontSize:17, fontWeight:900, color:bc(brand), letterSpacing:"0.12em", display:"flex", alignItems:"center" }}>{brand}</div>
+          <div data-print-row="true" style={{ display: "grid", gridTemplateColumns: COL, background: `linear-gradient(135deg, ${bc(brand)}18, ${bc(brand)}08)`, borderBottom: `2px solid ${bc(brand)}30`, padding: "0 0 0 20px", borderLeft: `6px solid ${bc(brand)}` }}>
+            <div style={{ fontSize: 22, fontWeight: 900, color: bc(brand), letterSpacing: "0.1em", display: "flex", alignItems: "center", padding: "16px 0" }}>{brand}</div>
             {TIMES.map(t => (
-              <div key={t} style={{ fontSize:16, fontWeight:800, color:bc(brand), textAlign:"center", fontFamily:MONO, borderLeft:`1px solid ${bc(brand)}30`, display:"flex", alignItems:"center", justifyContent:"center", padding:"6px 0" }}>{t}</div>
+              <div key={t} style={{ fontSize: 20, fontWeight: 800, color: bc(brand), textAlign: "center", fontFamily: MONO, borderLeft: `1px solid ${bc(brand)}20`, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px 8px" }}>{t}</div>
             ))}
           </div>
 
@@ -821,18 +821,21 @@ function PrintDoc({ date, stations, getV, getN }) {
           {stations[brand]?.map((st, i) => {
             const isTotal = !!st.isTotal;
             const hasNote = TIMES.some(t => getN(brand, st.id, t));
+            const hasAnyValue = TIMES.some(t => getV(brand, st.id, t));
             return (
-              <div key={st.id} data-print-row="true" style={{ ...G, background: isTotal ? bl(brand) : i%2===0 ? "#fff" : "#F7F9FC", borderBottom:`1px solid ${BRD}`, borderLeft: isTotal ? `6px solid ${bc(brand)}` : hasNote ? `4px solid ${ACC}` : "6px solid transparent", minHeight:58 }}>
-                <div style={{ display:"flex", alignItems:"center", padding:"10px 12px 10px 16px" }}>
-                  <span style={{ fontSize: isTotal ? 14 : 13, fontWeight: isTotal ? 900 : 700, color: isTotal ? bc(brand) : hasNote ? ACC : TXT, lineHeight:1.3 }}>{st.name}</span>
+              <div key={st.id} data-print-row="true" style={{ display: "grid", gridTemplateColumns: COL, background: isTotal ? `${bc(brand)}10` : i % 2 === 0 ? "#fff" : "#F8FAFD", borderBottom: `1px solid ${BRD}`, borderLeft: isTotal ? `6px solid ${bc(brand)}` : hasNote ? `4px solid ${ACC}` : "6px solid transparent", minHeight: 64 }}>
+                <div style={{ display: "flex", alignItems: "center", padding: "12px 16px 12px 20px", borderRight: `1px solid ${BRD}` }}>
+                  <span style={{ fontSize: isTotal ? 18 : 16, fontWeight: isTotal ? 900 : 700, color: isTotal ? bc(brand) : hasNote ? ACC : TXT, lineHeight: 1.3, letterSpacing: isTotal ? "0.04em" : 0 }}>{st.name}</span>
                 </div>
                 {TIMES.map(t => {
                   const v = getV(brand, st.id, t);
                   const n = getN(brand, st.id, t);
                   return (
-                    <div key={t} style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", borderLeft:`1px solid ${BRD}`, background: v ? `${bc(brand)}12` : "transparent", padding:"8px 6px", gap:4 }}>
-                      <span style={{ fontFamily:MONO, fontSize: v ? 26 : 17, fontWeight: v ? 800 : 400, color: v ? bc(brand) : "#C8D8E8", lineHeight:1 }}>{v || "—"}</span>
-                      {n && <span style={{ fontSize:10, color:ACC, background:ACL, border:`1px solid rgba(255,82,0,0.2)`, borderRadius:4, padding:"2px 6px" }}>{n}</span>}
+                    <div key={t} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", borderLeft: `1px solid ${BRD}`, background: v ? `${bc(brand)}10` : "transparent", padding: "10px 8px", gap: 5 }}>
+                      <span style={{ fontFamily: MONO, fontSize: v ? 34 : 20, fontWeight: v ? 900 : 400, color: v ? bc(brand) : "#C8D8E8", lineHeight: 1 }}>{v || "—"}</span>
+                      {n && (
+                        <span style={{ fontSize: 11, color: ACC, background: ACL, border: `1px solid rgba(255,82,0,0.25)`, borderRadius: 5, padding: "2px 8px", fontWeight: 700 }}>{n}</span>
+                      )}
                     </div>
                   );
                 })}
@@ -843,9 +846,9 @@ function PrintDoc({ date, stations, getV, getN }) {
       ))}
 
       {/* Footer */}
-      <div data-print-row="true" style={{ borderTop:`2px solid ${BRD}`, paddingTop:12, display:"flex", justifyContent:"space-between", fontSize:11, color:T3 }}>
-        <span style={{ fontWeight:700, letterSpacing:"0.06em" }}>RICEVERE QUALITÀ · FARE QUALITÀ · CONSEGNARE QUALITÀ</span>
-        <span style={{ fontFamily:MONO }}>{fmtD(date)}</span>
+      <div data-print-row="true" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 8px", borderTop: `2px solid ${BRD}`, marginTop: 8 }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: T2, letterSpacing: "0.08em", textTransform: "uppercase" }}>Ricevere Qualità · Fare Qualità · Consegnare Qualità</span>
+        <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: T2 }}>{fmtD(date)}</span>
       </div>
     </div>
   );
