@@ -976,43 +976,40 @@ function AnalisiTab({ stations, reports, anBrand, setAnBrand, anSid, setAnSid, a
 
 /* ═══ PRINT DOC NUOVO ═══ */
 function PrintDoc({ date, stations, getV, getN }) {
-  const COL = "430px repeat(4, 1fr)";
+  const COL = "500px repeat(4, 1fr)";
 
-  const brandTotal = (brand) => {
-    const totalStation = stations[brand]?.find((s) => s.isTotal);
-    if (!totalStation) return null;
-    return ["17:00", "15:00", "12:00", "10:00"].reduce((acc, t) => {
-      const val = getV(brand, totalStation.id, t);
-      return acc || (val && !isNaN(+val) ? val : null);
-    }, null);
+  const getHighlightStationId = (brand) => {
+    if (brand === "MOSAICON") return "m32";
+    if (brand === "EMOS") return "e18";
+    return null;
   };
 
   return (
-    <div style={{ fontFamily: FONT, background: "#EAF0F8", padding: 26 }}>
+    <div style={{ fontFamily: FONT, background: "#EAF0F8", padding: 30 }}>
       <div
         data-print-row="true"
         style={{
           background: "linear-gradient(135deg,#0A3D9C 0%,#1A5CFF 58%,#00A0D6 100%)",
-          borderRadius: 32,
-          padding: "34px 40px",
-          marginBottom: 28,
+          borderRadius: 34,
+          padding: "38px 44px",
+          marginBottom: 30,
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          boxShadow: "0 16px 36px rgba(26,92,255,0.24)",
+          boxShadow: "0 18px 40px rgba(26,92,255,0.24)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 22 }}>
           <div
             style={{
-              width: 72,
-              height: 72,
-              borderRadius: 20,
+              width: 78,
+              height: 78,
+              borderRadius: 22,
               background: "rgba(255,255,255,0.16)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 38,
+              fontSize: 42,
             }}
           >
             🏭
@@ -1020,7 +1017,7 @@ function PrintDoc({ date, stations, getV, getN }) {
           <div>
             <div
               style={{
-                fontSize: 14,
+                fontSize: 15,
                 color: "rgba(255,255,255,0.70)",
                 letterSpacing: "0.24em",
                 textTransform: "uppercase",
@@ -1032,7 +1029,7 @@ function PrintDoc({ date, stations, getV, getN }) {
             </div>
             <div
               style={{
-                fontSize: 40,
+                fontSize: 44,
                 fontWeight: 900,
                 color: "#fff",
                 letterSpacing: "0.08em",
@@ -1043,7 +1040,7 @@ function PrintDoc({ date, stations, getV, getN }) {
             </div>
             <div
               style={{
-                fontSize: 17,
+                fontSize: 18,
                 color: "rgba(255,255,255,0.84)",
                 marginTop: 12,
                 fontWeight: 500,
@@ -1058,217 +1055,231 @@ function PrintDoc({ date, stations, getV, getN }) {
           style={{
             background: "rgba(255,255,255,0.14)",
             color: "#fff",
-            padding: "18px 26px",
-            borderRadius: 18,
+            padding: "22px 30px",
+            borderRadius: 20,
             border: "1px solid rgba(255,255,255,0.22)",
             textAlign: "right",
-            minWidth: 190,
+            minWidth: 220,
           }}
         >
           <div
             style={{
-              fontSize: 11,
+              fontSize: 12,
               textTransform: "uppercase",
               letterSpacing: "0.18em",
               color: "rgba(255,255,255,0.66)",
               fontWeight: 700,
-              marginBottom: 6,
+              marginBottom: 8,
             }}
           >
             Data
           </div>
-          <div style={{ fontFamily: MONO, fontSize: 38, fontWeight: 900, lineHeight: 1 }}>
+          <div
+            style={{
+              fontFamily: MONO,
+              fontSize: 46,
+              fontWeight: 900,
+              lineHeight: 1,
+              letterSpacing: "-0.02em",
+            }}
+          >
             {fmtD(date)}
           </div>
         </div>
       </div>
 
-      {["MOSAICON", "EMOS"].map((brand) => (
-        <div
-          key={brand}
-          style={{
-            marginBottom: 30,
-            background: "#fff",
-            borderRadius: 28,
-            overflow: "hidden",
-            boxShadow: "0 8px 26px rgba(13,27,42,0.08)",
-            border: `1px solid ${BRD}`,
-          }}
-        >
+      {["MOSAICON", "EMOS"].map((brand) => {
+        const highlightId = getHighlightStationId(brand);
+
+        return (
           <div
-            data-print-row="true"
+            key={brand}
             style={{
-              display: "grid",
-              gridTemplateColumns: COL,
-              background: `linear-gradient(135deg, ${bc(brand)}14, #ffffff 72%)`,
-              borderBottom: `1px solid ${BRD}`,
+              marginBottom: 32,
+              background: "#fff",
+              borderRadius: 30,
+              overflow: "hidden",
+              boxShadow: "0 8px 26px rgba(13,27,42,0.08)",
+              border: `1px solid ${BRD}`,
             }}
           >
             <div
+              data-print-row="true"
               style={{
-                padding: "24px 28px",
-                borderLeft: `10px solid ${bc(brand)}`,
-                display: "flex",
-                alignItems: "center",
+                display: "grid",
+                gridTemplateColumns: COL,
+                background: `linear-gradient(135deg, ${bc(brand)}14, #ffffff 72%)`,
+                borderBottom: `1px solid ${BRD}`,
               }}
             >
-              <div>
-                <div
-                  style={{
-                    fontSize: 34,
-                    fontWeight: 900,
-                    color: bc(brand),
-                    letterSpacing: "0.16em",
-                    lineHeight: 1,
-                  }}
-                >
-                  {brand}
-                </div>
-                <div
-                  style={{
-                    fontSize: 18,
-                    color: T2,
-                    marginTop: 10,
-                    fontWeight: 600,
-                  }}
-                >
-                  Totale attuale: {brandTotal(brand) ?? "—"}
-                </div>
-              </div>
-            </div>
-
-            {TIMES.map((t) => (
               <div
-                key={t}
                 style={{
-                  borderLeft: `1px solid ${BRD}`,
+                  padding: "26px 30px",
+                  borderLeft: `10px solid ${bc(brand)}`,
                   display: "flex",
                   alignItems: "center",
-                  justifyContent: "center",
-                  padding: "24px 10px",
-                  background: `${bc(brand)}08`,
                 }}
               >
-                <div
-                  style={{
-                    fontFamily: MONO,
-                    fontSize: 34,
-                    fontWeight: 900,
-                    color: bc(brand),
-                    lineHeight: 1,
-                    letterSpacing: "0.03em",
-                  }}
-                >
-                  {t}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {stations[brand]?.map((st, i) => {
-            const isTotal = !!st.isTotal;
-            const hasNote = TIMES.some((t) => getN(brand, st.id, t));
-            const borderColor = isTotal ? bc(brand) : hasNote ? ACC : "transparent";
-
-            return (
-              <div
-                key={st.id}
-                data-print-row="true"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: COL,
-                  background: isTotal ? `${bc(brand)}10` : i % 2 === 0 ? "#fff" : "#F8FBFF",
-                  borderBottom: `1px solid ${BRD}`,
-                }}
-              >
-                <div
-                  style={{
-                    padding: "22px 26px",
-                    borderLeft: `10px solid ${borderColor}`,
-                    borderRight: `1px solid ${BRD}`,
-                    display: "flex",
-                    alignItems: "center",
-                    minHeight: 96,
-                  }}
-                >
-                  <div style={{ width: "100%" }}>
-                    <div
-                      style={{
-                        fontSize: isTotal ? 34 : 30,
-                        fontWeight: isTotal ? 900 : 800,
-                        color: isTotal ? bc(brand) : TXT,
-                        lineHeight: 1.1,
-                        letterSpacing: isTotal ? "0.03em" : "0.01em",
-                        wordBreak: "break-word",
-                      }}
-                    >
-                      {st.name}
-                    </div>
-
-                    {hasNote && !isTotal && (
-                      <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        {TIMES.map((t) => {
-                          const note = getN(brand, st.id, t);
-                          if (!note) return null;
-                          return (
-                            <span
-                              key={t}
-                              style={{
-                                fontSize: 11,
-                                fontWeight: 800,
-                                color: ACC,
-                                background: ACL,
-                                border: "1px solid rgba(255,82,0,0.18)",
-                                borderRadius: 999,
-                                padding: "4px 9px",
-                                letterSpacing: "0.04em",
-                              }}
-                            >
-                              {t} · {note}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    )}
+                <div>
+                  <div
+                    style={{
+                      fontSize: 38,
+                      fontWeight: 900,
+                      color: bc(brand),
+                      letterSpacing: "0.16em",
+                      lineHeight: 1,
+                    }}
+                  >
+                    {brand}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 18,
+                      color: T2,
+                      marginTop: 10,
+                      fontWeight: 600,
+                    }}
+                  >
+                    Report linea produzione
                   </div>
                 </div>
+              </div>
 
-                {TIMES.map((t) => {
-                  const v = getV(brand, st.id, t);
+              {TIMES.map((t) => (
+                <div
+                  key={t}
+                  style={{
+                    borderLeft: `1px solid ${BRD}`,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "26px 10px",
+                    background: `${bc(brand)}08`,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 38,
+                      fontWeight: 900,
+                      color: bc(brand),
+                      lineHeight: 1,
+                      letterSpacing: "0.03em",
+                    }}
+                  >
+                    {t}
+                  </div>
+                </div>
+              ))}
+            </div>
 
-                  return (
+            {stations[brand]
+              ?.filter((st) => st.name !== "DA INSCATOLARE/GIÀ CQ")
+              .map((st, i) => {
+                const isHighlight = st.id === highlightId;
+                const hasNote = TIMES.some((t) => getN(brand, st.id, t));
+                const borderColor = isHighlight ? bc(brand) : hasNote ? ACC : "transparent";
+
+                return (
+                  <div
+                    key={st.id}
+                    data-print-row="true"
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: COL,
+                      background: isHighlight ? `${bc(brand)}12` : i % 2 === 0 ? "#fff" : "#F8FBFF",
+                      borderBottom: `1px solid ${BRD}`,
+                    }}
+                  >
                     <div
-                      key={t}
                       style={{
-                        borderLeft: `1px solid ${BRD}`,
+                        padding: "24px 28px",
+                        borderLeft: `10px solid ${borderColor}`,
+                        borderRight: `1px solid ${BRD}`,
                         display: "flex",
                         alignItems: "center",
-                        justifyContent: "center",
-                        padding: "14px 8px",
-                        background: isTotal ? `${bc(brand)}08` : "transparent",
-                        minHeight: 96,
+                        minHeight: 108,
                       }}
                     >
-                      <div
-                        style={{
-                          fontFamily: MONO,
-                          fontSize: isTotal ? 52 : 46,
-                          fontWeight: 900,
-                          lineHeight: 1,
-                          color: v ? bc(brand) : "#C7D3E0",
-                          letterSpacing: "-0.03em",
-                        }}
-                      >
-                        {v || "—"}
+                      <div style={{ width: "100%" }}>
+                        <div
+                          style={{
+                            fontSize: isHighlight ? 38 : 34,
+                            fontWeight: isHighlight ? 900 : 800,
+                            color: isHighlight ? bc(brand) : TXT,
+                            lineHeight: 1.08,
+                            letterSpacing: isHighlight ? "0.03em" : "0.01em",
+                            wordBreak: "break-word",
+                          }}
+                        >
+                          {st.name}
+                        </div>
+
+                        {hasNote && !isHighlight && (
+                          <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            {TIMES.map((t) => {
+                              const note = getN(brand, st.id, t);
+                              if (!note) return null;
+                              return (
+                                <span
+                                  key={t}
+                                  style={{
+                                    fontSize: 11,
+                                    fontWeight: 800,
+                                    color: ACC,
+                                    background: ACL,
+                                    border: "1px solid rgba(255,82,0,0.18)",
+                                    borderRadius: 999,
+                                    padding: "4px 9px",
+                                    letterSpacing: "0.04em",
+                                  }}
+                                >
+                                  {t} · {note}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </div>
-      ))}
+
+                    {TIMES.map((t) => {
+                      const v = getV(brand, st.id, t);
+
+                      return (
+                        <div
+                          key={t}
+                          style={{
+                            borderLeft: `1px solid ${BRD}`,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: "16px 8px",
+                            background: isHighlight ? `${bc(brand)}10` : "transparent",
+                            minHeight: 108,
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontFamily: MONO,
+                              fontSize: isHighlight ? 58 : 52,
+                              fontWeight: 900,
+                              lineHeight: 1,
+                              color: v ? bc(brand) : "#C7D3E0",
+                              letterSpacing: "-0.03em",
+                            }}
+                          >
+                            {v || "—"}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+          </div>
+        );
+      })}
 
       <div
         data-print-row="true"
@@ -1281,7 +1292,7 @@ function PrintDoc({ date, stations, getV, getN }) {
       >
         <span
           style={{
-            fontSize: 14,
+            fontSize: 15,
             fontWeight: 700,
             color: T2,
             letterSpacing: "0.12em",
@@ -1290,7 +1301,7 @@ function PrintDoc({ date, stations, getV, getN }) {
         >
           Ricevere Qualità · Fare Qualità · Consegnare Qualità
         </span>
-        <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 700, color: T2 }}>
+        <span style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, color: T2 }}>
           {fmtD(date)}
         </span>
       </div>
