@@ -84,20 +84,36 @@ const DEF_STATIONS = {
 };
 
 /* ═══ HELPERS ═══ */
-const todayStr = () => new Date().toISOString().split("T")[0];
+const todayStr = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
 const uid = () => Math.random().toString(36).slice(2, 9);
+
 const fmtD = (d) => {
   if (!d) return "";
   const [y, m, day] = d.split("-");
   return `${day}.${m}.${y}`;
 };
+
 const yesterdayStr = () => {
-  const d = new Date(); d.setDate(d.getDate() - 1);
-  return d.toISOString().split("T")[0];
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 };
+
+const timeKey = (t) => t.replace(":", "_");
+
 function lastVal(rDay, brand, sid) {
   for (const t of ["17:00", "15:00", "12:00", "10:00"]) {
-    const v = rDay?.[brand]?.[sid]?.[t.replace(":", "_")]?.value;
+    const v = rDay?.[brand]?.[sid]?.[timeKey(t)]?.value;
     if (v !== undefined && v !== "" && !isNaN(+v)) return +v;
   }
   return null;
@@ -106,13 +122,15 @@ function lastVal(rDay, brand, sid) {
 /* ═══ APP ROOT ═══ */
 export default function App() {
   const [tab,       setTab]      = useState("home");
-  const [date,      setDate]     = useState(todayStr);
+  const [date,      setDate]     = useState(() => todayStr());
   const [stations,  setStations] = useState(DEF_STATIONS);
   const [reports,   setReports]  = useState({});
   const [loading,   setLoading]  = useState(true);
   const [saving,    setSaving]   = useState(false);
   const [online,    setOnline]   = useState(navigator.onLine);
   const [savedKeys, setSavedKeys]= useState(new Set());
+
+  const [pdfLibs, setPdfLibs] = useState({ html2canvas: null, jsPDF: null });
 
   const [cellModal, setCellModal] = useState(null);
   const [cellVal,   setCellVal]   = useState("");
@@ -125,20 +143,53 @@ export default function App() {
   const [anBrand, setAnBrand] = useState("MOSAICON");
   const [anSid,   setAnSid]   = useState("");
   const [anFrom,  setAnFrom]  = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() - 30);
-    return d.toISOString().split("T")[0];
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
   });
-  const [anTo,  setAnTo]  = useState(todayStr);
+  const [anTo,  setAnTo]  = useState(() => todayStr());
   const [anRes, setAnRes] = useState(null);
 
   useEffect(() => {
     const on = () => setOnline(true), off = () => setOnline(false);
-    window.addEventListener("online", on); window.addEventListener("offline", off);
-    return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
   }, []);
 
   useEffect(() => {
-    return onValue(ref(db, "stations"), (snap) => { if (snap.exists()) setStations(snap.val()); });
+    let mounted = true;
+
+    (async () => {
+      try {
+        const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+          import("html2canvas"),
+          import("jspdf"),
+        ]);
+
+        if (mounted) {
+          setPdfLibs({ html2canvas, jsPDF });
+        }
+      } catch (e) {
+        console.error("Preload librerie PDF fallito:", e);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    return onValue(ref(db, "stations"), (snap) => {
+      if (snap.exists()) setStations(snap.val());
+    });
   }, []);
 
   useEffect(() => {
@@ -150,154 +201,285 @@ export default function App() {
 
   const saveStations = useCallback(async (s) => {
     setStations(s);
-    try { await set(ref(db, "stations"), s); } catch (e) { console.error(e); }
+    try {
+      await set(ref(db, "stations"), s);
+    } catch (e) {
+      console.error(e);
+    }
   }, []);
 
   const saveCell = useCallback(async (val, note) => {
+    if (!cellModal) return;
+
     const { brand, sid, t } = cellModal;
-    const tKey = t.replace(":", "_");
+    const tKey = timeKey(t);
     const flashKey = `${brand}_${sid}_${tKey}`;
     setSaving(true);
+
     try {
-      await set(ref(db, `reports/${date}/${brand}/${sid}/${tKey}`), { value: val, note });
-      await set(ref(db, `reports/${date}/_meta`), { date, ts: Date.now(), updated: Date.now() });
+      await set(ref(db, `reports/${date}/${brand}/${sid}/${tKey}`), {
+        value: val,
+        note,
+      });
+      await set(ref(db, `reports/${date}/_meta`), {
+        date,
+        ts: Date.now(),
+        updated: Date.now(),
+      });
+
       setSavedKeys(prev => new Set([...prev, flashKey]));
-      setTimeout(() => setSavedKeys(prev => { const n = new Set(prev); n.delete(flashKey); return n; }), 1500);
-    } catch (e) { console.error(e); }
+      setTimeout(() => {
+        setSavedKeys(prev => {
+          const n = new Set(prev);
+          n.delete(flashKey);
+          return n;
+        });
+      }, 1500);
+    } catch (e) {
+      console.error(e);
+    }
+
     setSaving(false);
     setCellModal(null);
   }, [cellModal, date]);
 
   const getV = (brand, sid, t) =>
-    reports[date]?.[brand]?.[sid]?.[t.replace(":", "_")]?.value ?? "";
+    reports[date]?.[brand]?.[sid]?.[timeKey(t)]?.value ?? "";
+
   const getN = (brand, sid, t) =>
-    reports[date]?.[brand]?.[sid]?.[t.replace(":", "_")]?.note ?? "";
+    reports[date]?.[brand]?.[sid]?.[timeKey(t)]?.note ?? "";
 
   function openCell(brand, sid, t, name) {
-    setCellVal(reports[date]?.[brand]?.[sid]?.[t.replace(":", "_")]?.value ?? "");
-    setCellNote(reports[date]?.[brand]?.[sid]?.[t.replace(":", "_")]?.note ?? "");
+    setCellVal(reports[date]?.[brand]?.[sid]?.[timeKey(t)]?.value ?? "");
+    setCellNote(reports[date]?.[brand]?.[sid]?.[timeKey(t)]?.note ?? "");
     setCellModal({ brand, sid, t, name });
   }
 
   async function renameStation(brand, sid, name) {
-    await saveStations({ ...stations, [brand]: stations[brand].map(s => s.id === sid ? { ...s, name } : s) });
+    await saveStations({
+      ...stations,
+      [brand]: stations[brand].map(s => s.id === sid ? { ...s, name } : s)
+    });
     setStModal(null);
   }
+
   async function deleteStation(brand, sid) {
-    await saveStations({ ...stations, [brand]: stations[brand].filter(s => s.id !== sid) });
+    await saveStations({
+      ...stations,
+      [brand]: stations[brand].filter(s => s.id !== sid)
+    });
     setStModal(null);
   }
+
   async function addStation(brand, afterId, name) {
     const arr = stations[brand];
-    const idx = afterId ? arr.findIndex(s => s.id === afterId) : arr.length - 1;
-    const ns = { ...stations, [brand]: [...arr.slice(0, idx + 1), { id: `${brand[0].toLowerCase()}_${uid()}`, name: name.trim() }, ...arr.slice(idx + 1)] };
+    const idxFound = afterId ? arr.findIndex(s => s.id === afterId) : arr.length - 1;
+    const idx = idxFound >= 0 ? idxFound : arr.length - 1;
+
+    const ns = {
+      ...stations,
+      [brand]: [
+        ...arr.slice(0, idx + 1),
+        { id: `${brand[0].toLowerCase()}_${uid()}`, name: name.trim() },
+        ...arr.slice(idx + 1)
+      ]
+    };
     await saveStations(ns);
-    setAddModal(null); setAddName("");
+    setAddModal(null);
+    setAddName("");
   }
+
   async function moveStation(brand, sid, dir) {
     const arr = [...stations[brand]];
     const i = arr.findIndex(s => s.id === sid);
-    if (dir === "up"   && i > 0)              [arr[i-1], arr[i]] = [arr[i], arr[i-1]];
-    if (dir === "down" && i < arr.length - 1) [arr[i+1], arr[i]] = [arr[i], arr[i+1]];
+    if (i === -1) return;
+    if (arr[i].isTotal) return;
+
+    if (dir === "up" && i > 0) [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]];
+    if (dir === "down" && i < arr.length - 1) [arr[i + 1], arr[i]] = [arr[i], arr[i + 1]];
+
     await saveStations({ ...stations, [brand]: arr });
   }
 
- async function shareWA() {
+  async function shareWA() {
+    const el = document.getElementById("print-doc");
+    if (!el) {
+      alert("Area PDF non trovata");
+      return;
+    }
+
+    const { html2canvas, jsPDF } = pdfLibs;
+    if (!html2canvas || !jsPDF) {
+      alert("Le librerie PDF non sono ancora pronte. Riprova tra un secondo.");
+      return;
+    }
+
+    const prevDisplay = el.style.display;
+    const prevWidth = el.style.width;
+
     try {
-      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
-        import("html2canvas"),
-        import("jspdf"),
-      ]);
-
-      const el = document.getElementById("print-doc");
       el.style.display = "block";
-      el.style.width = "1100px"; // più largo = tutto più grande nel PDF
+      el.style.width = "1100px";
 
-      const elRect = el.getBoundingClientRect();
-      const rowEls = el.querySelectorAll("[data-print-row]");
-      const rowBreaks = [0, ...Array.from(rowEls).map(r => r.getBoundingClientRect().bottom - elRect.top)];
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-      const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
-      el.style.display = "none";
-      el.style.width = "";
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+        windowWidth: el.scrollWidth,
+        windowHeight: el.scrollHeight,
+      });
 
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+        compress: true,
+      });
+
       const pageW = pdf.internal.pageSize.getWidth();
       const pageH = pdf.internal.pageSize.getHeight();
 
-      const domH = elRect.height;
-      const scaleFactor = canvas.height / domH;
-      const pageHeightPx = (pageH * canvas.width) / pageW;
+      const imgW = pageW;
+      const imgH = (canvas.height * imgW) / canvas.width;
 
-      let startPx = 0, page = 0;
-      while (startPx < canvas.height) {
-        if (page > 0) pdf.addPage();
-        const maxEnd = startPx + pageHeightPx;
-        const fits = rowBreaks.map(b => b * scaleFactor).filter(b => b > startPx && b <= maxEnd);
-        const endPx = fits.length > 0 ? fits[fits.length - 1] : Math.min(maxEnd, canvas.height);
-        const sliceH = Math.round(endPx - startPx);
-        const slice = document.createElement("canvas");
-        slice.width = canvas.width;
-        slice.height = sliceH;
-        const ctx = slice.getContext("2d");
-        ctx.fillStyle = "#fff";
-        ctx.fillRect(0, 0, slice.width, slice.height);
-        ctx.drawImage(canvas, 0, -Math.round(startPx));
-        const imgH = (sliceH / canvas.width) * pageW;
-        pdf.addImage(slice.toDataURL("image/png"), "PNG", 0, 0, pageW, imgH);
-        startPx = endPx;
-        page++;
+      if (imgH <= pageH) {
+        pdf.addImage(
+          canvas.toDataURL("image/jpeg", 0.92),
+          "JPEG",
+          0,
+          0,
+          imgW,
+          imgH,
+          undefined,
+          "FAST"
+        );
+      } else {
+        const pxPerMm = canvas.width / pageW;
+        const pageHeightPx = Math.floor(pageH * pxPerMm);
+
+        let rendered = 0;
+        let page = 0;
+
+        while (rendered < canvas.height) {
+          if (page > 0) pdf.addPage();
+
+          const sliceHeight = Math.min(pageHeightPx, canvas.height - rendered);
+          const pageCanvas = document.createElement("canvas");
+          pageCanvas.width = canvas.width;
+          pageCanvas.height = sliceHeight;
+
+          const ctx = pageCanvas.getContext("2d");
+          ctx.fillStyle = "#fff";
+          ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+
+          ctx.drawImage(
+            canvas,
+            0, rendered, canvas.width, sliceHeight,
+            0, 0, canvas.width, sliceHeight
+          );
+
+          const pageImgH = sliceHeight / pxPerMm;
+
+          pdf.addImage(
+            pageCanvas.toDataURL("image/jpeg", 0.92),
+            "JPEG",
+            0,
+            0,
+            pageW,
+            pageImgH,
+            undefined,
+            "FAST"
+          );
+
+          rendered += sliceHeight;
+          page++;
+        }
       }
 
       const blob = pdf.output("blob");
-      const file = new File([blob], `produzione_${date}.pdf`, { type: "application/pdf" });
-      if (navigator.share && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: `Produzione ${fmtD(date)}` });
-        return;
+      const file = new File([blob], `produzione_${date}.pdf`, {
+        type: "application/pdf",
+        lastModified: Date.now(),
+      });
+
+      const shareData = {
+        files: [file],
+        title: `Produzione ${fmtD(date)}`,
+        text: `Report produzione ${fmtD(date)}`,
+      };
+
+      if (!window.isSecureContext) {
+        throw new Error("L'app non è in HTTPS");
       }
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = `produzione_${date}.pdf`; a.click();
-      URL.revokeObjectURL(url);
-      return;
+
+      if (typeof navigator.share !== "function") {
+        throw new Error("navigator.share non disponibile");
+      }
+
+      if (typeof navigator.canShare === "function" && !navigator.canShare(shareData)) {
+        throw new Error("Il browser non accetta la condivisione di questo file");
+      }
+
+      await navigator.share(shareData);
     } catch (e) {
-      console.warn("PDF fallback a testo", e);
+      console.error("Errore shareWA:", e);
+      alert(`Condivisione non riuscita: ${e.message}`);
+    } finally {
+      el.style.display = prevDisplay;
+      el.style.width = prevWidth;
     }
-    let txt = `📊 Produzione ${fmtD(date)}\n\n`;
-    for (const brand of ["MOSAICON", "EMOS"]) {
-      txt += `━ ${brand} ━\n`;
-      for (const st of stations[brand]) {
-        if (TIMES.some(t => getV(brand, st.id, t)))
-          txt += `${st.name}: ${TIMES.map(t => getV(brand, st.id, t) || "—").join(" | ")}\n`;
-      }
-      txt += "\n";
-    }
-    if (navigator.share) navigator.share({ text: txt }).catch(() => {});
-    else window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`);
   }
-
-
 
   function runAnalysis() {
     const stList = stations[anBrand] || [];
     const sid = anSid || stList.find(s => s.isTotal)?.id || stList[0]?.id;
     const stName = stList.find(s => s.id === sid)?.name || "";
     const pts = [];
-    const cur = new Date(anFrom), end = new Date(anTo);
+
+    const cur = new Date(anFrom + "T12:00:00");
+    const end = new Date(anTo + "T12:00:00");
+
     while (cur <= end) {
       const d = cur.toISOString().split("T")[0];
       const v = lastVal(reports[d], anBrand, sid);
       if (v !== null) pts.push({ date: d, label: fmtD(d), value: v });
       cur.setDate(cur.getDate() + 1);
     }
-    if (!pts.length) { setAnRes({ empty: true, stName, brand: anBrand }); return; }
+
+    if (!pts.length) {
+      setAnRes({ empty: true, stName, brand: anBrand });
+      return;
+    }
+
     const vals = pts.map(p => p.value);
     const total = vals.reduce((a, b) => a + b, 0);
     const avg = +(total / vals.length).toFixed(1);
-    const max = Math.max(...vals), min = Math.min(...vals);
-    const trend = vals.length > 1 ? +((vals[vals.length-1] - vals[0]) / vals[0] * 100).toFixed(1) : 0;
-    setAnRes({ stName, brand: anBrand, sid, from: anFrom, to: anTo, pts, total, avg, max, min, trend,
-      days: pts.length, maxDay: pts[vals.indexOf(max)], minDay: pts[vals.indexOf(min)] });
+    const max = Math.max(...vals);
+    const min = Math.min(...vals);
+    const trend =
+      vals.length > 1 && vals[0] !== 0
+        ? +((((vals[vals.length - 1] - vals[0]) / vals[0]) * 100)).toFixed(1)
+        : 0;
+
+    setAnRes({
+      stName,
+      brand: anBrand,
+      sid,
+      from: anFrom,
+      to: anTo,
+      pts,
+      total,
+      avg,
+      max,
+      min,
+      trend,
+      days: pts.length,
+      maxDay: pts[vals.indexOf(max)],
+      minDay: pts[vals.indexOf(min)]
+    });
   }
 
   if (loading) return (
@@ -338,10 +520,16 @@ export default function App() {
             </div>
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)}
-              style={{ border:"none", background:"rgba(255,255,255,0.18)", fontFamily:MONO, fontSize:13, fontWeight:700, color:"#fff", cursor:"pointer", outline:"none", padding:"5px 10px", borderRadius:8 }} />
-            <button onClick={shareWA}
-              style={{ background:"#25D366", color:"#fff", border:"none", borderRadius:8, padding:"7px 13px", fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:FONT }}>
+            <input
+              type="date"
+              value={date}
+              onChange={e => setDate(e.target.value)}
+              style={{ border:"none", background:"rgba(255,255,255,0.18)", fontFamily:MONO, fontSize:13, fontWeight:700, color:"#fff", cursor:"pointer", outline:"none", padding:"5px 10px", borderRadius:8 }}
+            />
+            <button
+              onClick={shareWA}
+              style={{ background:"#25D366", color:"#fff", border:"none", borderRadius:8, padding:"7px 13px", fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:FONT }}
+            >
               📤 PDF
             </button>
           </div>
@@ -351,17 +539,43 @@ export default function App() {
       {/* CONTENT */}
       <div className="no-print" style={{ flex:1, overflowY:"auto" }}>
         {tab === "home"    && <HomeTab date={date} reports={reports} stations={stations} onGoFoglio={() => setTab("foglio")} />}
-        {tab === "foglio"  && <FoglioTab stations={stations} getV={getV} getN={getN} openCell={openCell} savedKeys={savedKeys}
-          onEditSt={(brand, st) => { setStModal({ brand, st }); setStNewName(st.name); }}
-          onAddSt={(brand, afterId) => { setAddModal({ brand, afterId }); setAddName(""); }} />}
+        {tab === "foglio"  && (
+          <FoglioTab
+            stations={stations}
+            getV={getV}
+            getN={getN}
+            openCell={openCell}
+            savedKeys={savedKeys}
+            onEditSt={(brand, st) => {
+              setStModal({ brand, st });
+              setStNewName(st.name);
+            }}
+            onAddSt={(brand, afterId) => {
+              setAddModal({ brand, afterId });
+              setAddName("");
+            }}
+          />
+        )}
         {tab === "storico" && <StoricoTab reports={reports} stations={stations} onOpen={d => { setDate(d); setTab("foglio"); }} />}
-        {tab === "analisi" && <AnalisiTab stations={stations} reports={reports}
-          anBrand={anBrand} setAnBrand={setAnBrand} anSid={anSid} setAnSid={setAnSid}
-          anFrom={anFrom} setAnFrom={setAnFrom} anTo={anTo} setAnTo={setAnTo}
-          anRes={anRes} run={runAnalysis} />}
+        {tab === "analisi" && (
+          <AnalisiTab
+            stations={stations}
+            reports={reports}
+            anBrand={anBrand}
+            setAnBrand={setAnBrand}
+            anSid={anSid}
+            setAnSid={setAnSid}
+            anFrom={anFrom}
+            setAnFrom={setAnFrom}
+            anTo={anTo}
+            setAnTo={setAnTo}
+            anRes={anRes}
+            run={runAnalysis}
+          />
+        )}
       </div>
 
-      {/* PRINT DOC nascosto, usato da html2canvas */}
+      {/* PRINT DOC */}
       <div id="print-doc" style={{ display:"none", padding:"24px 28px", background:"#fff" }}>
         <PrintDoc date={date} stations={stations} getV={getV} getN={getN} />
       </div>
@@ -374,8 +588,11 @@ export default function App() {
           { id:"storico", icon:"📁", label:"Storico" },
           { id:"analisi", icon:"📊", label:"Analisi" },
         ].map(({ id, icon, label }) => (
-          <button key={id} onClick={() => setTab(id)}
-            style={{ flex:1, background:"none", border:"none", padding:"10px 4px 8px", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, fontFamily:FONT }}>
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            style={{ flex:1, background:"none", border:"none", padding:"10px 4px 8px", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, fontFamily:FONT }}
+          >
             <span style={{ fontSize:19 }}>{icon}</span>
             <span style={{ fontSize:9, fontWeight:700, color: tab === id ? M : T3 }}>{label}</span>
             {tab === id && <div style={{ width:20, height:2, background:M, borderRadius:1 }} />}
@@ -390,17 +607,26 @@ export default function App() {
             {cellModal.brand} · {cellModal.t}
           </div>
           <div style={{ fontSize:18, fontWeight:800, color:TXT, marginBottom:14 }}>{cellModal.name}</div>
-          <input type="number" inputMode="decimal" autoFocus value={cellVal}
+          <input
+            type="number"
+            inputMode="decimal"
+            autoFocus
+            value={cellVal}
             onChange={e => setCellVal(e.target.value)}
-            style={{ width:"100%", background:BG, border:`2.5px solid ${bc(cellModal.brand)}`, borderRadius:12, padding:14, fontFamily:MONO, fontSize:34, fontWeight:700, color:bc(cellModal.brand), textAlign:"center", outline:"none", marginBottom:12 }} />
+            style={{ width:"100%", background:BG, border:`2.5px solid ${bc(cellModal.brand)}`, borderRadius:12, padding:14, fontFamily:MONO, fontSize:34, fontWeight:700, color:bc(cellModal.brand), textAlign:"center", outline:"none", marginBottom:12 }}
+          />
           <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:6 }}>
             <div style={{ width:7, height:7, background:ACC, borderRadius:"50%" }} />
             <span style={{ fontSize:9, fontWeight:700, color:ACC, letterSpacing:"0.1em", textTransform:"uppercase" }}>Commento</span>
             <span style={{ marginLeft:"auto", fontSize:8, color:T3 }}>max 30 car.</span>
           </div>
-          <input type="text" value={cellNote} onChange={e => setCellNote(e.target.value.slice(0, 30))}
+          <input
+            type="text"
+            value={cellNote}
+            onChange={e => setCellNote(e.target.value.slice(0, 30))}
             placeholder="Appare sotto il numero…"
-            style={{ width:"100%", background:BG, border:`1.5px solid ${BRD}`, borderRadius:10, padding:"10px 12px", fontSize:13, color:TXT, outline:"none", marginBottom:14, fontFamily:FONT }} />
+            style={{ width:"100%", background:BG, border:`1.5px solid ${BRD}`, borderRadius:10, padding:"10px 12px", fontSize:13, color:TXT, outline:"none", marginBottom:14, fontFamily:FONT }}
+          />
           <Btn color={bc(cellModal.brand)} onClick={() => saveCell(cellVal, cellNote)}>✓ SALVA</Btn>
           {(cellVal || cellNote) && <Btn color={BG} textColor={T2} style={{ marginTop:8 }} onClick={() => saveCell("", "")}>Cancella valore</Btn>}
           <Btn color={BG} textColor={T3} style={{ marginTop:8 }} onClick={() => setCellModal(null)}>Annulla</Btn>
@@ -412,16 +638,20 @@ export default function App() {
         <Modal onClose={() => setStModal(null)}>
           <div style={{ fontSize:9, fontWeight:700, color:T3, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:3 }}>Stazione · {stModal.brand}</div>
           <div style={{ fontSize:18, fontWeight:800, color:TXT, marginBottom:14 }}>{stModal.st.name}</div>
-          <input autoFocus value={stNewName} onChange={e => setStNewName(e.target.value)} placeholder="Nuovo nome…"
-            style={{ width:"100%", background:BG, border:`2px solid ${bc(stModal.brand)}`, borderRadius:10, padding:"11px 12px", fontSize:15, color:TXT, outline:"none", marginBottom:12, fontFamily:FONT }} />
+          <input
+            autoFocus
+            value={stNewName}
+            onChange={e => setStNewName(e.target.value)}
+            placeholder="Nuovo nome…"
+            style={{ width:"100%", background:BG, border:`2px solid ${bc(stModal.brand)}`, borderRadius:10, padding:"11px 12px", fontSize:15, color:TXT, outline:"none", marginBottom:12, fontFamily:FONT }}
+          />
           <Btn color={bc(stModal.brand)} onClick={() => stNewName.trim() && renameStation(stModal.brand, stModal.st.id, stNewName.trim())}>✓ RINOMINA</Btn>
           <div style={{ display:"flex", gap:8, marginTop:8 }}>
-            <button onClick={() => { moveStation(stModal.brand, stModal.st.id, "up");   setStModal(null); }} style={{ flex:1, background:BG, border:`1px solid ${BRD}`, borderRadius:8, padding:9, fontSize:14, cursor:"pointer" }}>⬆ Su</button>
+            <button onClick={() => { moveStation(stModal.brand, stModal.st.id, "up"); setStModal(null); }} style={{ flex:1, background:BG, border:`1px solid ${BRD}`, borderRadius:8, padding:9, fontSize:14, cursor:"pointer" }}>⬆ Su</button>
             <button onClick={() => { moveStation(stModal.brand, stModal.st.id, "down"); setStModal(null); }} style={{ flex:1, background:BG, border:`1px solid ${BRD}`, borderRadius:8, padding:9, fontSize:14, cursor:"pointer" }}>⬇ Giù</button>
           </div>
           {!stModal.st.isTotal && (
-            <Btn color="#FEE2E2" textColor={RED} style={{ marginTop:8 }}
-              onClick={() => { if (window.confirm(`Eliminare "${stModal.st.name}"?`)) deleteStation(stModal.brand, stModal.st.id); }}>
+            <Btn color="#FEE2E2" textColor={RED} style={{ marginTop:8 }} onClick={() => { if (window.confirm(`Eliminare "${stModal.st.name}"?`)) deleteStation(stModal.brand, stModal.st.id); }}>
               🗑 Elimina stazione
             </Btn>
           )}
@@ -434,10 +664,14 @@ export default function App() {
         <Modal onClose={() => setAddModal(null)}>
           <div style={{ fontSize:9, fontWeight:700, color:T3, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:3 }}>Nuova stazione · {addModal.brand}</div>
           <div style={{ fontSize:18, fontWeight:800, color:TXT, marginBottom:14 }}>Aggiungi stazione</div>
-          <input autoFocus value={addName} onChange={e => setAddName(e.target.value)}
+          <input
+            autoFocus
+            value={addName}
+            onChange={e => setAddName(e.target.value)}
             onKeyDown={e => e.key === "Enter" && addName.trim() && addStation(addModal.brand, addModal.afterId, addName)}
             placeholder="Nome stazione…"
-            style={{ width:"100%", background:BG, border:`2px solid ${bc(addModal.brand)}`, borderRadius:10, padding:"11px 12px", fontSize:15, color:TXT, outline:"none", marginBottom:14, fontFamily:FONT }} />
+            style={{ width:"100%", background:BG, border:`2px solid ${bc(addModal.brand)}`, borderRadius:10, padding:"11px 12px", fontSize:15, color:TXT, outline:"none", marginBottom:14, fontFamily:FONT }}
+          />
           <Btn color={bc(addModal.brand)} onClick={() => addName.trim() && addStation(addModal.brand, addModal.afterId, addName)}>+ AGGIUNGI</Btn>
           <Btn color={BG} textColor={T3} style={{ marginTop:8 }} onClick={() => setAddModal(null)}>Annulla</Btn>
         </Modal>
@@ -468,18 +702,18 @@ function HomeTab({ date, reports, stations, onGoFoglio }) {
   const last7 = useMemo(() => {
     const pts = [];
     for (let i = 6; i >= 0; i--) {
-      const d = new Date(); d.setDate(d.getDate() - i);
+      const d = new Date();
+      d.setDate(d.getDate() - i);
       const ds = d.toISOString().split("T")[0];
       const m = getTot(reports[ds], "MOSAICON") ?? 0;
       const e = getTot(reports[ds], "EMOS")     ?? 0;
       pts.push({ label:`${d.getDate()}/${d.getMonth()+1}`, MOSAICON:m, EMOS:e, total:m+e });
     }
     return pts;
-  }, [reports]);
+  }, [reports, stations]);
 
   return (
     <div style={{ padding:"16px 14px", fontFamily:FONT }}>
-
       <div style={{ marginBottom:14, padding:"10px 16px", background:S0, borderRadius:16, border:`1px solid ${BRD}`, boxShadow:"0 2px 10px rgba(13,27,42,0.05)" }}>
         <div style={{ fontSize:9, fontWeight:700, color:T3, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:2 }}>
           {date === todayStr() ? "Oggi" : "Data selezionata"}
@@ -515,11 +749,14 @@ function HomeTab({ date, reports, stations, onGoFoglio }) {
         <div>
           <div style={{ fontSize:9, fontWeight:700, color:"rgba(255,255,255,0.6)", letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:4 }}>Totale combinato</div>
           <div style={{ fontFamily:MONO, fontSize:44, fontWeight:700, color:"#fff", lineHeight:1 }}>{combined || "—"}</div>
-          {combinedYest > 0 && (() => { const p = pct(combined, combinedYest); return p !== null ? (
-            <div style={{ marginTop:6, fontSize:11, fontWeight:700, color: p >= 0 ? "#86EFAC" : "#FCA5A5" }}>
-              {p >= 0 ? "▲" : "▼"} {Math.abs(p)}% rispetto a ieri ({combinedYest})
-            </div>
-          ) : null; })()}
+          {combinedYest > 0 && (() => {
+            const p = pct(combined, combinedYest);
+            return p !== null ? (
+              <div style={{ marginTop:6, fontSize:11, fontWeight:700, color: p >= 0 ? "#86EFAC" : "#FCA5A5" }}>
+                {p >= 0 ? "▲" : "▼"} {Math.abs(p)}% rispetto a ieri ({combinedYest})
+              </div>
+            ) : null;
+          })()}
         </div>
         <div style={{ fontSize:40, opacity:0.35 }}>🏭</div>
       </div>
@@ -531,16 +768,17 @@ function HomeTab({ date, reports, stations, onGoFoglio }) {
             <CartesianGrid strokeDasharray="3 3" stroke={BRD} vertical={false} />
             <XAxis dataKey="label" tick={{ fontSize:8, fill:T3, fontFamily:MONO }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fontSize:8, fill:T3, fontFamily:MONO }} axisLine={false} tickLine={false} width={34} />
-            <Tooltip contentStyle={{ background:S0, border:`1px solid ${BRD}`, borderRadius:8, fontFamily:FONT, fontSize:12 }}
-              labelStyle={{ color:TXT, fontWeight:700 }} />
+            <Tooltip contentStyle={{ background:S0, border:`1px solid ${BRD}`, borderRadius:8, fontFamily:FONT, fontSize:12 }} labelStyle={{ color:TXT, fontWeight:700 }} />
             <Bar dataKey="MOSAICON" fill={M} radius={[4,4,0,0]} maxBarSize={20} />
-            <Bar dataKey="EMOS"     fill={E} radius={[4,4,0,0]} maxBarSize={20} />
+            <Bar dataKey="EMOS" fill={E} radius={[4,4,0,0]} maxBarSize={20} />
           </BarChart>
         </ResponsiveContainer>
       </div>
 
-      <button onClick={onGoFoglio}
-        style={{ width:"100%", background:S0, border:`1.5px solid ${BRD}`, borderRadius:16, padding:"14px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:FONT, boxShadow:"0 2px 10px rgba(13,27,42,0.05)" }}>
+      <button
+        onClick={onGoFoglio}
+        style={{ width:"100%", background:S0, border:`1.5px solid ${BRD}`, borderRadius:16, padding:"14px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:FONT, boxShadow:"0 2px 10px rgba(13,27,42,0.05)" }}
+      >
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
           <span style={{ fontSize:24 }}>📋</span>
           <div style={{ textAlign:"left" }}>
@@ -562,8 +800,6 @@ function FoglioTab({ stations, getV, getN, openCell, savedKeys, onEditSt, onAddS
     <div>
       {["MOSAICON", "EMOS"].map(brand => (
         <div key={brand} style={{ marginTop: brand === "EMOS" ? 16 : 0 }}>
-
-          {/* Brand header */}
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 16px", background:bl(brand), borderBottom:`2px solid ${bc(brand)}`, borderLeft:`5px solid ${bc(brand)}`, position:"sticky", top:0, zIndex:10 }}>
             <span style={{ fontSize:17, fontWeight:900, color:bc(brand), letterSpacing:"0.12em" }}>{brand}</span>
             <span style={{ fontFamily:MONO, fontSize:13, fontWeight:800, background:`${bc(brand)}20`, color:bc(brand), padding:"4px 14px", borderRadius:20 }}>
@@ -579,7 +815,6 @@ function FoglioTab({ stations, getV, getN, openCell, savedKeys, onEditSt, onAddS
             </span>
           </div>
 
-          {/* Time header */}
           <div style={{ display:"grid", gridTemplateColumns:"130px repeat(4,1fr)", padding:"6px 10px 6px 14px", background:S2, borderBottom:`1px solid ${BRD}`, position:"sticky", top:48, zIndex:9 }}>
             <div style={{ fontSize:9, fontWeight:700, color:T2, letterSpacing:"0.1em", textTransform:"uppercase", display:"flex", alignItems:"center" }}>STAZIONE</div>
             {TIMES.map(t => (
@@ -587,7 +822,6 @@ function FoglioTab({ stations, getV, getN, openCell, savedKeys, onEditSt, onAddS
             ))}
           </div>
 
-          {/* Rows */}
           {stations[brand]?.map((st, idx) => {
             const hasNote = TIMES.some(t => getN(brand, st.id, t));
             const isTotal = !!st.isTotal;
@@ -600,12 +834,14 @@ function FoglioTab({ stations, getV, getN, openCell, savedKeys, onEditSt, onAddS
                 {TIMES.map(t => {
                   const v = getV(brand, st.id, t);
                   const n = getN(brand, st.id, t);
-                  const flashKey = `${brand}_${st.id}_${t.replace(":","_")}`;
+                  const flashKey = `${brand}_${st.id}_${timeKey(t)}`;
                   return (
-                    <button key={t}
+                    <button
+                      key={t}
                       className={savedKeys.has(flashKey) ? "cell-flash" : ""}
                       onClick={() => openCell(brand, st.id, t, st.name)}
-                      style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", borderLeft:`1px solid ${BRD}`, background: v ? `${bc(brand)}12` : "transparent", cursor:"pointer", gap:3, padding:"6px 4px", width:"100%", height:"100%", minHeight:54, border:"none", borderLeft:`1px solid ${BRD}`, transition:"background 0.2s" }}>
+                      style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", borderLeft:`1px solid ${BRD}`, background: v ? `${bc(brand)}12` : "transparent", cursor:"pointer", gap:3, padding:"6px 4px", width:"100%", height:"100%", minHeight:54, border:"none", transition:"background 0.2s" }}
+                    >
                       <span style={{ fontFamily:MONO, fontSize: v ? 18 : 13, fontWeight: v ? 800 : 400, color: v ? bc(brand) : "#C8D8E8", lineHeight:1 }}>{v || "—"}</span>
                       {n && <span style={{ fontSize:7.5, color:ACC, background:ACL, border:"1px solid rgba(255,82,0,0.2)", borderRadius:4, padding:"1px 5px", maxWidth:58, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", lineHeight:1.4 }}>{n}</span>}
                     </button>
@@ -615,9 +851,7 @@ function FoglioTab({ stations, getV, getN, openCell, savedKeys, onEditSt, onAddS
             );
           })}
 
-          {/* Add station */}
-          <button onClick={() => onAddSt(brand, stations[brand]?.[stations[brand].length-1]?.id)}
-            style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 16px", margin:"8px 12px", background:S0, border:`1.5px dashed ${BRD2}`, borderRadius:10, cursor:"pointer", fontFamily:FONT, width:"calc(100% - 24px)" }}>
+          <button onClick={() => onAddSt(brand, stations[brand]?.[stations[brand].length-1]?.id)} style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 16px", margin:"8px 12px", background:S0, border:`1.5px dashed ${BRD2}`, borderRadius:10, cursor:"pointer", fontFamily:FONT, width:"calc(100% - 24px)" }}>
             <span style={{ width:20, height:20, borderRadius:5, background:bl(brand), color:bc(brand), display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, fontWeight:900, flexShrink:0 }}>+</span>
             <span style={{ fontSize:11, fontWeight:600, color:T2 }}>Aggiungi stazione {brand}</span>
           </button>
@@ -628,12 +862,12 @@ function FoglioTab({ stations, getV, getN, openCell, savedKeys, onEditSt, onAddS
   );
 }
 
-
 /* ═══ STORICO TAB ═══ */
 function StoricoTab({ reports, stations, onOpen }) {
-  const sorted = useMemo(() =>
-    Object.keys(reports).filter(k => reports[k]._meta).sort((a,b) => b.localeCompare(a)),
-  [reports]);
+  const sorted = useMemo(
+    () => Object.keys(reports).filter(k => reports[k]._meta).sort((a,b) => b.localeCompare(a)),
+    [reports]
+  );
 
   if (!sorted.length) return (
     <div style={{ padding:40, textAlign:"center", color:T3, fontFamily:FONT }}>
@@ -648,14 +882,14 @@ function StoricoTab({ reports, stations, onOpen }) {
       {sorted.map((d, idx) => {
         const rDay = reports[d];
         const mTot = (() => { const t = stations.MOSAICON?.find(s => s.isTotal); return t ? lastVal(rDay,"MOSAICON",t.id) : null; })();
-        const eTot = (() => { const t = stations.EMOS?.find(s => s.isTotal);     return t ? lastVal(rDay,"EMOS",    t.id) : null; })();
+        const eTot = (() => { const t = stations.EMOS?.find(s => s.isTotal); return t ? lastVal(rDay,"EMOS",t.id) : null; })();
         const notesN = ["MOSAICON","EMOS"].flatMap(b =>
-          (stations[b]||[]).flatMap(s => TIMES.filter(t => rDay?.[b]?.[s.id]?.[t.replace(":","_")]?.note))
+          (stations[b]||[]).flatMap(s => TIMES.filter(t => rDay?.[b]?.[s.id]?.[timeKey(t)]?.note))
         ).length;
         const dt = new Date(d + "T12:00:00");
+
         return (
-          <button key={d} onClick={() => onOpen(d)}
-            style={{ display:"flex", alignItems:"center", gap:14, padding:"13px 16px", background: idx%2===0 ? S0 : S1, border:"none", borderBottom:`1px solid ${BRD}`, width:"100%", cursor:"pointer", textAlign:"left", fontFamily:FONT }}>
+          <button key={d} onClick={() => onOpen(d)} style={{ display:"flex", alignItems:"center", gap:14, padding:"13px 16px", background: idx%2===0 ? S0 : S1, border:"none", borderBottom:`1px solid ${BRD}`, width:"100%", cursor:"pointer", textAlign:"left", fontFamily:FONT }}>
             <div style={{ flexShrink:0, textAlign:"center", width:36 }}>
               <div style={{ fontFamily:MONO, fontSize:22, fontWeight:800, color:M, lineHeight:1 }}>{String(dt.getDate()).padStart(2,"0")}</div>
               <div style={{ fontSize:8, fontWeight:700, color:T3, letterSpacing:"0.06em", textTransform:"uppercase" }}>{dt.toLocaleDateString("it-IT",{month:"short"})}</div>
@@ -667,7 +901,7 @@ function StoricoTab({ reports, stations, onOpen }) {
               <div style={{ display:"flex", gap:5, marginTop:5, flexWrap:"wrap" }}>
                 {mTot !== null && <span style={{ fontFamily:MONO, fontSize:8, fontWeight:700, background:ML, color:M, padding:"2px 7px", borderRadius:4 }}>MOA {mTot}</span>}
                 {eTot !== null && <span style={{ fontFamily:MONO, fontSize:8, fontWeight:700, background:EL, color:E, padding:"2px 7px", borderRadius:4 }}>EMS {eTot}</span>}
-                {notesN > 0   && <span style={{ fontSize:8, fontWeight:700, background:ACL, color:ACC, padding:"2px 7px", borderRadius:4 }}>{notesN} nota{notesN>1?"e":""}</span>}
+                {notesN > 0 && <span style={{ fontSize:8, fontWeight:700, background:ACL, color:ACC, padding:"2px 7px", borderRadius:4 }}>{notesN} nota{notesN>1?"e":""}</span>}
               </div>
             </div>
             <span style={{ fontSize:20, color:BRD2, flexShrink:0 }}>›</span>
@@ -691,7 +925,9 @@ function AnalisiTab({ stations, reports, anBrand, setAnBrand, anSid, setAnSid, a
         <div style={{ display:"flex", gap:8, marginBottom:12 }}>
           {["MOSAICON","EMOS"].map(b => (
             <button key={b} onClick={() => { setAnBrand(b); setAnSid(""); }}
-              style={{ flex:1, padding:10, background: anBrand===b ? bl(b) : BG, border:`1.5px solid ${anBrand===b ? bc(b) : BRD}`, borderRadius:10, fontSize:12, fontWeight:800, color: anBrand===b ? bc(b) : T3, cursor:"pointer", fontFamily:FONT }}>{b}</button>
+              style={{ flex:1, padding:10, background: anBrand===b ? bl(b) : BG, border:`1.5px solid ${anBrand===b ? bc(b) : BRD}`, borderRadius:10, fontSize:12, fontWeight:800, color: anBrand===b ? bc(b) : T3, cursor:"pointer", fontFamily:FONT }}>
+              {b}
+            </button>
           ))}
         </div>
         <div style={{ marginBottom:12 }}>
@@ -758,8 +994,7 @@ function AnalisiTab({ stations, reports, anBrand, setAnBrand, anSid, setAnSid, a
                     <CartesianGrid strokeDasharray="3 3" stroke={BRD} />
                     <XAxis dataKey="label" tick={{ fontSize:8, fill:T3, fontFamily:MONO }} interval="preserveStartEnd" />
                     <YAxis tick={{ fontSize:8, fill:T3, fontFamily:MONO }} width={38} />
-                    <Tooltip contentStyle={{ background:S0, border:`1px solid ${BRD}`, borderRadius:8, fontFamily:FONT, fontSize:12 }}
-                      labelStyle={{ color:TXT, fontWeight:700 }} formatter={v => [v, anRes.stName]} />
+                    <Tooltip contentStyle={{ background:S0, border:`1px solid ${BRD}`, borderRadius:8, fontFamily:FONT, fontSize:12 }} labelStyle={{ color:TXT, fontWeight:700 }} formatter={v => [v, anRes.stName]} />
                     <ReferenceLine y={anRes.avg} stroke={T3} strokeDasharray="4 4"
                       label={{ value:`avg ${anRes.avg}`, position:"insideTopRight", fontSize:9, fill:T3, fontFamily:MONO }} />
                     <Line type="monotone" dataKey="value" stroke={bc(anRes.brand)} strokeWidth={2.5}
@@ -793,8 +1028,6 @@ function PrintDoc({ date, stations, getV, getN }) {
   const COL = "260px repeat(4, 1fr)";
   return (
     <div style={{ fontFamily: FONT, background: "#F0F4FA", padding: 32 }}>
-
-      {/* ── HEADER ── */}
       <div data-print-row="true" style={{ background: "linear-gradient(135deg,#0A3D9C 0%,#1A5CFF 55%,#009FCC 100%)", borderRadius: 18, padding: "24px 32px", marginBottom: 32, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 8px 32px rgba(26,92,255,0.3)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
           <div style={{ width: 56, height: 56, borderRadius: 14, background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32 }}>🏭</div>
@@ -808,8 +1041,6 @@ function PrintDoc({ date, stations, getV, getN }) {
 
       {["MOSAICON", "EMOS"].map(brand => (
         <div key={brand} style={{ marginBottom: 36, background: "#fff", borderRadius: 18, overflow: "hidden", boxShadow: "0 4px 24px rgba(13,27,42,0.08)", border: `1px solid ${BRD}` }}>
-
-          {/* Brand header */}
           <div data-print-row="true" style={{ display: "grid", gridTemplateColumns: COL, background: `linear-gradient(135deg, ${bc(brand)}18, ${bc(brand)}08)`, borderBottom: `2px solid ${bc(brand)}30`, padding: "0 0 0 20px", borderLeft: `6px solid ${bc(brand)}` }}>
             <div style={{ fontSize: 22, fontWeight: 900, color: bc(brand), letterSpacing: "0.1em", display: "flex", alignItems: "center", padding: "16px 0" }}>{brand}</div>
             {TIMES.map(t => (
@@ -817,11 +1048,9 @@ function PrintDoc({ date, stations, getV, getN }) {
             ))}
           </div>
 
-          {/* Righe stazioni */}
           {stations[brand]?.map((st, i) => {
             const isTotal = !!st.isTotal;
             const hasNote = TIMES.some(t => getN(brand, st.id, t));
-            const hasAnyValue = TIMES.some(t => getV(brand, st.id, t));
             return (
               <div key={st.id} data-print-row="true" style={{ display: "grid", gridTemplateColumns: COL, background: isTotal ? `${bc(brand)}10` : i % 2 === 0 ? "#fff" : "#F8FAFD", borderBottom: `1px solid ${BRD}`, borderLeft: isTotal ? `6px solid ${bc(brand)}` : hasNote ? `4px solid ${ACC}` : "6px solid transparent", minHeight: 64 }}>
                 <div style={{ display: "flex", alignItems: "center", padding: "12px 16px 12px 20px", borderRight: `1px solid ${BRD}` }}>
@@ -845,7 +1074,6 @@ function PrintDoc({ date, stations, getV, getN }) {
         </div>
       ))}
 
-      {/* Footer */}
       <div data-print-row="true" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 8px", borderTop: `2px solid ${BRD}`, marginTop: 8 }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: T2, letterSpacing: "0.08em", textTransform: "uppercase" }}>Ricevere Qualità · Fare Qualità · Consegnare Qualità</span>
         <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: T2 }}>{fmtD(date)}</span>
@@ -853,8 +1081,6 @@ function PrintDoc({ date, stations, getV, getN }) {
     </div>
   );
 }
-
-
 
 /* ═══ SHARED COMPONENTS ═══ */
 function Modal({ children, onClose }) {
