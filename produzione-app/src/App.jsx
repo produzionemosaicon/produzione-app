@@ -1192,8 +1192,19 @@ function AnalisiTab({
               </div>
 
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
-                <KpiSmall label="Totale periodo" value={anRes.total} color=M sub={`in ${anRes.days} giorni`} />
-                <KpiSmall label="Media giornaliera" value={anRes.avg} color=M sub="paia/giorno" />
+               <KpiSmall 
+  label="Totale periodo" 
+  value={anRes.total} 
+  color={bc(anRes.brand)} 
+  sub={`in ${anRes.days} giorni`} 
+/>
+
+<KpiSmall 
+  label="Media giornaliera" 
+  value={anRes.avg} 
+  color={bc(anRes.brand)} 
+  sub="paia/giorno" 
+/>
                 <KpiSmall label="Giorno migliore" value={anRes.max} color={GRN} sub={fmtD(anRes.maxDay?.date)} arrow="▲" />
                 <KpiSmall label="Giorno peggiore" value={anRes.min} color={RED} sub={fmtD(anRes.minDay?.date)} arrow="▼" />
               </div>
