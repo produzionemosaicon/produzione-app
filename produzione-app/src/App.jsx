@@ -121,28 +121,28 @@ function lastVal(rDay, brand, sid) {
 
 /* ═══ APP ROOT ═══ */
 export default function App() {
-  const [tab,       setTab]      = useState("home");
-  const [date,      setDate]     = useState(() => todayStr());
-  const [stations,  setStations] = useState(DEF_STATIONS);
-  const [reports,   setReports]  = useState({});
-  const [loading,   setLoading]  = useState(true);
-  const [saving,    setSaving]   = useState(false);
-  const [online,    setOnline]   = useState(navigator.onLine);
-  const [savedKeys, setSavedKeys]= useState(new Set());
+  const [tab, setTab] = useState("home");
+  const [date, setDate] = useState(() => todayStr());
+  const [stations, setStations] = useState(DEF_STATIONS);
+  const [reports, setReports] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [online, setOnline] = useState(navigator.onLine);
+  const [savedKeys, setSavedKeys] = useState(new Set());
 
   const [pdfLibs, setPdfLibs] = useState({ html2canvas: null, jsPDF: null });
 
   const [cellModal, setCellModal] = useState(null);
-  const [cellVal,   setCellVal]   = useState("");
-  const [cellNote,  setCellNote]  = useState("");
-  const [stModal,   setStModal]   = useState(null);
+  const [cellVal, setCellVal] = useState("");
+  const [cellNote, setCellNote] = useState("");
+  const [stModal, setStModal] = useState(null);
   const [stNewName, setStNewName] = useState("");
-  const [addModal,  setAddModal]  = useState(null);
-  const [addName,   setAddName]   = useState("");
+  const [addModal, setAddModal] = useState(null);
+  const [addName, setAddName] = useState("");
 
   const [anBrand, setAnBrand] = useState("MOSAICON");
-  const [anSid,   setAnSid]   = useState("");
-  const [anFrom,  setAnFrom]  = useState(() => {
+  const [anSid, setAnSid] = useState("");
+  const [anFrom, setAnFrom] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
     const y = d.getFullYear();
@@ -150,7 +150,7 @@ export default function App() {
     const day = String(d.getDate()).padStart(2, "0");
     return `${y}-${m}-${day}`;
   });
-  const [anTo,  setAnTo]  = useState(() => todayStr());
+  const [anTo, setAnTo] = useState(() => todayStr());
   const [anRes, setAnRes] = useState(null);
 
   useEffect(() => {
@@ -193,10 +193,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    return onValue(ref(db, "reports"), (snap) => {
-      if (snap.exists()) setReports(snap.val());
-      setLoading(false);
-    }, () => setLoading(false));
+    return onValue(
+      ref(db, "reports"),
+      (snap) => {
+        if (snap.exists()) setReports(snap.val());
+        setLoading(false);
+      },
+      () => setLoading(false)
+    );
   }, []);
 
   const saveStations = useCallback(async (s) => {
@@ -319,7 +323,7 @@ export default function App() {
 
     try {
       el.style.display = "block";
-      el.style.width = "1100px";
+      el.style.width = "1180px";
 
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
@@ -504,7 +508,6 @@ export default function App() {
         .print-only{display:none}
       `}</style>
 
-      {/* TOP BAR */}
       <div className="no-print" style={{ background:"linear-gradient(135deg,#0A3D9C 0%,#1A5CFF 55%,#0099CC 100%)", padding:"12px 16px", flexShrink:0, boxShadow:"0 3px 18px rgba(26,92,255,0.28)" }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
@@ -536,7 +539,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* CONTENT */}
       <div className="no-print" style={{ flex:1, overflowY:"auto" }}>
         {tab === "home"    && <HomeTab date={date} reports={reports} stations={stations} onGoFoglio={() => setTab("foglio")} />}
         {tab === "foglio"  && (
@@ -575,12 +577,10 @@ export default function App() {
         )}
       </div>
 
-      {/* PRINT DOC */}
-      <div id="print-doc" style={{ display:"none", padding:"24px 28px", background:"#fff" }}>
+      <div id="print-doc" style={{ display:"none", padding:"30px", background:"#fff" }}>
         <PrintDoc date={date} stations={stations} getV={getV} getN={getN} />
       </div>
 
-      {/* BOTTOM NAV */}
       <div className="no-print" style={{ background:S0, borderTop:`1px solid ${BRD}`, display:"flex", flexShrink:0, boxShadow:"0 -2px 12px rgba(13,27,42,0.07)" }}>
         {[
           { id:"home",    icon:"🏠", label:"Home" },
@@ -600,7 +600,6 @@ export default function App() {
         ))}
       </div>
 
-      {/* CELL MODAL */}
       {cellModal && (
         <Modal onClose={() => setCellModal(null)}>
           <div style={{ fontSize:9, fontWeight:700, color:T3, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:3 }}>
@@ -633,7 +632,6 @@ export default function App() {
         </Modal>
       )}
 
-      {/* STATION MODAL */}
       {stModal && (
         <Modal onClose={() => setStModal(null)}>
           <div style={{ fontSize:9, fontWeight:700, color:T3, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:3 }}>Stazione · {stModal.brand}</div>
@@ -659,7 +657,6 @@ export default function App() {
         </Modal>
       )}
 
-      {/* ADD MODAL */}
       {addModal && (
         <Modal onClose={() => setAddModal(null)}>
           <div style={{ fontSize:9, fontWeight:700, color:T3, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:3 }}>Nuova stazione · {addModal.brand}</div>
@@ -1023,48 +1020,294 @@ function AnalisiTab({ stations, reports, anBrand, setAnBrand, anSid, setAnSid, a
   );
 }
 
-/* ═══ PRINT DOC ═══ */
+/* ═══ PRINT DOC NUOVO ═══ */
 function PrintDoc({ date, stations, getV, getN }) {
-  const COL = "260px repeat(4, 1fr)";
+  const COL = "320px repeat(4, 1fr)";
+
+  const brandTotal = (brand) => {
+    const totalStation = stations[brand]?.find((s) => s.isTotal);
+    if (!totalStation) return null;
+    return ["17:00", "15:00", "12:00", "10:00"].reduce((acc, t) => {
+      const val = getV(brand, totalStation.id, t);
+      return acc || (val && !isNaN(+val) ? val : null);
+    }, null);
+  };
+
   return (
-    <div style={{ fontFamily: FONT, background: "#F0F4FA", padding: 32 }}>
-      <div data-print-row="true" style={{ background: "linear-gradient(135deg,#0A3D9C 0%,#1A5CFF 55%,#009FCC 100%)", borderRadius: 18, padding: "24px 32px", marginBottom: 32, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 8px 32px rgba(26,92,255,0.3)" }}>
+    <div style={{ fontFamily: FONT, background: "#E9EFF7", padding: 24 }}>
+      <div
+        data-print-row="true"
+        style={{
+          background: "linear-gradient(135deg,#0A3D9C 0%,#1A5CFF 55%,#009FCC 100%)",
+          borderRadius: 28,
+          padding: "28px 34px",
+          marginBottom: 26,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          boxShadow: "0 14px 36px rgba(26,92,255,0.28)",
+        }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-          <div style={{ width: 56, height: 56, borderRadius: 14, background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32 }}>🏭</div>
+          <div
+            style={{
+              width: 62,
+              height: 62,
+              borderRadius: 16,
+              background: "rgba(255,255,255,0.18)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 34,
+              boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.15)",
+            }}
+          >
+            🏭
+          </div>
           <div>
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", letterSpacing: "0.16em", textTransform: "uppercase", marginBottom: 4 }}>Report Produzione Giornaliero</div>
-            <div style={{ fontSize: 32, fontWeight: 900, color: "#fff", letterSpacing: "0.06em", lineHeight: 1 }}>MOSAICON + EMOS</div>
+            <div
+              style={{
+                fontSize: 13,
+                color: "rgba(255,255,255,0.68)",
+                letterSpacing: "0.22em",
+                textTransform: "uppercase",
+                marginBottom: 6,
+                fontWeight: 700,
+              }}
+            >
+              Report Produzione Giornaliero
+            </div>
+            <div
+              style={{
+                fontSize: 34,
+                fontWeight: 900,
+                color: "#fff",
+                letterSpacing: "0.08em",
+                lineHeight: 1,
+              }}
+            >
+              MOSAICON + EMOS
+            </div>
+            <div style={{ fontSize: 15, color: "rgba(255,255,255,0.82)", marginTop: 10, fontWeight: 500 }}>
+              Report operativo giornaliero
+            </div>
           </div>
         </div>
-        <div style={{ background: "rgba(255,255,255,0.2)", backdropFilter: "blur(8px)", color: "#fff", fontFamily: MONO, fontSize: 24, fontWeight: 800, padding: "12px 24px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.3)" }}>{fmtD(date)}</div>
+
+        <div
+          style={{
+            background: "rgba(255,255,255,0.14)",
+            backdropFilter: "blur(8px)",
+            color: "#fff",
+            padding: "14px 22px",
+            borderRadius: 16,
+            border: "1px solid rgba(255,255,255,0.22)",
+            textAlign: "right",
+            minWidth: 150,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 10,
+              textTransform: "uppercase",
+              letterSpacing: "0.18em",
+              color: "rgba(255,255,255,0.66)",
+              fontWeight: 700,
+              marginBottom: 4,
+            }}
+          >
+            Data
+          </div>
+          <div style={{ fontFamily: MONO, fontSize: 28, fontWeight: 800 }}>{fmtD(date)}</div>
+        </div>
       </div>
 
-      {["MOSAICON", "EMOS"].map(brand => (
-        <div key={brand} style={{ marginBottom: 36, background: "#fff", borderRadius: 18, overflow: "hidden", boxShadow: "0 4px 24px rgba(13,27,42,0.08)", border: `1px solid ${BRD}` }}>
-          <div data-print-row="true" style={{ display: "grid", gridTemplateColumns: COL, background: `linear-gradient(135deg, ${bc(brand)}18, ${bc(brand)}08)`, borderBottom: `2px solid ${bc(brand)}30`, padding: "0 0 0 20px", borderLeft: `6px solid ${bc(brand)}` }}>
-            <div style={{ fontSize: 22, fontWeight: 900, color: bc(brand), letterSpacing: "0.1em", display: "flex", alignItems: "center", padding: "16px 0" }}>{brand}</div>
-            {TIMES.map(t => (
-              <div key={t} style={{ fontSize: 20, fontWeight: 800, color: bc(brand), textAlign: "center", fontFamily: MONO, borderLeft: `1px solid ${bc(brand)}20`, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px 8px" }}>{t}</div>
+      {["MOSAICON", "EMOS"].map((brand) => (
+        <div
+          key={brand}
+          style={{
+            marginBottom: 28,
+            background: "#fff",
+            borderRadius: 24,
+            overflow: "hidden",
+            boxShadow: "0 8px 28px rgba(13,27,42,0.08)",
+            border: `1px solid ${BRD}`,
+          }}
+        >
+          <div
+            data-print-row="true"
+            style={{
+              display: "grid",
+              gridTemplateColumns: COL,
+              background: `linear-gradient(135deg, ${bc(brand)}12, #ffffff 70%)`,
+              borderBottom: `1px solid ${BRD}`,
+            }}
+          >
+            <div
+              style={{
+                padding: "18px 22px",
+                borderLeft: `8px solid ${bc(brand)}`,
+                display: "flex",
+                alignItems: "center",
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontSize: 28,
+                    fontWeight: 900,
+                    color: bc(brand),
+                    letterSpacing: "0.14em",
+                    lineHeight: 1,
+                  }}
+                >
+                  {brand}
+                </div>
+                <div style={{ fontSize: 14, color: T2, marginTop: 7, fontWeight: 600 }}>
+                  Totale attuale: {brandTotal(brand) ?? "—"}
+                </div>
+              </div>
+            </div>
+
+            {TIMES.map((t) => (
+              <div
+                key={t}
+                style={{
+                  borderLeft: `1px solid ${BRD}`,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "16px 10px",
+                  background: `${bc(brand)}08`,
+                }}
+              >
+                <div
+                  style={{
+                    background: "#fff",
+                    border: `1px solid ${bc(brand)}20`,
+                    borderRadius: 14,
+                    padding: "8px 16px",
+                    minWidth: 92,
+                    textAlign: "center",
+                    boxShadow: "0 3px 10px rgba(13,27,42,0.05)",
+                    fontFamily: MONO,
+                    fontSize: 24,
+                    fontWeight: 800,
+                    color: bc(brand),
+                    lineHeight: 1,
+                  }}
+                >
+                  {t}
+                </div>
+              </div>
             ))}
           </div>
 
           {stations[brand]?.map((st, i) => {
             const isTotal = !!st.isTotal;
-            const hasNote = TIMES.some(t => getN(brand, st.id, t));
+            const hasNote = TIMES.some((t) => getN(brand, st.id, t));
+            const borderColor = isTotal ? bc(brand) : hasNote ? ACC : "transparent";
+
             return (
-              <div key={st.id} data-print-row="true" style={{ display: "grid", gridTemplateColumns: COL, background: isTotal ? `${bc(brand)}10` : i % 2 === 0 ? "#fff" : "#F8FAFD", borderBottom: `1px solid ${BRD}`, borderLeft: isTotal ? `6px solid ${bc(brand)}` : hasNote ? `4px solid ${ACC}` : "6px solid transparent", minHeight: 64 }}>
-                <div style={{ display: "flex", alignItems: "center", padding: "12px 16px 12px 20px", borderRight: `1px solid ${BRD}` }}>
-                  <span style={{ fontSize: isTotal ? 18 : 16, fontWeight: isTotal ? 900 : 700, color: isTotal ? bc(brand) : hasNote ? ACC : TXT, lineHeight: 1.3, letterSpacing: isTotal ? "0.04em" : 0 }}>{st.name}</span>
+              <div
+                key={st.id}
+                data-print-row="true"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: COL,
+                  background: isTotal ? `${bc(brand)}0D` : i % 2 === 0 ? "#fff" : "#F8FBFF",
+                  borderBottom: `1px solid ${BRD}`,
+                }}
+              >
+                <div
+                  style={{
+                    padding: "16px 20px",
+                    borderLeft: `8px solid ${borderColor}`,
+                    borderRight: `1px solid ${BRD}`,
+                    display: "flex",
+                    alignItems: "center",
+                    minHeight: 78,
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{
+                        fontSize: isTotal ? 25 : 21,
+                        fontWeight: isTotal ? 900 : 800,
+                        color: isTotal ? bc(brand) : TXT,
+                        lineHeight: 1.15,
+                        letterSpacing: isTotal ? "0.03em" : "0.01em",
+                      }}
+                    >
+                      {st.name}
+                    </div>
+
+                    {hasNote && !isTotal && (
+                      <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {TIMES.map((t) => {
+                          const note = getN(brand, st.id, t);
+                          if (!note) return null;
+                          return (
+                            <span
+                              key={t}
+                              style={{
+                                fontSize: 10,
+                                fontWeight: 800,
+                                color: ACC,
+                                background: ACL,
+                                border: "1px solid rgba(255,82,0,0.18)",
+                                borderRadius: 999,
+                                padding: "3px 8px",
+                                letterSpacing: "0.04em",
+                              }}
+                            >
+                              {t} · {note}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                {TIMES.map(t => {
+
+                {TIMES.map((t) => {
                   const v = getV(brand, st.id, t);
-                  const n = getN(brand, st.id, t);
                   return (
-                    <div key={t} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", borderLeft: `1px solid ${BRD}`, background: v ? `${bc(brand)}10` : "transparent", padding: "10px 8px", gap: 5 }}>
-                      <span style={{ fontFamily: MONO, fontSize: v ? 34 : 20, fontWeight: v ? 900 : 400, color: v ? bc(brand) : "#C8D8E8", lineHeight: 1 }}>{v || "—"}</span>
-                      {n && (
-                        <span style={{ fontSize: 11, color: ACC, background: ACL, border: `1px solid rgba(255,82,0,0.25)`, borderRadius: 5, padding: "2px 8px", fontWeight: 700 }}>{n}</span>
-                      )}
+                    <div
+                      key={t}
+                      style={{
+                        borderLeft: `1px solid ${BRD}`,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: "12px 10px",
+                        background: isTotal ? `${bc(brand)}10` : v ? `${bc(brand)}08` : "transparent",
+                        minHeight: 78,
+                      }}
+                    >
+                      <div
+                        style={{
+                          minWidth: 98,
+                          padding: "10px 12px",
+                          borderRadius: 18,
+                          textAlign: "center",
+                          background: isTotal ? bc(brand) : v ? "#F2F6FC" : "#F7FAFD",
+                          color: isTotal ? "#fff" : v ? TXT : "#B8C7D9",
+                          boxShadow: isTotal ? "0 6px 16px rgba(26,92,255,0.22)" : "inset 0 0 0 1px rgba(13,27,42,0.04)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontFamily: MONO,
+                            fontSize: isTotal ? 34 : 30,
+                            fontWeight: 900,
+                            lineHeight: 1,
+                            color: isTotal ? "#fff" : v ? bc(brand) : "#C6D2E0",
+                          }}
+                        >
+                          {v || "—"}
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
@@ -1074,9 +1317,29 @@ function PrintDoc({ date, stations, getV, getN }) {
         </div>
       ))}
 
-      <div data-print-row="true" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 8px", borderTop: `2px solid ${BRD}`, marginTop: 8 }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: T2, letterSpacing: "0.08em", textTransform: "uppercase" }}>Ricevere Qualità · Fare Qualità · Consegnare Qualità</span>
-        <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: T2 }}>{fmtD(date)}</span>
+      <div
+        data-print-row="true"
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "8px 6px 2px",
+        }}
+      >
+        <span
+          style={{
+            fontSize: 13,
+            fontWeight: 700,
+            color: T2,
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+          }}
+        >
+          Ricevere Qualità · Fare Qualità · Consegnare Qualità
+        </span>
+        <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: T2 }}>
+          {fmtD(date)}
+        </span>
       </div>
     </div>
   );
