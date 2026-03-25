@@ -211,9 +211,8 @@ export default function App() {
 
       const el = document.getElementById("print-doc");
       el.style.display = "block";
-      el.style.width = "794px";
+      el.style.width = "1100px"; // più largo = tutto più grande nel PDF
 
-      // Misura le posizioni delle righe PRIMA di catturare
       const elRect = el.getBoundingClientRect();
       const rowEls = el.querySelectorAll("[data-print-row]");
       const rowBreaks = [0, ...Array.from(rowEls).map(r => r.getBoundingClientRect().bottom - elRect.top)];
@@ -233,11 +232,9 @@ export default function App() {
       let startPx = 0, page = 0;
       while (startPx < canvas.height) {
         if (page > 0) pdf.addPage();
-
         const maxEnd = startPx + pageHeightPx;
         const fits = rowBreaks.map(b => b * scaleFactor).filter(b => b > startPx && b <= maxEnd);
         const endPx = fits.length > 0 ? fits[fits.length - 1] : Math.min(maxEnd, canvas.height);
-
         const sliceH = Math.round(endPx - startPx);
         const slice = document.createElement("canvas");
         slice.width = canvas.width;
@@ -246,10 +243,8 @@ export default function App() {
         ctx.fillStyle = "#fff";
         ctx.fillRect(0, 0, slice.width, slice.height);
         ctx.drawImage(canvas, 0, -Math.round(startPx));
-
         const imgH = (sliceH / canvas.width) * pageW;
         pdf.addImage(slice.toDataURL("image/png"), "PNG", 0, 0, pageW, imgH);
-
         startPx = endPx;
         page++;
       }
@@ -280,6 +275,7 @@ export default function App() {
     if (navigator.share) navigator.share({ text: txt }).catch(() => {});
     else window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`);
   }
+
 
 
   function runAnalysis() {
