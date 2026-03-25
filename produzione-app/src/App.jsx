@@ -553,11 +553,12 @@ function FoglioTab({ stations, getV, getN, openCell, savedKeys, onEditSt, onAddS
   return (
     <div>
       {["MOSAICON", "EMOS"].map(brand => (
-        <div key={brand} style={{ marginTop: brand === "EMOS" ? 12 : 0 }}>
+        <div key={brand} style={{ marginTop: brand === "EMOS" ? 16 : 0 }}>
 
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 14px", background:bl(brand), borderBottom:`1px solid ${BRD}`, borderLeft:`4px solid ${bc(brand)}`, position:"sticky", top:0, zIndex:10 }}>
-            <span style={{ fontSize:14, fontWeight:900, color:bc(brand), letterSpacing:"0.14em" }}>{brand}</span>
-            <span style={{ fontFamily:MONO, fontSize:11, fontWeight:700, background:`${bc(brand)}20`, color:bc(brand), padding:"3px 11px", borderRadius:20 }}>
+          {/* Brand header */}
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 16px", background:bl(brand), borderBottom:`2px solid ${bc(brand)}`, borderLeft:`5px solid ${bc(brand)}`, position:"sticky", top:0, zIndex:10 }}>
+            <span style={{ fontSize:17, fontWeight:900, color:bc(brand), letterSpacing:"0.12em" }}>{brand}</span>
+            <span style={{ fontFamily:MONO, fontSize:13, fontWeight:800, background:`${bc(brand)}20`, color:bc(brand), padding:"4px 14px", borderRadius:20 }}>
               {(() => {
                 const tot = stations[brand]?.find(s => s.isTotal);
                 if (!tot) return "—";
@@ -570,21 +571,23 @@ function FoglioTab({ stations, getV, getN, openCell, savedKeys, onEditSt, onAddS
             </span>
           </div>
 
-          <div style={{ display:"grid", gridTemplateColumns:"110px repeat(4,1fr)", padding:"5px 10px 5px 12px", background:S1, borderBottom:`1px solid ${BRD}`, position:"sticky", top:44, zIndex:9 }}>
-            <div style={{ fontSize:8, fontWeight:700, color:T3, letterSpacing:"0.08em", textTransform:"uppercase", display:"flex", alignItems:"center" }}>STAZIONE</div>
+          {/* Time header */}
+          <div style={{ display:"grid", gridTemplateColumns:"130px repeat(4,1fr)", padding:"6px 10px 6px 14px", background:S2, borderBottom:`1px solid ${BRD}`, position:"sticky", top:48, zIndex:9 }}>
+            <div style={{ fontSize:9, fontWeight:700, color:T2, letterSpacing:"0.1em", textTransform:"uppercase", display:"flex", alignItems:"center" }}>STAZIONE</div>
             {TIMES.map(t => (
-              <div key={t} style={{ fontSize:9, fontWeight:800, color:bc(brand), textAlign:"center", borderLeft:`1px solid ${BRD}`, fontFamily:MONO, display:"flex", alignItems:"center", justifyContent:"center" }}>{t}</div>
+              <div key={t} style={{ fontSize:12, fontWeight:800, color:bc(brand), textAlign:"center", borderLeft:`1px solid ${BRD}`, fontFamily:MONO, display:"flex", alignItems:"center", justifyContent:"center", padding:"4px 0" }}>{t}</div>
             ))}
           </div>
 
+          {/* Rows */}
           {stations[brand]?.map((st, idx) => {
             const hasNote = TIMES.some(t => getN(brand, st.id, t));
             const isTotal = !!st.isTotal;
             return (
-              <div key={st.id} style={{ display:"grid", gridTemplateColumns:"110px repeat(4,1fr)", background: isTotal ? bl(brand) : idx%2===0 ? S0 : S1, borderBottom:`1px solid ${BRD}`, borderLeft: isTotal ? `4px solid ${bc(brand)}` : hasNote ? `3px solid ${ACC}` : "3px solid transparent", minHeight:44 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:4, padding:"6px 4px 6px 8px", overflow:"hidden" }}>
-                  <span style={{ flex:1, fontSize: isTotal ? 9.5 : 9, fontWeight: isTotal ? 900 : 600, color: isTotal ? bc(brand) : hasNote ? ACC : TXT, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{st.name}</span>
-                  <button onClick={() => onEditSt(brand, st)} style={{ flexShrink:0, fontSize:7, background:S2, border:`1px solid ${BRD2}`, color:T2, borderRadius:3, padding:"1px 4px", cursor:"pointer", lineHeight:1.5 }}>✏</button>
+              <div key={st.id} style={{ display:"grid", gridTemplateColumns:"130px repeat(4,1fr)", background: isTotal ? bl(brand) : idx%2===0 ? S0 : S1, borderBottom:`1px solid ${BRD}`, borderLeft: isTotal ? `5px solid ${bc(brand)}` : hasNote ? `4px solid ${ACC}` : "4px solid transparent", minHeight:54 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 6px 8px 10px", overflow:"hidden" }}>
+                  <span style={{ flex:1, fontSize: isTotal ? 12 : 11, fontWeight: isTotal ? 900 : 700, color: isTotal ? bc(brand) : hasNote ? ACC : TXT, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", lineHeight:1.3 }}>{st.name}</span>
+                  <button onClick={() => onEditSt(brand, st)} style={{ flexShrink:0, fontSize:8, background:S2, border:`1px solid ${BRD2}`, color:T2, borderRadius:4, padding:"2px 5px", cursor:"pointer", lineHeight:1.5 }}>✏</button>
                 </div>
                 {TIMES.map(t => {
                   const v = getV(brand, st.id, t);
@@ -594,9 +597,9 @@ function FoglioTab({ stations, getV, getN, openCell, savedKeys, onEditSt, onAddS
                     <button key={t}
                       className={savedKeys.has(flashKey) ? "cell-flash" : ""}
                       onClick={() => openCell(brand, st.id, t, st.name)}
-                      style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", borderLeft:`1px solid ${BRD}`, background: v ? `${bc(brand)}10` : "transparent", cursor:"pointer", gap:2, padding:"5px 2px", width:"100%", height:"100%", minHeight:44, border:"none", borderLeft:`1px solid ${BRD}`, transition:"background 0.2s" }}>
-                      <span style={{ fontFamily:MONO, fontSize: v ? 15 : 12, fontWeight: v ? 800 : 400, color: v ? bc(brand) : "#C8D8E8", lineHeight:1 }}>{v || "—"}</span>
-                      {n && <span style={{ fontSize:6.5, color:ACC, background:ACL, border:"1px solid rgba(255,82,0,0.2)", borderRadius:3, padding:"1px 4px", maxWidth:54, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", lineHeight:1.4 }}>{n}</span>}
+                      style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", borderLeft:`1px solid ${BRD}`, background: v ? `${bc(brand)}12` : "transparent", cursor:"pointer", gap:3, padding:"6px 4px", width:"100%", height:"100%", minHeight:54, border:"none", borderLeft:`1px solid ${BRD}`, transition:"background 0.2s" }}>
+                      <span style={{ fontFamily:MONO, fontSize: v ? 18 : 13, fontWeight: v ? 800 : 400, color: v ? bc(brand) : "#C8D8E8", lineHeight:1 }}>{v || "—"}</span>
+                      {n && <span style={{ fontSize:7.5, color:ACC, background:ACL, border:"1px solid rgba(255,82,0,0.2)", borderRadius:4, padding:"1px 5px", maxWidth:58, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", lineHeight:1.4 }}>{n}</span>}
                     </button>
                   );
                 })}
@@ -604,10 +607,11 @@ function FoglioTab({ stations, getV, getN, openCell, savedKeys, onEditSt, onAddS
             );
           })}
 
+          {/* Add station */}
           <button onClick={() => onAddSt(brand, stations[brand]?.[stations[brand].length-1]?.id)}
-            style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 14px", margin:"6px 12px", background:S0, border:`1.5px dashed ${BRD2}`, borderRadius:10, cursor:"pointer", fontFamily:FONT, width:"calc(100% - 24px)" }}>
-            <span style={{ width:18, height:18, borderRadius:5, background:bl(brand), color:bc(brand), display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, fontWeight:900, flexShrink:0 }}>+</span>
-            <span style={{ fontSize:9, fontWeight:600, color:T2 }}>Aggiungi stazione {brand}</span>
+            style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 16px", margin:"8px 12px", background:S0, border:`1.5px dashed ${BRD2}`, borderRadius:10, cursor:"pointer", fontFamily:FONT, width:"calc(100% - 24px)" }}>
+            <span style={{ width:20, height:20, borderRadius:5, background:bl(brand), color:bc(brand), display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, fontWeight:900, flexShrink:0 }}>+</span>
+            <span style={{ fontSize:11, fontWeight:600, color:T2 }}>Aggiungi stazione {brand}</span>
           </button>
         </div>
       ))}
@@ -615,6 +619,7 @@ function FoglioTab({ stations, getV, getN, openCell, savedKeys, onEditSt, onAddS
     </div>
   );
 }
+
 
 /* ═══ STORICO TAB ═══ */
 function StoricoTab({ reports, stations, onOpen }) {
