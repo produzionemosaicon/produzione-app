@@ -473,17 +473,18 @@ export default function App() {
   }
 
   async function shareAnalysisPdf() {
-    if (!anRes || anRes.empty) {
-      alert("Esegui prima un'analisi con dati disponibili.");
-      return;
-    }
-    await shareNodeAsPdf(
-      "analysis-print-doc",
-      `analisi_${anFrom}_${anTo}.pdf`,
-      `Report analisi ${fmtD(anFrom)} - ${fmtD(anTo)}`,
-      1480
-    );
+  if (!anRes || anRes.empty) {
+    alert("Esegui prima un'analisi con dati disponibili.");
+    return;
   }
+
+  await shareNodeAsPaginatedPdf(
+    "analysis-print-doc",
+    `analisi_${anFrom}_${anTo}.pdf`,
+    `Report analisi ${fmtD(anFrom)} - ${fmtD(anTo)}`,
+    1480
+  );
+}
 
   function runAnalysis() {
     const activeBrands = Object.entries(anBrands).filter(([, ok]) => ok).map(([b]) => b);
