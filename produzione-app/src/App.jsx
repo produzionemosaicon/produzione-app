@@ -782,46 +782,49 @@ function AnalisiTab({ stations, reports, anBrand, setAnBrand, anSid, setAnSid, a
 
 /* ═══ PRINT DOC ═══ */
 function PrintDoc({ date, stations, getV, getN }) {
-  const G = { display:"grid", gridTemplateColumns:"180px repeat(4,1fr)" };
+  const G = { display:"grid", gridTemplateColumns:"200px repeat(4,1fr)" };
   return (
-    <div style={{ fontFamily:FONT, background:"#fff", padding:"24px 28px" }}>
+    <div style={{ fontFamily:FONT, background:"#fff", padding:"28px 32px" }}>
 
-      <div style={{ background:"linear-gradient(135deg,#0A3D9C,#1A5CFF 55%,#009FCC)", padding:"16px 20px", marginBottom:24, borderRadius:12, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-          <span style={{ fontSize:28 }}>🏭</span>
+      {/* Header */}
+      <div style={{ background:"linear-gradient(135deg,#0A3D9C,#1A5CFF 55%,#009FCC)", padding:"18px 24px", marginBottom:28, borderRadius:14, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+          <span style={{ fontSize:32 }}>🏭</span>
           <div>
-            <div style={{ fontSize:9, color:"rgba(255,255,255,0.65)", letterSpacing:"0.14em", textTransform:"uppercase", marginBottom:3 }}>Report Produzione Giornaliero</div>
-            <div style={{ fontSize:22, fontWeight:900, color:"#fff", letterSpacing:"0.08em" }}>MOSAICON + EMOS</div>
+            <div style={{ fontSize:10, color:"rgba(255,255,255,0.65)", letterSpacing:"0.14em", textTransform:"uppercase", marginBottom:4 }}>Report Produzione Giornaliero</div>
+            <div style={{ fontSize:24, fontWeight:900, color:"#fff", letterSpacing:"0.08em" }}>MOSAICON + EMOS</div>
           </div>
         </div>
-        <div style={{ background:"rgba(255,255,255,0.2)", color:"#fff", fontFamily:MONO, fontSize:16, fontWeight:700, padding:"8px 16px", borderRadius:8 }}>{fmtD(date)}</div>
+        <div style={{ background:"rgba(255,255,255,0.2)", color:"#fff", fontFamily:MONO, fontSize:18, fontWeight:700, padding:"10px 20px", borderRadius:10 }}>{fmtD(date)}</div>
       </div>
 
       {["MOSAICON","EMOS"].map(brand => (
-        <div key={brand} style={{ marginBottom:28 }}>
+        <div key={brand} style={{ marginBottom:32 }}>
 
-          <div style={{ ...G, background:bl(brand), borderLeft:`5px solid ${bc(brand)}`, padding:"10px 12px", borderRadius:"10px 10px 0 0" }}>
-            <div style={{ fontSize:13, fontWeight:900, color:bc(brand), letterSpacing:"0.12em", display:"flex", alignItems:"center" }}>{brand}</div>
+          {/* Brand header */}
+          <div style={{ ...G, background:bl(brand), borderLeft:`6px solid ${bc(brand)}`, padding:"12px 14px", borderRadius:"12px 12px 0 0" }}>
+            <div style={{ fontSize:15, fontWeight:900, color:bc(brand), letterSpacing:"0.12em", display:"flex", alignItems:"center" }}>{brand}</div>
             {TIMES.map(t => (
-              <div key={t} style={{ fontSize:12, fontWeight:800, color:bc(brand), textAlign:"center", fontFamily:MONO, borderLeft:`1px solid ${bc(brand)}30`, display:"flex", alignItems:"center", justifyContent:"center" }}>{t}</div>
+              <div key={t} style={{ fontSize:14, fontWeight:800, color:bc(brand), textAlign:"center", fontFamily:MONO, borderLeft:`1px solid ${bc(brand)}30`, display:"flex", alignItems:"center", justifyContent:"center", padding:"6px 0" }}>{t}</div>
             ))}
           </div>
 
+          {/* Righe */}
           {stations[brand]?.map((st, i) => {
             const isTotal = !!st.isTotal;
             const hasNote = TIMES.some(t => getN(brand, st.id, t));
             return (
-              <div key={st.id} style={{ ...G, background: isTotal ? bl(brand) : i%2===0 ? "#fff" : S1, borderBottom:`1px solid ${BRD}`, borderLeft: isTotal ? `5px solid ${bc(brand)}` : hasNote ? `3px solid ${ACC}` : "5px solid transparent", minHeight:46 }}>
-                <div style={{ display:"flex", alignItems:"center", padding:"8px 10px 8px 14px" }}>
-                  <span style={{ fontSize: isTotal ? 11 : 10, fontWeight: isTotal ? 900 : 600, color: isTotal ? bc(brand) : hasNote ? ACC : TXT }}>{st.name}</span>
+              <div key={st.id} style={{ ...G, background: isTotal ? bl(brand) : i%2===0 ? "#fff" : "#F7F9FC", borderBottom:`1px solid ${BRD}`, borderLeft: isTotal ? `6px solid ${bc(brand)}` : hasNote ? `4px solid ${ACC}` : "6px solid transparent", minHeight:54 }}>
+                <div style={{ display:"flex", alignItems:"center", padding:"10px 12px 10px 16px" }}>
+                  <span style={{ fontSize: isTotal ? 13 : 12, fontWeight: isTotal ? 900 : 700, color: isTotal ? bc(brand) : hasNote ? ACC : TXT, lineHeight:1.3 }}>{st.name}</span>
                 </div>
                 {TIMES.map(t => {
                   const v = getV(brand, st.id, t);
                   const n = getN(brand, st.id, t);
                   return (
-                    <div key={t} style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", borderLeft:`1px solid ${BRD}`, background: v ? `${bc(brand)}12` : "transparent", padding:"6px 4px", gap:3 }}>
-                      <span style={{ fontFamily:MONO, fontSize: v ? 20 : 14, fontWeight: v ? 800 : 400, color: v ? bc(brand) : "#C8D8E8", lineHeight:1 }}>{v || "—"}</span>
-                      {n && <span style={{ fontSize:8, color:ACC, background:ACL, border:`1px solid rgba(255,82,0,0.2)`, borderRadius:3, padding:"1px 5px" }}>{n}</span>}
+                    <div key={t} style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", borderLeft:`1px solid ${BRD}`, background: v ? `${bc(brand)}12` : "transparent", padding:"8px 6px", gap:4 }}>
+                      <span style={{ fontFamily:MONO, fontSize: v ? 24 : 16, fontWeight: v ? 800 : 400, color: v ? bc(brand) : "#C8D8E8", lineHeight:1 }}>{v || "—"}</span>
+                      {n && <span style={{ fontSize:9, color:ACC, background:ACL, border:`1px solid rgba(255,82,0,0.2)`, borderRadius:4, padding:"2px 6px" }}>{n}</span>}
                     </div>
                   );
                 })}
@@ -831,13 +834,15 @@ function PrintDoc({ date, stations, getV, getN }) {
         </div>
       ))}
 
-      <div style={{ borderTop:`2px solid ${BRD}`, paddingTop:10, display:"flex", justifyContent:"space-between", fontSize:9, color:T3 }}>
-        <span style={{ fontWeight:600, letterSpacing:"0.06em" }}>RICEVERE QUALITÀ · FARE QUALITÀ · CONSEGNARE QUALITÀ</span>
+      {/* Footer */}
+      <div style={{ borderTop:`2px solid ${BRD}`, paddingTop:12, display:"flex", justifyContent:"space-between", fontSize:10, color:T3 }}>
+        <span style={{ fontWeight:700, letterSpacing:"0.06em" }}>RICEVERE QUALITÀ · FARE QUALITÀ · CONSEGNARE QUALITÀ</span>
         <span style={{ fontFamily:MONO }}>{fmtD(date)}</span>
       </div>
     </div>
   );
 }
+
 
 /* ═══ SHARED COMPONENTS ═══ */
 function Modal({ children, onClose }) {
