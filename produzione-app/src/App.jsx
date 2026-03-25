@@ -203,7 +203,6 @@ export default function App() {
   }
 
   async function shareWA() {
-    // Tenta PDF vero con html2canvas + jspdf
     try {
       const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
         import("html2canvas"),
@@ -212,13 +211,37 @@ export default function App() {
       const el = document.getElementById("print-doc");
       if (el) {
         el.style.display = "block";
-        const canvas = await html2canvas(el, { scale: 2, useCORS: true });
+        el.style.width = "800px";
+        const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
         el.style.display = "none";
+        el.style.width = "";
+
         const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-        const imgData = canvas.toDataURL("image/png");
-        const w = pdf.internal.pageSize.getWidth();
-        const h = (canvas.height * w) / canvas.width;
-        pdf.addImage(imgData, "PNG", 0, 0, w, Math.min(h, pdf.internal.pageSize.getHeight()));
+        const pageW = pdf.internal.pageSize.getWidth();
+        const pageH = pdf.internal.pageSize.getHeight();
+        const imgW  = pageW;
+        const imgH  = (canvas.height * pageW) / canvas.width;
+
+        if (imgH <= pageH) {
+          pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, imgW, imgH);
+        } else {
+          const pxPerPage = Math.floor((canvas.height * pageH) / imgH);
+          let offsetY = 0, page = 0;
+          while (offsetY < canvas.height) {
+            if (page > 0) pdf.addPage();
+            const slice = document.createElement("canvas");
+            slice.width  = canvas.width;
+            slice.height = pxPerPage;
+            const ctx = slice.getContext("2d");
+            ctx.fillStyle = "#fff";
+            ctx.fillRect(0, 0, slice.width, slice.height);
+            ctx.drawImage(canvas, 0, -offsetY);
+            pdf.addImage(slice.toDataURL("image/png"), "PNG", 0, 0, imgW, pageH);
+            offsetY += pxPerPage;
+            page++;
+          }
+        }
+
         const blob = pdf.output("blob");
         const file = new File([blob], `produzione_${date}.pdf`, { type: "application/pdf" });
         if (navigator.share && navigator.canShare({ files: [file] })) {
@@ -234,7 +257,6 @@ export default function App() {
     } catch (e) {
       console.warn("PDF fallback a testo", e);
     }
-    // Fallback testo WhatsApp
     let txt = `📊 Produzione ${fmtD(date)}\n\n`;
     for (const brand of ["MOSAICON", "EMOS"]) {
       txt += `━ ${brand} ━\n`;
@@ -270,7 +292,6 @@ export default function App() {
       days: pts.length, maxDay: pts[vals.indexOf(max)], minDay: pts[vals.indexOf(min)] });
   }
 
-  /* ═══ LOADING ═══ */
   if (loading) return (
     <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:"100dvh", background:BG, fontFamily:FONT, gap:12 }}>
       <div style={{ fontSize:40 }}>🏭</div>
@@ -282,7 +303,6 @@ export default function App() {
     </div>
   );
 
-  /* ═══ RENDER ═══ */
   return (
     <div style={{ maxWidth:900, margin:"0 auto", minHeight:"100dvh", display:"flex", flexDirection:"column", background:BG, fontFamily:FONT }}>
       <style>{`
@@ -294,7 +314,7 @@ export default function App() {
         .print-only{display:none}
       `}</style>
 
-      {/* ── TOP BAR ── */}
+      {/* TOP BAR */}
       <div className="no-print" style={{ background:"linear-gradient(135deg,#0A3D9C 0%,#1A5CFF 55%,#0099CC 100%)", padding:"12px 16px", flexShrink:0, boxShadow:"0 3px 18px rgba(26,92,255,0.28)" }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
@@ -320,7 +340,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── CONTENT ── */}
+      {/* CONTENT */}
       <div className="no-print" style={{ flex:1, overflowY:"auto" }}>
         {tab === "home"    && <HomeTab date={date} reports={reports} stations={stations} onGoFoglio={() => setTab("foglio")} />}
         {tab === "foglio"  && <FoglioTab stations={stations} getV={getV} getN={getN} openCell={openCell} savedKeys={savedKeys}
@@ -333,12 +353,12 @@ export default function App() {
           anRes={anRes} run={runAnalysis} />}
       </div>
 
-      {/* ── PRINT DOC (nascosto, usato per PDF) ── */}
-      <div id="print-doc" style={{ display:"none", padding:"20px 24px", background:"#fff" }}>
+      {/* PRINT DOC nascosto, usato da html2canvas */}
+      <div id="print-doc" style={{ display:"none", padding:"24px 28px", background:"#fff" }}>
         <PrintDoc date={date} stations={stations} getV={getV} getN={getN} />
       </div>
 
-      {/* ── BOTTOM NAV ── */}
+      {/* BOTTOM NAV */}
       <div className="no-print" style={{ background:S0, borderTop:`1px solid ${BRD}`, display:"flex", flexShrink:0, boxShadow:"0 -2px 12px rgba(13,27,42,0.07)" }}>
         {[
           { id:"home",    icon:"🏠", label:"Home" },
@@ -355,7 +375,7 @@ export default function App() {
         ))}
       </div>
 
-      {/* ── CELL MODAL ── */}
+      {/* CELL MODAL */}
       {cellModal && (
         <Modal onClose={() => setCellModal(null)}>
           <div style={{ fontSize:9, fontWeight:700, color:T3, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:3 }}>
@@ -379,7 +399,7 @@ export default function App() {
         </Modal>
       )}
 
-      {/* ── STATION MODAL ── */}
+      {/* STATION MODAL */}
       {stModal && (
         <Modal onClose={() => setStModal(null)}>
           <div style={{ fontSize:9, fontWeight:700, color:T3, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:3 }}>Stazione · {stModal.brand}</div>
@@ -401,7 +421,7 @@ export default function App() {
         </Modal>
       )}
 
-      {/* ── ADD MODAL ── */}
+      {/* ADD MODAL */}
       {addModal && (
         <Modal onClose={() => setAddModal(null)}>
           <div style={{ fontSize:9, fontWeight:700, color:T3, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:3 }}>Nuova stazione · {addModal.brand}</div>
@@ -428,12 +448,12 @@ function HomeTab({ date, reports, stations, onGoFoglio }) {
   const rToday = reports[date];
   const rYest  = reports[yesterdayStr()];
 
-  const mTod = getTot(rToday, "MOSAICON");
-  const eTod = getTot(rToday, "EMOS");
-  const mYest = getTot(rYest, "MOSAICON");
-  const eYest = getTot(rYest, "EMOS");
-  const combined      = (mTod  ?? 0) + (eTod  ?? 0);
-  const combinedYest  = (mYest ?? 0) + (eYest ?? 0);
+  const mTod  = getTot(rToday, "MOSAICON");
+  const eTod  = getTot(rToday, "EMOS");
+  const mYest = getTot(rYest,  "MOSAICON");
+  const eYest = getTot(rYest,  "EMOS");
+  const combined     = (mTod  ?? 0) + (eTod  ?? 0);
+  const combinedYest = (mYest ?? 0) + (eYest ?? 0);
 
   const pct = (a, b) => (b && a !== null) ? +(((a - b) / b) * 100).toFixed(1) : null;
 
@@ -444,7 +464,7 @@ function HomeTab({ date, reports, stations, onGoFoglio }) {
       const ds = d.toISOString().split("T")[0];
       const m = getTot(reports[ds], "MOSAICON") ?? 0;
       const e = getTot(reports[ds], "EMOS")     ?? 0;
-      pts.push({ label: `${d.getDate()}/${d.getMonth()+1}`, MOSAICON: m, EMOS: e, total: m+e });
+      pts.push({ label:`${d.getDate()}/${d.getMonth()+1}`, MOSAICON:m, EMOS:e, total:m+e });
     }
     return pts;
   }, [reports]);
@@ -452,7 +472,6 @@ function HomeTab({ date, reports, stations, onGoFoglio }) {
   return (
     <div style={{ padding:"16px 14px", fontFamily:FONT }}>
 
-      {/* Data */}
       <div style={{ marginBottom:14, padding:"10px 16px", background:S0, borderRadius:16, border:`1px solid ${BRD}`, boxShadow:"0 2px 10px rgba(13,27,42,0.05)" }}>
         <div style={{ fontSize:9, fontWeight:700, color:T3, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:2 }}>
           {date === todayStr() ? "Oggi" : "Data selezionata"}
@@ -462,12 +481,11 @@ function HomeTab({ date, reports, stations, onGoFoglio }) {
         </div>
       </div>
 
-      {/* KPI MOSAICON + EMOS */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
         {[
-          { brand:"MOSAICON", val:mTod, yest:mYest, color:M, light:ML },
-          { brand:"EMOS",     val:eTod, yest:eYest, color:E, light:EL },
-        ].map(({ brand, val, yest, color, light }) => {
+          { brand:"MOSAICON", val:mTod, yest:mYest, color:M },
+          { brand:"EMOS",     val:eTod, yest:eYest, color:E },
+        ].map(({ brand, val, yest, color }) => {
           const p = pct(val, yest);
           const isUp = p !== null && p >= 0;
           return (
@@ -485,7 +503,6 @@ function HomeTab({ date, reports, stations, onGoFoglio }) {
         })}
       </div>
 
-      {/* Totale combinato */}
       <div style={{ background:"linear-gradient(135deg,#0A3D9C,#1A5CFF 60%,#0099CC)", borderRadius:18, padding:"18px 20px", marginBottom:16, boxShadow:"0 6px 24px rgba(26,92,255,0.28)", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
         <div>
           <div style={{ fontSize:9, fontWeight:700, color:"rgba(255,255,255,0.6)", letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:4 }}>Totale combinato</div>
@@ -499,7 +516,6 @@ function HomeTab({ date, reports, stations, onGoFoglio }) {
         <div style={{ fontSize:40, opacity:0.35 }}>🏭</div>
       </div>
 
-      {/* Grafico ultimi 7 giorni */}
       <div style={{ background:S0, borderRadius:16, border:`1px solid ${BRD}`, padding:"14px 10px 10px", marginBottom:16, boxShadow:"0 2px 10px rgba(13,27,42,0.05)" }}>
         <div style={{ fontSize:10, fontWeight:700, color:T2, paddingLeft:6, marginBottom:12, letterSpacing:"0.08em", textTransform:"uppercase" }}>Ultimi 7 giorni</div>
         <ResponsiveContainer width="100%" height={140}>
@@ -515,7 +531,6 @@ function HomeTab({ date, reports, stations, onGoFoglio }) {
         </ResponsiveContainer>
       </div>
 
-      {/* Accesso rapido foglio */}
       <button onClick={onGoFoglio}
         style={{ width:"100%", background:S0, border:`1.5px solid ${BRD}`, borderRadius:16, padding:"14px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:FONT, boxShadow:"0 2px 10px rgba(13,27,42,0.05)" }}>
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
@@ -540,7 +555,6 @@ function FoglioTab({ stations, getV, getN, openCell, savedKeys, onEditSt, onAddS
       {["MOSAICON", "EMOS"].map(brand => (
         <div key={brand} style={{ marginTop: brand === "EMOS" ? 12 : 0 }}>
 
-          {/* Brand header sticky */}
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 14px", background:bl(brand), borderBottom:`1px solid ${BRD}`, borderLeft:`4px solid ${bc(brand)}`, position:"sticky", top:0, zIndex:10 }}>
             <span style={{ fontSize:14, fontWeight:900, color:bc(brand), letterSpacing:"0.14em" }}>{brand}</span>
             <span style={{ fontFamily:MONO, fontSize:11, fontWeight:700, background:`${bc(brand)}20`, color:bc(brand), padding:"3px 11px", borderRadius:20 }}>
@@ -556,7 +570,6 @@ function FoglioTab({ stations, getV, getN, openCell, savedKeys, onEditSt, onAddS
             </span>
           </div>
 
-          {/* Time header */}
           <div style={{ display:"grid", gridTemplateColumns:"110px repeat(4,1fr)", padding:"5px 10px 5px 12px", background:S1, borderBottom:`1px solid ${BRD}`, position:"sticky", top:44, zIndex:9 }}>
             <div style={{ fontSize:8, fontWeight:700, color:T3, letterSpacing:"0.08em", textTransform:"uppercase", display:"flex", alignItems:"center" }}>STAZIONE</div>
             {TIMES.map(t => (
@@ -564,7 +577,6 @@ function FoglioTab({ stations, getV, getN, openCell, savedKeys, onEditSt, onAddS
             ))}
           </div>
 
-          {/* Rows */}
           {stations[brand]?.map((st, idx) => {
             const hasNote = TIMES.some(t => getN(brand, st.id, t));
             const isTotal = !!st.isTotal;
@@ -577,12 +589,10 @@ function FoglioTab({ stations, getV, getN, openCell, savedKeys, onEditSt, onAddS
                 {TIMES.map(t => {
                   const v = getV(brand, st.id, t);
                   const n = getN(brand, st.id, t);
-                  const tKey = t.replace(":","_");
-                  const flashKey = `${brand}_${st.id}_${tKey}`;
-                  const isFlashing = savedKeys.has(flashKey);
+                  const flashKey = `${brand}_${st.id}_${t.replace(":","_")}`;
                   return (
                     <button key={t}
-                      className={isFlashing ? "cell-flash" : ""}
+                      className={savedKeys.has(flashKey) ? "cell-flash" : ""}
                       onClick={() => openCell(brand, st.id, t, st.name)}
                       style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", borderLeft:`1px solid ${BRD}`, background: v ? `${bc(brand)}10` : "transparent", cursor:"pointer", gap:2, padding:"5px 2px", width:"100%", height:"100%", minHeight:44, border:"none", borderLeft:`1px solid ${BRD}`, transition:"background 0.2s" }}>
                       <span style={{ fontFamily:MONO, fontSize: v ? 15 : 12, fontWeight: v ? 800 : 400, color: v ? bc(brand) : "#C8D8E8", lineHeight:1 }}>{v || "—"}</span>
@@ -594,7 +604,6 @@ function FoglioTab({ stations, getV, getN, openCell, savedKeys, onEditSt, onAddS
             );
           })}
 
-          {/* Add station */}
           <button onClick={() => onAddSt(brand, stations[brand]?.[stations[brand].length-1]?.id)}
             style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 14px", margin:"6px 12px", background:S0, border:`1.5px dashed ${BRD2}`, borderRadius:10, cursor:"pointer", fontFamily:FONT, width:"calc(100% - 24px)" }}>
             <span style={{ width:18, height:18, borderRadius:5, background:bl(brand), color:bc(brand), display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, fontWeight:900, flexShrink:0 }}>+</span>
@@ -666,14 +675,12 @@ function AnalisiTab({ stations, reports, anBrand, setAnBrand, anSid, setAnSid, a
     <div style={{ fontFamily:FONT }}>
       <div style={{ background:S0, borderBottom:`1px solid ${BRD}`, padding:"14px 14px 16px" }}>
         <div style={{ fontSize:10, fontWeight:700, color:T3, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:12 }}>Filtri analisi</div>
-
         <div style={{ display:"flex", gap:8, marginBottom:12 }}>
           {["MOSAICON","EMOS"].map(b => (
             <button key={b} onClick={() => { setAnBrand(b); setAnSid(""); }}
               style={{ flex:1, padding:10, background: anBrand===b ? bl(b) : BG, border:`1.5px solid ${anBrand===b ? bc(b) : BRD}`, borderRadius:10, fontSize:12, fontWeight:800, color: anBrand===b ? bc(b) : T3, cursor:"pointer", fontFamily:FONT }}>{b}</button>
           ))}
         </div>
-
         <div style={{ marginBottom:12 }}>
           <div style={{ fontSize:9, fontWeight:700, color:T2, marginBottom:5, letterSpacing:"0.08em", textTransform:"uppercase" }}>Stazione</div>
           <select value={sidEff} onChange={e => setAnSid(e.target.value)}
@@ -681,7 +688,6 @@ function AnalisiTab({ stations, reports, anBrand, setAnBrand, anSid, setAnSid, a
             {stList.map(s => <option key={s.id} value={s.id}>{s.name}{s.isTotal?" ★":""}</option>)}
           </select>
         </div>
-
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
           {[["DAL", anFrom, setAnFrom],["AL", anTo, setAnTo]].map(([label, val, setter]) => (
             <div key={label}>
@@ -691,7 +697,6 @@ function AnalisiTab({ stations, reports, anBrand, setAnBrand, anSid, setAnSid, a
             </div>
           ))}
         </div>
-
         <button onClick={run}
           style={{ width:"100%", padding:13, background:bc(anBrand), color:"#fff", border:"none", borderRadius:12, fontSize:14, fontWeight:800, cursor:"pointer", fontFamily:FONT }}>
           📊 ANALIZZA
@@ -715,14 +720,12 @@ function AnalisiTab({ stations, reports, anBrand, setAnBrand, anSid, setAnSid, a
                   <div style={{ fontSize:10, color:T2, marginTop:2, fontFamily:MONO }}>{fmtD(anRes.from)} → {fmtD(anRes.to)} · {anRes.days} gg</div>
                 </div>
               </div>
-
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
                 <KpiSmall label="Totale periodo"    value={anRes.total} color={bc(anRes.brand)} sub={`in ${anRes.days} giorni`} />
                 <KpiSmall label="Media giornaliera" value={anRes.avg}   color={bc(anRes.brand)} sub="paia/giorno" />
                 <KpiSmall label="Giorno migliore"   value={anRes.max}   color={GRN} sub={fmtD(anRes.maxDay?.date)} arrow="▲" />
                 <KpiSmall label="Giorno peggiore"   value={anRes.min}   color={anRes.min < anRes.avg*0.8 ? RED : T2} sub={fmtD(anRes.minDay?.date)} arrow="▼" />
               </div>
-
               <div style={{ background:S0, border:`1px solid ${BRD}`, borderRadius:14, padding:"12px 14px", marginBottom:14, display:"flex", alignItems:"center", gap:12 }}>
                 <div style={{ width:42, height:42, borderRadius:12, background: anRes.trend>=0 ? "#DCFCE7" : "#FEE2E2", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, flexShrink:0 }}>
                   {anRes.trend >= 0 ? "📈" : "📉"}
@@ -735,7 +738,6 @@ function AnalisiTab({ stations, reports, anBrand, setAnBrand, anSid, setAnSid, a
                   <div style={{ fontSize:10, color:T3, marginTop:2 }}>dal primo all'ultimo giorno rilevato</div>
                 </div>
               </div>
-
               <div style={{ background:S0, border:`1px solid ${BRD}`, borderRadius:14, padding:"14px 6px 10px", marginBottom:14 }}>
                 <div style={{ fontSize:10, fontWeight:700, color:T2, paddingLeft:10, marginBottom:10 }}>{anRes.stName} — andamento</div>
                 <ResponsiveContainer width="100%" height={160}>
@@ -752,7 +754,6 @@ function AnalisiTab({ stations, reports, anBrand, setAnBrand, anSid, setAnSid, a
                   </LineChart>
                 </ResponsiveContainer>
               </div>
-
               <div style={{ background:S0, border:`1px solid ${BRD}`, borderRadius:14, overflow:"hidden", marginBottom:14 }}>
                 <div style={{ padding:"10px 14px", borderBottom:`1px solid ${BRD}`, fontSize:10, fontWeight:700, color:T2, textTransform:"uppercase", letterSpacing:"0.08em" }}>Dettaglio giornaliero</div>
                 {[...anRes.pts].reverse().map((pt, i) => (
@@ -776,51 +777,58 @@ function AnalisiTab({ stations, reports, anBrand, setAnBrand, anSid, setAnSid, a
 
 /* ═══ PRINT DOC ═══ */
 function PrintDoc({ date, stations, getV, getN }) {
+  const G = { display:"grid", gridTemplateColumns:"180px repeat(4,1fr)" };
   return (
-    <div style={{ fontFamily:FONT, background:"#fff" }}>
-      <div style={{ background:"linear-gradient(135deg,#0A3D9C,#1A5CFF 55%,#009FCC)", padding:"14px 16px", marginBottom:16, display:"flex", justifyContent:"space-between", alignItems:"flex-end" }}>
-        <div>
-          <div style={{ fontSize:9, color:"rgba(255,255,255,0.6)", letterSpacing:"0.14em", textTransform:"uppercase", marginBottom:3 }}>Report Produzione Giornaliero</div>
-          <div style={{ fontSize:20, fontWeight:900, color:"#fff", letterSpacing:"0.1em" }}>MOSAICON + EMOS</div>
-        </div>
-        <div style={{ background:"rgba(255,255,255,0.18)", color:"#fff", fontFamily:MONO, fontSize:12, padding:"4px 10px", borderRadius:5 }}>{fmtD(date)}</div>
-      </div>
-      {["MOSAICON","EMOS"].map(brand => (
-        <div key={brand} style={{ marginBottom:16 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, padding:"5px 8px", background:bl(brand) }}>
-            <div style={{ width:3, height:16, background:bc(brand), borderRadius:2 }} />
-            <div style={{ fontSize:12, fontWeight:900, color:bc(brand), letterSpacing:"0.1em" }}>{brand}</div>
+    <div style={{ fontFamily:FONT, background:"#fff", padding:"24px 28px" }}>
+
+      <div style={{ background:"linear-gradient(135deg,#0A3D9C,#1A5CFF 55%,#009FCC)", padding:"16px 20px", marginBottom:24, borderRadius:12, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          <span style={{ fontSize:28 }}>🏭</span>
+          <div>
+            <div style={{ fontSize:9, color:"rgba(255,255,255,0.65)", letterSpacing:"0.14em", textTransform:"uppercase", marginBottom:3 }}>Report Produzione Giornaliero</div>
+            <div style={{ fontSize:22, fontWeight:900, color:"#fff", letterSpacing:"0.08em" }}>MOSAICON + EMOS</div>
           </div>
-          <table style={{ width:"100%", borderCollapse:"collapse" }}>
-            <thead>
-              <tr style={{ background:"#EEF3FA" }}>
-                <th style={{ padding:"5px 8px", fontSize:8, fontWeight:700, color:T2, textAlign:"left", borderBottom:`2px solid ${BRD}`, width:"38%" }}>STAZIONE</th>
-                {TIMES.map(t => <th key={t} style={{ padding:"5px 6px", fontSize:8, fontWeight:700, color:T2, textAlign:"center", borderBottom:`2px solid ${BRD}`, fontFamily:MONO, borderLeft:`1px solid ${BRD}` }}>{t}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {stations[brand]?.map((st, i) => (
-                <tr key={st.id} style={{ background: st.isTotal ? bl(brand) : i%2===0 ? "#fff" : "#F8FAFC" }}>
-                  <td style={{ padding:"5px 8px", fontSize:9, fontWeight: st.isTotal ? 800 : 600, color: st.isTotal ? bc(brand) : TXT, borderBottom:`1px solid #EEF3F9` }}>{st.name}</td>
-                  {TIMES.map(t => {
-                    const v = getV(brand, st.id, t);
-                    const n = getN(brand, st.id, t);
-                    return (
-                      <td key={t} style={{ padding:4, textAlign:"center", borderBottom:`1px solid #EEF3F9`, borderLeft:`1px solid #EEF3F9`, verticalAlign:"middle" }}>
-                        <div style={{ fontFamily:MONO, fontSize:12, fontWeight:700, color: v ? bc(brand) : "#C8D8E8" }}>{v || "—"}</div>
-                        {n && <div style={{ fontSize:7, color:ACC, background:ACL, borderRadius:2, padding:"1px 4px", marginTop:2, display:"inline-block" }}>{n}</div>}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        </div>
+        <div style={{ background:"rgba(255,255,255,0.2)", color:"#fff", fontFamily:MONO, fontSize:16, fontWeight:700, padding:"8px 16px", borderRadius:8 }}>{fmtD(date)}</div>
+      </div>
+
+      {["MOSAICON","EMOS"].map(brand => (
+        <div key={brand} style={{ marginBottom:28 }}>
+
+          <div style={{ ...G, background:bl(brand), borderLeft:`5px solid ${bc(brand)}`, padding:"10px 12px", borderRadius:"10px 10px 0 0" }}>
+            <div style={{ fontSize:13, fontWeight:900, color:bc(brand), letterSpacing:"0.12em", display:"flex", alignItems:"center" }}>{brand}</div>
+            {TIMES.map(t => (
+              <div key={t} style={{ fontSize:12, fontWeight:800, color:bc(brand), textAlign:"center", fontFamily:MONO, borderLeft:`1px solid ${bc(brand)}30`, display:"flex", alignItems:"center", justifyContent:"center" }}>{t}</div>
+            ))}
+          </div>
+
+          {stations[brand]?.map((st, i) => {
+            const isTotal = !!st.isTotal;
+            const hasNote = TIMES.some(t => getN(brand, st.id, t));
+            return (
+              <div key={st.id} style={{ ...G, background: isTotal ? bl(brand) : i%2===0 ? "#fff" : S1, borderBottom:`1px solid ${BRD}`, borderLeft: isTotal ? `5px solid ${bc(brand)}` : hasNote ? `3px solid ${ACC}` : "5px solid transparent", minHeight:46 }}>
+                <div style={{ display:"flex", alignItems:"center", padding:"8px 10px 8px 14px" }}>
+                  <span style={{ fontSize: isTotal ? 11 : 10, fontWeight: isTotal ? 900 : 600, color: isTotal ? bc(brand) : hasNote ? ACC : TXT }}>{st.name}</span>
+                </div>
+                {TIMES.map(t => {
+                  const v = getV(brand, st.id, t);
+                  const n = getN(brand, st.id, t);
+                  return (
+                    <div key={t} style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", borderLeft:`1px solid ${BRD}`, background: v ? `${bc(brand)}12` : "transparent", padding:"6px 4px", gap:3 }}>
+                      <span style={{ fontFamily:MONO, fontSize: v ? 20 : 14, fontWeight: v ? 800 : 400, color: v ? bc(brand) : "#C8D8E8", lineHeight:1 }}>{v || "—"}</span>
+                      {n && <span style={{ fontSize:8, color:ACC, background:ACL, border:`1px solid rgba(255,82,0,0.2)`, borderRadius:3, padding:"1px 5px" }}>{n}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
         </div>
       ))}
-      <div style={{ borderTop:`1px solid ${BRD}`, paddingTop:8, display:"flex", justifyContent:"space-between", fontSize:8, color:T3 }}>
-        <span>RICEVERE QUALITÀ · FARE QUALITÀ · CONSEGNARE QUALITÀ</span>
-        <span style={{ fontFamily:MONO }}>1/1</span>
+
+      <div style={{ borderTop:`2px solid ${BRD}`, paddingTop:10, display:"flex", justifyContent:"space-between", fontSize:9, color:T3 }}>
+        <span style={{ fontWeight:600, letterSpacing:"0.06em" }}>RICEVERE QUALITÀ · FARE QUALITÀ · CONSEGNARE QUALITÀ</span>
+        <span style={{ fontFamily:MONO }}>{fmtD(date)}</span>
       </div>
     </div>
   );
