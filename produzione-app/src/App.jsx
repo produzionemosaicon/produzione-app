@@ -736,7 +736,7 @@ function AnalisiTab({ stations, reports, anBrand, setAnBrand, anSid, setAnSid, a
 
 /* ═══ PRINT DOC NUOVO ═══ */
 function PrintDoc({ date, stations, getV, getN }) {
-  const COL = "360px repeat(4, 1fr)";
+  const COL = "430px repeat(4, 1fr)";
 
   const brandTotal = (brand) => {
     const totalStation = stations[brand]?.find((s) => s.isTotal);
@@ -748,32 +748,31 @@ function PrintDoc({ date, stations, getV, getN }) {
   };
 
   return (
-    <div style={{ fontFamily: FONT, background: "#EAF0F8", padding: 24 }}>
-      {/* HEADER */}
+    <div style={{ fontFamily: FONT, background: "#EAF0F8", padding: 26 }}>
       <div
         data-print-row="true"
         style={{
           background: "linear-gradient(135deg,#0A3D9C 0%,#1A5CFF 58%,#00A0D6 100%)",
-          borderRadius: 30,
-          padding: "30px 36px",
-          marginBottom: 26,
+          borderRadius: 32,
+          padding: "34px 40px",
+          marginBottom: 28,
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          boxShadow: "0 14px 34px rgba(26,92,255,0.24)",
+          boxShadow: "0 16px 36px rgba(26,92,255,0.24)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
           <div
             style={{
-              width: 64,
-              height: 64,
-              borderRadius: 18,
+              width: 72,
+              height: 72,
+              borderRadius: 20,
               background: "rgba(255,255,255,0.16)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 34,
+              fontSize: 38,
             }}
           >
             🏭
@@ -781,11 +780,11 @@ function PrintDoc({ date, stations, getV, getN }) {
           <div>
             <div
               style={{
-                fontSize: 13,
+                fontSize: 14,
                 color: "rgba(255,255,255,0.70)",
                 letterSpacing: "0.24em",
                 textTransform: "uppercase",
-                marginBottom: 6,
+                marginBottom: 8,
                 fontWeight: 700,
               }}
             >
@@ -793,7 +792,7 @@ function PrintDoc({ date, stations, getV, getN }) {
             </div>
             <div
               style={{
-                fontSize: 36,
+                fontSize: 40,
                 fontWeight: 900,
                 color: "#fff",
                 letterSpacing: "0.08em",
@@ -804,9 +803,9 @@ function PrintDoc({ date, stations, getV, getN }) {
             </div>
             <div
               style={{
-                fontSize: 15,
+                fontSize: 17,
                 color: "rgba(255,255,255,0.84)",
-                marginTop: 10,
+                marginTop: 12,
                 fontWeight: 500,
               }}
             >
@@ -819,26 +818,26 @@ function PrintDoc({ date, stations, getV, getN }) {
           style={{
             background: "rgba(255,255,255,0.14)",
             color: "#fff",
-            padding: "15px 22px",
-            borderRadius: 16,
+            padding: "18px 26px",
+            borderRadius: 18,
             border: "1px solid rgba(255,255,255,0.22)",
             textAlign: "right",
-            minWidth: 160,
+            minWidth: 190,
           }}
         >
           <div
             style={{
-              fontSize: 10,
+              fontSize: 11,
               textTransform: "uppercase",
               letterSpacing: "0.18em",
               color: "rgba(255,255,255,0.66)",
               fontWeight: 700,
-              marginBottom: 4,
+              marginBottom: 6,
             }}
           >
             Data
           </div>
-          <div style={{ fontFamily: MONO, fontSize: 30, fontWeight: 800 }}>
+          <div style={{ fontFamily: MONO, fontSize: 38, fontWeight: 900, lineHeight: 1 }}>
             {fmtD(date)}
           </div>
         </div>
@@ -848,15 +847,14 @@ function PrintDoc({ date, stations, getV, getN }) {
         <div
           key={brand}
           style={{
-            marginBottom: 28,
+            marginBottom: 30,
             background: "#fff",
-            borderRadius: 26,
+            borderRadius: 28,
             overflow: "hidden",
             boxShadow: "0 8px 26px rgba(13,27,42,0.08)",
             border: `1px solid ${BRD}`,
           }}
         >
-          {/* HEADER TABELLA */}
           <div
             data-print-row="true"
             style={{
@@ -868,8 +866,8 @@ function PrintDoc({ date, stations, getV, getN }) {
           >
             <div
               style={{
-                padding: "20px 24px",
-                borderLeft: `8px solid ${bc(brand)}`,
+                padding: "24px 28px",
+                borderLeft: `10px solid ${bc(brand)}`,
                 display: "flex",
                 alignItems: "center",
               }}
@@ -877,7 +875,7 @@ function PrintDoc({ date, stations, getV, getN }) {
               <div>
                 <div
                   style={{
-                    fontSize: 30,
+                    fontSize: 34,
                     fontWeight: 900,
                     color: bc(brand),
                     letterSpacing: "0.16em",
@@ -888,9 +886,9 @@ function PrintDoc({ date, stations, getV, getN }) {
                 </div>
                 <div
                   style={{
-                    fontSize: 15,
+                    fontSize: 18,
                     color: T2,
-                    marginTop: 8,
+                    marginTop: 10,
                     fontWeight: 600,
                   }}
                 >
@@ -907,14 +905,14 @@ function PrintDoc({ date, stations, getV, getN }) {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  padding: "20px 8px",
+                  padding: "24px 10px",
                   background: `${bc(brand)}08`,
                 }}
               >
                 <div
                   style={{
                     fontFamily: MONO,
-                    fontSize: 28,
+                    fontSize: 34,
                     fontWeight: 900,
                     color: bc(brand),
                     lineHeight: 1,
@@ -927,7 +925,6 @@ function PrintDoc({ date, stations, getV, getN }) {
             ))}
           </div>
 
-          {/* RIGHE */}
           {stations[brand]?.map((st, i) => {
             const isTotal = !!st.isTotal;
             const hasNote = TIMES.some((t) => getN(brand, st.id, t));
@@ -946,29 +943,30 @@ function PrintDoc({ date, stations, getV, getN }) {
               >
                 <div
                   style={{
-                    padding: "18px 22px",
-                    borderLeft: `8px solid ${borderColor}`,
+                    padding: "22px 26px",
+                    borderLeft: `10px solid ${borderColor}`,
                     borderRight: `1px solid ${BRD}`,
                     display: "flex",
                     alignItems: "center",
-                    minHeight: 84,
+                    minHeight: 96,
                   }}
                 >
-                  <div>
+                  <div style={{ width: "100%" }}>
                     <div
                       style={{
-                        fontSize: isTotal ? 29 : 25,
+                        fontSize: isTotal ? 34 : 30,
                         fontWeight: isTotal ? 900 : 800,
                         color: isTotal ? bc(brand) : TXT,
-                        lineHeight: 1.12,
+                        lineHeight: 1.1,
                         letterSpacing: isTotal ? "0.03em" : "0.01em",
+                        wordBreak: "break-word",
                       }}
                     >
                       {st.name}
                     </div>
 
                     {hasNote && !isTotal && (
-                      <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}>
                         {TIMES.map((t) => {
                           const note = getN(brand, st.id, t);
                           if (!note) return null;
@@ -976,13 +974,13 @@ function PrintDoc({ date, stations, getV, getN }) {
                             <span
                               key={t}
                               style={{
-                                fontSize: 10,
+                                fontSize: 11,
                                 fontWeight: 800,
                                 color: ACC,
                                 background: ACL,
                                 border: "1px solid rgba(255,82,0,0.18)",
                                 borderRadius: 999,
-                                padding: "3px 8px",
+                                padding: "4px 9px",
                                 letterSpacing: "0.04em",
                               }}
                             >
@@ -1006,19 +1004,19 @@ function PrintDoc({ date, stations, getV, getN }) {
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        padding: "12px 8px",
+                        padding: "14px 8px",
                         background: isTotal ? `${bc(brand)}08` : "transparent",
-                        minHeight: 84,
+                        minHeight: 96,
                       }}
                     >
                       <div
                         style={{
                           fontFamily: MONO,
-                          fontSize: isTotal ? 42 : 38,
+                          fontSize: isTotal ? 52 : 46,
                           fontWeight: 900,
                           lineHeight: 1,
-                          color: v ? (isTotal ? bc(brand) : bc(brand)) : "#C7D3E0",
-                          letterSpacing: "-0.02em",
+                          color: v ? bc(brand) : "#C7D3E0",
+                          letterSpacing: "-0.03em",
                         }}
                       >
                         {v || "—"}
@@ -1032,19 +1030,18 @@ function PrintDoc({ date, stations, getV, getN }) {
         </div>
       ))}
 
-      {/* FOOTER */}
       <div
         data-print-row="true"
         style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          padding: "8px 6px 2px",
+          padding: "10px 8px 2px",
         }}
       >
         <span
           style={{
-            fontSize: 13,
+            fontSize: 14,
             fontWeight: 700,
             color: T2,
             letterSpacing: "0.12em",
@@ -1053,7 +1050,7 @@ function PrintDoc({ date, stations, getV, getN }) {
         >
           Ricevere Qualità · Fare Qualità · Consegnare Qualità
         </span>
-        <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: T2 }}>
+        <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 700, color: T2 }}>
           {fmtD(date)}
         </span>
       </div>
