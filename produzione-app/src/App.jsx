@@ -799,44 +799,44 @@ function PrintDoc({ date, stations, getV, getN }) {
     <div style={{ fontFamily:FONT, background:"#fff", padding:"28px 32px" }}>
 
       {/* Header */}
-      <div style={{ background:"linear-gradient(135deg,#0A3D9C,#1A5CFF 55%,#009FCC)", padding:"18px 24px", marginBottom:28, borderRadius:14, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+      <div data-print-row="true" style={{ background:"linear-gradient(135deg,#0A3D9C,#1A5CFF 55%,#009FCC)", padding:"20px 26px", marginBottom:28, borderRadius:14, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
         <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-          <span style={{ fontSize:32 }}>🏭</span>
+          <span style={{ fontSize:36 }}>🏭</span>
           <div>
-            <div style={{ fontSize:10, color:"rgba(255,255,255,0.65)", letterSpacing:"0.14em", textTransform:"uppercase", marginBottom:4 }}>Report Produzione Giornaliero</div>
-            <div style={{ fontSize:24, fontWeight:900, color:"#fff", letterSpacing:"0.08em" }}>MOSAICON + EMOS</div>
+            <div style={{ fontSize:11, color:"rgba(255,255,255,0.65)", letterSpacing:"0.14em", textTransform:"uppercase", marginBottom:4 }}>Report Produzione Giornaliero</div>
+            <div style={{ fontSize:26, fontWeight:900, color:"#fff", letterSpacing:"0.08em" }}>MOSAICON + EMOS</div>
           </div>
         </div>
-        <div style={{ background:"rgba(255,255,255,0.2)", color:"#fff", fontFamily:MONO, fontSize:18, fontWeight:700, padding:"10px 20px", borderRadius:10 }}>{fmtD(date)}</div>
+        <div style={{ background:"rgba(255,255,255,0.2)", color:"#fff", fontFamily:MONO, fontSize:20, fontWeight:700, padding:"10px 22px", borderRadius:10 }}>{fmtD(date)}</div>
       </div>
 
       {["MOSAICON","EMOS"].map(brand => (
         <div key={brand} style={{ marginBottom:32 }}>
 
           {/* Brand header */}
-          <div style={{ ...G, background:bl(brand), borderLeft:`6px solid ${bc(brand)}`, padding:"12px 14px", borderRadius:"12px 12px 0 0" }}>
-            <div style={{ fontSize:15, fontWeight:900, color:bc(brand), letterSpacing:"0.12em", display:"flex", alignItems:"center" }}>{brand}</div>
+          <div data-print-row="true" style={{ ...G, background:bl(brand), borderLeft:`6px solid ${bc(brand)}`, padding:"12px 14px", borderRadius:"12px 12px 0 0" }}>
+            <div style={{ fontSize:17, fontWeight:900, color:bc(brand), letterSpacing:"0.12em", display:"flex", alignItems:"center" }}>{brand}</div>
             {TIMES.map(t => (
-              <div key={t} style={{ fontSize:14, fontWeight:800, color:bc(brand), textAlign:"center", fontFamily:MONO, borderLeft:`1px solid ${bc(brand)}30`, display:"flex", alignItems:"center", justifyContent:"center", padding:"6px 0" }}>{t}</div>
+              <div key={t} style={{ fontSize:16, fontWeight:800, color:bc(brand), textAlign:"center", fontFamily:MONO, borderLeft:`1px solid ${bc(brand)}30`, display:"flex", alignItems:"center", justifyContent:"center", padding:"6px 0" }}>{t}</div>
             ))}
           </div>
 
-          {/* Righe */}
+          {/* Righe stazioni */}
           {stations[brand]?.map((st, i) => {
             const isTotal = !!st.isTotal;
             const hasNote = TIMES.some(t => getN(brand, st.id, t));
             return (
-              <div key={st.id} style={{ ...G, background: isTotal ? bl(brand) : i%2===0 ? "#fff" : "#F7F9FC", borderBottom:`1px solid ${BRD}`, borderLeft: isTotal ? `6px solid ${bc(brand)}` : hasNote ? `4px solid ${ACC}` : "6px solid transparent", minHeight:54 }}>
+              <div key={st.id} data-print-row="true" style={{ ...G, background: isTotal ? bl(brand) : i%2===0 ? "#fff" : "#F7F9FC", borderBottom:`1px solid ${BRD}`, borderLeft: isTotal ? `6px solid ${bc(brand)}` : hasNote ? `4px solid ${ACC}` : "6px solid transparent", minHeight:58 }}>
                 <div style={{ display:"flex", alignItems:"center", padding:"10px 12px 10px 16px" }}>
-                  <span style={{ fontSize: isTotal ? 13 : 12, fontWeight: isTotal ? 900 : 700, color: isTotal ? bc(brand) : hasNote ? ACC : TXT, lineHeight:1.3 }}>{st.name}</span>
+                  <span style={{ fontSize: isTotal ? 14 : 13, fontWeight: isTotal ? 900 : 700, color: isTotal ? bc(brand) : hasNote ? ACC : TXT, lineHeight:1.3 }}>{st.name}</span>
                 </div>
                 {TIMES.map(t => {
                   const v = getV(brand, st.id, t);
                   const n = getN(brand, st.id, t);
                   return (
                     <div key={t} style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", borderLeft:`1px solid ${BRD}`, background: v ? `${bc(brand)}12` : "transparent", padding:"8px 6px", gap:4 }}>
-                      <span style={{ fontFamily:MONO, fontSize: v ? 24 : 16, fontWeight: v ? 800 : 400, color: v ? bc(brand) : "#C8D8E8", lineHeight:1 }}>{v || "—"}</span>
-                      {n && <span style={{ fontSize:9, color:ACC, background:ACL, border:`1px solid rgba(255,82,0,0.2)`, borderRadius:4, padding:"2px 6px" }}>{n}</span>}
+                      <span style={{ fontFamily:MONO, fontSize: v ? 26 : 17, fontWeight: v ? 800 : 400, color: v ? bc(brand) : "#C8D8E8", lineHeight:1 }}>{v || "—"}</span>
+                      {n && <span style={{ fontSize:10, color:ACC, background:ACL, border:`1px solid rgba(255,82,0,0.2)`, borderRadius:4, padding:"2px 6px" }}>{n}</span>}
                     </div>
                   );
                 })}
@@ -847,13 +847,14 @@ function PrintDoc({ date, stations, getV, getN }) {
       ))}
 
       {/* Footer */}
-      <div style={{ borderTop:`2px solid ${BRD}`, paddingTop:12, display:"flex", justifyContent:"space-between", fontSize:10, color:T3 }}>
+      <div data-print-row="true" style={{ borderTop:`2px solid ${BRD}`, paddingTop:12, display:"flex", justifyContent:"space-between", fontSize:11, color:T3 }}>
         <span style={{ fontWeight:700, letterSpacing:"0.06em" }}>RICEVERE QUALITÀ · FARE QUALITÀ · CONSEGNARE QUALITÀ</span>
         <span style={{ fontFamily:MONO }}>{fmtD(date)}</span>
       </div>
     </div>
   );
 }
+
 
 
 /* ═══ SHARED COMPONENTS ═══ */
