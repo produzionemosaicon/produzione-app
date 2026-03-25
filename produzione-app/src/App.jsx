@@ -202,58 +202,69 @@ export default function App() {
     await saveStations({ ...stations, [brand]: arr });
   }
 
-  async function shareWA() {
+ async function shareWA() {
     try {
       const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
         import("html2canvas"),
         import("jspdf"),
       ]);
+
       const el = document.getElementById("print-doc");
-      if (el) {
-        el.style.display = "block";
-        el.style.width = "800px";
-        const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
-        el.style.display = "none";
-        el.style.width = "";
+      el.style.display = "block";
+      el.style.width = "794px";
 
-        const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-        const pageW = pdf.internal.pageSize.getWidth();
-        const pageH = pdf.internal.pageSize.getHeight();
-        const imgW  = pageW;
-        const imgH  = (canvas.height * pageW) / canvas.width;
+      // Misura le posizioni delle righe PRIMA di catturare
+      const elRect = el.getBoundingClientRect();
+      const rowEls = el.querySelectorAll("[data-print-row]");
+      const rowBreaks = [0, ...Array.from(rowEls).map(r => r.getBoundingClientRect().bottom - elRect.top)];
 
-        if (imgH <= pageH) {
-          pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, imgW, imgH);
-        } else {
-          const pxPerPage = Math.floor((canvas.height * pageH) / imgH);
-          let offsetY = 0, page = 0;
-          while (offsetY < canvas.height) {
-            if (page > 0) pdf.addPage();
-            const slice = document.createElement("canvas");
-            slice.width  = canvas.width;
-            slice.height = pxPerPage;
-            const ctx = slice.getContext("2d");
-            ctx.fillStyle = "#fff";
-            ctx.fillRect(0, 0, slice.width, slice.height);
-            ctx.drawImage(canvas, 0, -offsetY);
-            pdf.addImage(slice.toDataURL("image/png"), "PNG", 0, 0, imgW, pageH);
-            offsetY += pxPerPage;
-            page++;
-          }
-        }
+      const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+      el.style.display = "none";
+      el.style.width = "";
 
-        const blob = pdf.output("blob");
-        const file = new File([blob], `produzione_${date}.pdf`, { type: "application/pdf" });
-        if (navigator.share && navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: `Produzione ${fmtD(date)}` });
-          return;
-        }
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url; a.download = `produzione_${date}.pdf`; a.click();
-        URL.revokeObjectURL(url);
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+
+      const domH = elRect.height;
+      const scaleFactor = canvas.height / domH;
+      const pageHeightPx = (pageH * canvas.width) / pageW;
+
+      let startPx = 0, page = 0;
+      while (startPx < canvas.height) {
+        if (page > 0) pdf.addPage();
+
+        const maxEnd = startPx + pageHeightPx;
+        const fits = rowBreaks.map(b => b * scaleFactor).filter(b => b > startPx && b <= maxEnd);
+        const endPx = fits.length > 0 ? fits[fits.length - 1] : Math.min(maxEnd, canvas.height);
+
+        const sliceH = Math.round(endPx - startPx);
+        const slice = document.createElement("canvas");
+        slice.width = canvas.width;
+        slice.height = sliceH;
+        const ctx = slice.getContext("2d");
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, slice.width, slice.height);
+        ctx.drawImage(canvas, 0, -Math.round(startPx));
+
+        const imgH = (sliceH / canvas.width) * pageW;
+        pdf.addImage(slice.toDataURL("image/png"), "PNG", 0, 0, pageW, imgH);
+
+        startPx = endPx;
+        page++;
+      }
+
+      const blob = pdf.output("blob");
+      const file = new File([blob], `produzione_${date}.pdf`, { type: "application/pdf" });
+      if (navigator.share && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: `Produzione ${fmtD(date)}` });
         return;
       }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `produzione_${date}.pdf`; a.click();
+      URL.revokeObjectURL(url);
+      return;
     } catch (e) {
       console.warn("PDF fallback a testo", e);
     }
@@ -269,6 +280,7 @@ export default function App() {
     if (navigator.share) navigator.share({ text: txt }).catch(() => {});
     else window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`);
   }
+
 
   function runAnalysis() {
     const stList = stations[anBrand] || [];
