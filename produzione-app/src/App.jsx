@@ -306,89 +306,329 @@ export default function App() {
   }
 
   async function shareWA() {
-  const el = document.getElementById("print-doc");
-  if (!el) {
-    alert("Area PDF non trovata");
-    return;
-  }
-
-  const { html2canvas, jsPDF } = pdfLibs;
-  if (!html2canvas || !jsPDF) {
-    alert("Le librerie PDF non sono ancora pronte. Riprova tra un secondo.");
-    return;
-  }
-
-  const prevDisplay = el.style.display;
-  const prevWidth = el.style.width;
-
-  try {
-    el.style.display = "block";
-    el.style.width = "1320px";
-
-    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-
-    const canvas = await html2canvas(el, {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: "#ffffff",
-      logging: false,
-      windowWidth: el.scrollWidth,
-      windowHeight: el.scrollHeight,
-    });
-
-    const pageW = 210; // A4 width in mm
-    const pageH = (canvas.height * pageW) / canvas.width;
-
-    const pdf = new jsPDF({
-      orientation: pageH > pageW ? "portrait" : "landscape",
-      unit: "mm",
-      format: [pageH, pageW], // pagina personalizzata lunga
-      compress: true,
-    });
-
-    pdf.addImage(
-      canvas.toDataURL("image/jpeg", 0.95),
-      "JPEG",
-      0,
-      0,
-      pageW,
-      pageH,
-      undefined,
-      "FAST"
-    );
-
-    const blob = pdf.output("blob");
-    const file = new File([blob], `produzione_${date}.pdf`, {
-      type: "application/pdf",
-      lastModified: Date.now(),
-    });
-
-    const shareData = {
-      files: [file],
-      title: `Produzione ${fmtD(date)}`,
-      text: `Report produzione ${fmtD(date)}`,
-    };
-
-    if (!window.isSecureContext) {
-      throw new Error("L'app non è in HTTPS");
+    const el = document.getElementById("print-doc");
+    if (!el) {
+      alert("Area PDF non trovata");
+      return;
     }
 
-    if (typeof navigator.share !== "function") {
-      throw new Error("navigator.share non disponibile");
+    const { html2canvas, jsPDF } = pdfLibs;
+    if (!html2canvas || !jsPDF) {
+      alert("Le librerie PDF non sono ancora pronte. Riprova tra un secondo.");
+      return;
     }
 
-    if (typeof navigator.canShare === "function" && !navigator.canShare(shareData)) {
-      throw new Error("Il browser non accetta la condivisione di questo file");
-    }
+    const prevDisplay = el.style.display;
+    const prevWidth = el.style.width;
 
-    await navigator.share(shareData);
-  } catch (e) {
-    console.error("Errore shareWA:", e);
-    alert(`Condivisione non riuscita: ${e.message}`);
-  } finally {
-    el.style.display = prevDisplay;
-    el.style.width = prevWidth;
+    try {
+      el.style.display = "block";
+      el.style.width = "1320px";
+
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+        windowWidth: el.scrollWidth,
+        windowHeight: el.scrollHeight,
+      });
+
+      const pageW = 210;
+      const pageH = (canvas.height * pageW) / canvas.width;
+
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: [pageW, pageH],
+        compress: true,
+      });
+
+      pdf.addImage(
+        canvas.toDataURL("image/jpeg", 0.95),
+        "JPEG",
+        0,
+        0,
+        pageW,
+        pageH,
+        undefined,
+        "FAST"
+      );
+
+      const blob = pdf.output("blob");
+      const file = new File([blob], `produzione_${date}.pdf`, {
+        type: "application/pdf",
+        lastModified: Date.now(),
+      });
+
+      const shareData = {
+        files: [file],
+        title: `Produzione ${fmtD(date)}`,
+        text: `Report produzione ${fmtD(date)}`,
+      };
+
+      if (!window.isSecureContext) {
+        throw new Error("L'app non è in HTTPS");
+      }
+
+      if (typeof navigator.share !== "function") {
+        throw new Error("navigator.share non disponibile");
+      }
+
+      if (typeof navigator.canShare === "function" && !navigator.canShare(shareData)) {
+        throw new Error("Il browser non accetta la condivisione di questo file");
+      }
+
+      await navigator.share(shareData);
+    } catch (e) {
+      console.error("Errore shareWA:", e);
+      alert(`Condivisione non riuscita: ${e.message}`);
+    } finally {
+      el.style.display = prevDisplay;
+      el.style.width = prevWidth;
+    }
   }
+
+  function runAnalysis() {
+    const stList = stations[anBrand] || [];
+    const sid = anSid || stList.find(s => s.isTotal)?.id || stList[0]?.id;
+    const stName = stList.find(s => s.id === sid)?.name || "";
+    const pts = [];
+
+    const cur = new Date(anFrom + "T12:00:00");
+    const end = new Date(anTo + "T12:00:00");
+
+    while (cur <= end) {
+      const d = cur.toISOString().split("T")[0];
+      const v = lastVal(reports[d], anBrand, sid);
+      if (v !== null) pts.push({ date: d, label: fmtD(d), value: v });
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    if (!pts.length) {
+      setAnRes({ empty: true, stName, brand: anBrand });
+      return;
+    }
+
+    const vals = pts.map(p => p.value);
+    const total = vals.reduce((a, b) => a + b, 0);
+    const avg = +(total / vals.length).toFixed(1);
+    const max = Math.max(...vals);
+    const min = Math.min(...vals);
+    const trend =
+      vals.length > 1 && vals[0] !== 0
+        ? +((((vals[vals.length - 1] - vals[0]) / vals[0]) * 100)).toFixed(1)
+        : 0;
+
+    setAnRes({
+      stName,
+      brand: anBrand,
+      sid,
+      from: anFrom,
+      to: anTo,
+      pts,
+      total,
+      avg,
+      max,
+      min,
+      trend,
+      days: pts.length,
+      maxDay: pts[vals.indexOf(max)],
+      minDay: pts[vals.indexOf(min)]
+    });
+  }
+
+  if (loading) return (
+    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:"100dvh", background:BG, fontFamily:FONT, gap:12 }}>
+      <div style={{ fontSize:40 }}>🏭</div>
+      <div style={{ fontSize:16, fontWeight:700, color:TXT }}>Caricamento dati…</div>
+      <div style={{ width:120, height:3, background:BRD, borderRadius:2, overflow:"hidden" }}>
+        <div style={{ width:"60%", height:"100%", background:M, animation:"load 1.2s ease-in-out infinite alternate" }} />
+      </div>
+      <style>{`@keyframes load{from{width:20%}to{width:90%}}`}</style>
+    </div>
+  );
+
+  return (
+    <div style={{ maxWidth:900, margin:"0 auto", minHeight:"100dvh", display:"flex", flexDirection:"column", background:BG, fontFamily:FONT }}>
+      <style>{`
+        @keyframes cellFlash { 0%{background:rgba(0,184,122,0)} 30%{background:rgba(0,184,122,0.25)} 100%{background:rgba(0,184,122,0)} }
+        .cell-flash { animation: cellFlash 1.5s ease-out forwards; }
+        input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+        ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-thumb{background:${BRD2};border-radius:2px}
+        @media print{.no-print{display:none!important}.print-only{display:block!important}body{background:#fff}}
+        .print-only{display:none}
+      `}</style>
+
+      <div className="no-print" style={{ background:"linear-gradient(135deg,#0A3D9C 0%,#1A5CFF 55%,#0099CC 100%)", padding:"12px 16px", flexShrink:0, boxShadow:"0 3px 18px rgba(26,92,255,0.28)" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <span style={{ fontSize:24 }}>🏭</span>
+            <div>
+              <div style={{ fontSize:14, fontWeight:900, color:"#fff", letterSpacing:"0.04em" }}>MOSAICON · EMOS</div>
+              <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:1 }}>
+                <div style={{ width:5, height:5, borderRadius:"50%", background: online ? GRN : RED }} />
+                <span style={{ fontSize:8, color:"rgba(255,255,255,0.65)", fontWeight:600 }}>
+                  {online ? "In linea" : "Offline"}{saving ? " · salvataggio…" : ""}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <input
+              type="date"
+              value={date}
+              onChange={e => setDate(e.target.value)}
+              style={{ border:"none", background:"rgba(255,255,255,0.18)", fontFamily:MONO, fontSize:13, fontWeight:700, color:"#fff", cursor:"pointer", outline:"none", padding:"5px 10px", borderRadius:8 }}
+            />
+            <button
+              onClick={shareWA}
+              style={{ background:"#25D366", color:"#fff", border:"none", borderRadius:8, padding:"7px 13px", fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:FONT }}
+            >
+              📤 PDF
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="no-print" style={{ flex:1, overflowY:"auto" }}>
+        {tab === "home"    && <HomeTab date={date} reports={reports} stations={stations} onGoFoglio={() => setTab("foglio")} />}
+        {tab === "foglio"  && (
+          <FoglioTab
+            stations={stations}
+            getV={getV}
+            getN={getN}
+            openCell={openCell}
+            savedKeys={savedKeys}
+            onEditSt={(brand, st) => {
+              setStModal({ brand, st });
+              setStNewName(st.name);
+            }}
+            onAddSt={(brand, afterId) => {
+              setAddModal({ brand, afterId });
+              setAddName("");
+            }}
+          />
+        )}
+        {tab === "storico" && <StoricoTab reports={reports} stations={stations} onOpen={d => { setDate(d); setTab("foglio"); }} />}
+        {tab === "analisi" && (
+          <AnalisiTab
+            stations={stations}
+            reports={reports}
+            anBrand={anBrand}
+            setAnBrand={setAnBrand}
+            anSid={anSid}
+            setAnSid={setAnSid}
+            anFrom={anFrom}
+            setAnFrom={setAnFrom}
+            anTo={anTo}
+            setAnTo={setAnTo}
+            anRes={anRes}
+            run={runAnalysis}
+          />
+        )}
+      </div>
+
+      <div id="print-doc" style={{ display:"none", padding:"30px", background:"#fff" }}>
+        <PrintDoc date={date} stations={stations} getV={getV} getN={getN} />
+      </div>
+
+      <div className="no-print" style={{ background:S0, borderTop:`1px solid ${BRD}`, display:"flex", flexShrink:0, boxShadow:"0 -2px 12px rgba(13,27,42,0.07)" }}>
+        {[
+          { id:"home",    icon:"🏠", label:"Home" },
+          { id:"foglio",  icon:"📋", label:"Foglio" },
+          { id:"storico", icon:"📁", label:"Storico" },
+          { id:"analisi", icon:"📊", label:"Analisi" },
+        ].map(({ id, icon, label }) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            style={{ flex:1, background:"none", border:"none", padding:"10px 4px 8px", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, fontFamily:FONT }}
+          >
+            <span style={{ fontSize:19 }}>{icon}</span>
+            <span style={{ fontSize:9, fontWeight:700, color: tab === id ? M : T3 }}>{label}</span>
+            {tab === id && <div style={{ width:20, height:2, background:M, borderRadius:1 }} />}
+          </button>
+        ))}
+      </div>
+
+      {cellModal && (
+        <Modal onClose={() => setCellModal(null)}>
+          <div style={{ fontSize:9, fontWeight:700, color:T3, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:3 }}>
+            {cellModal.brand} · {cellModal.t}
+          </div>
+          <div style={{ fontSize:18, fontWeight:800, color:TXT, marginBottom:14 }}>{cellModal.name}</div>
+          <input
+            type="number"
+            inputMode="decimal"
+            autoFocus
+            value={cellVal}
+            onChange={e => setCellVal(e.target.value)}
+            style={{ width:"100%", background:BG, border:`2.5px solid ${bc(cellModal.brand)}`, borderRadius:12, padding:14, fontFamily:MONO, fontSize:34, fontWeight:700, color:bc(cellModal.brand), textAlign:"center", outline:"none", marginBottom:12 }}
+          />
+          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:6 }}>
+            <div style={{ width:7, height:7, background:ACC, borderRadius:"50%" }} />
+            <span style={{ fontSize:9, fontWeight:700, color:ACC, letterSpacing:"0.1em", textTransform:"uppercase" }}>Commento</span>
+            <span style={{ marginLeft:"auto", fontSize:8, color:T3 }}>max 30 car.</span>
+          </div>
+          <input
+            type="text"
+            value={cellNote}
+            onChange={e => setCellNote(e.target.value.slice(0, 30))}
+            placeholder="Appare sotto il numero…"
+            style={{ width:"100%", background:BG, border:`1.5px solid ${BRD}`, borderRadius:10, padding:"10px 12px", fontSize:13, color:TXT, outline:"none", marginBottom:14, fontFamily:FONT }}
+          />
+          <Btn color={bc(cellModal.brand)} onClick={() => saveCell(cellVal, cellNote)}>✓ SALVA</Btn>
+          {(cellVal || cellNote) && <Btn color={BG} textColor={T2} style={{ marginTop:8 }} onClick={() => saveCell("", "")}>Cancella valore</Btn>}
+          <Btn color={BG} textColor={T3} style={{ marginTop:8 }} onClick={() => setCellModal(null)}>Annulla</Btn>
+        </Modal>
+      )}
+
+      {stModal && (
+        <Modal onClose={() => setStModal(null)}>
+          <div style={{ fontSize:9, fontWeight:700, color:T3, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:3 }}>Stazione · {stModal.brand}</div>
+          <div style={{ fontSize:18, fontWeight:800, color:TXT, marginBottom:14 }}>{stModal.st.name}</div>
+          <input
+            autoFocus
+            value={stNewName}
+            onChange={e => setStNewName(e.target.value)}
+            placeholder="Nuovo nome…"
+            style={{ width:"100%", background:BG, border:`2px solid ${bc(stModal.brand)}`, borderRadius:10, padding:"11px 12px", fontSize:15, color:TXT, outline:"none", marginBottom:12, fontFamily:FONT }}
+          />
+          <Btn color={bc(stModal.brand)} onClick={() => stNewName.trim() && renameStation(stModal.brand, stModal.st.id, stNewName.trim())}>✓ RINOMINA</Btn>
+          <div style={{ display:"flex", gap:8, marginTop:8 }}>
+            <button onClick={() => { moveStation(stModal.brand, stModal.st.id, "up"); setStModal(null); }} style={{ flex:1, background:BG, border:`1px solid ${BRD}`, borderRadius:8, padding:9, fontSize:14, cursor:"pointer" }}>⬆ Su</button>
+            <button onClick={() => { moveStation(stModal.brand, stModal.st.id, "down"); setStModal(null); }} style={{ flex:1, background:BG, border:`1px solid ${BRD}`, borderRadius:8, padding:9, fontSize:14, cursor:"pointer" }}>⬇ Giù</button>
+          </div>
+          {!stModal.st.isTotal && (
+            <Btn color="#FEE2E2" textColor={RED} style={{ marginTop:8 }} onClick={() => { if (window.confirm(`Eliminare "${stModal.st.name}"?`)) deleteStation(stModal.brand, stModal.st.id); }}>
+              🗑 Elimina stazione
+            </Btn>
+          )}
+          <Btn color={BG} textColor={T3} style={{ marginTop:8 }} onClick={() => setStModal(null)}>Annulla</Btn>
+        </Modal>
+      )}
+
+      {addModal && (
+        <Modal onClose={() => setAddModal(null)}>
+          <div style={{ fontSize:9, fontWeight:700, color:T3, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:3 }}>Nuova stazione · {addModal.brand}</div>
+          <div style={{ fontSize:18, fontWeight:800, color:TXT, marginBottom:14 }}>Aggiungi stazione</div>
+          <input
+            autoFocus
+            value={addName}
+            onChange={e => setAddName(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && addName.trim() && addStation(addModal.brand, addModal.afterId, addName)}
+            placeholder="Nome stazione…"
+            style={{ width:"100%", background:BG, border:`2px solid ${bc(addModal.brand)}`, borderRadius:10, padding:"11px 12px", fontSize:15, color:TXT, outline:"none", marginBottom:14, fontFamily:FONT }}
+          />
+          <Btn color={bc(addModal.brand)} onClick={() => addName.trim() && addStation(addModal.brand, addModal.afterId, addName)}>+ AGGIUNGI</Btn>
+          <Btn color={BG} textColor={T3} style={{ marginTop:8 }} onClick={() => setAddModal(null)}>Annulla</Btn>
+        </Modal>
+      )}
+    </div>
+  );
 }
 
 /* ═══ HOME TAB ═══ */
@@ -1057,6 +1297,7 @@ function PrintDoc({ date, stations, getV, getN }) {
     </div>
   );
 }
+
 /* ═══ SHARED COMPONENTS ═══ */
 function Modal({ children, onClose }) {
   return (
