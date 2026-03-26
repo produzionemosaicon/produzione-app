@@ -370,7 +370,7 @@ export default function App() {
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
     const canvas = await html2canvas(el, {
-      scale: 2,
+      scale: 1.5,
       useCORS: true,
       backgroundColor: "#ffffff",
       logging: false,
