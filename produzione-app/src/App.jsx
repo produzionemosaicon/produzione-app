@@ -139,6 +139,17 @@ function getPackingStationId(brand, stations) {
   return null;
 }
 
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 /* ═══ APP ROOT ═══ */
 export default function App() {
   const [tab, setTab] = useState("home");
@@ -347,144 +358,158 @@ export default function App() {
     ));
   }
 
+  async function buildPdfFromNode(nodeId, widthPx = 1480) {
+    const el = document.getElementById(nodeId);
+    if (!el) throw new Error("Area PDF non trovata");
+
+    const { html2canvas, jsPDF } = pdfLibs;
+    if (!html2canvas || !jsPDF) {
+      throw new Error("Le librerie PDF non sono ancora pronte");
+    }
+
+    const prevDisplay = el.style.display;
+    const prevWidth = el.style.width;
+
+    try {
+      el.style.display = "block";
+      el.style.width = `${widthPx}px`;
+
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+        windowWidth: el.scrollWidth,
+        windowHeight: el.scrollHeight,
+        scrollX: 0,
+        scrollY: 0,
+      });
+
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+        compress: true,
+      });
+
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+
+      const pxPerMm = canvas.width / pageW;
+      const pageHeightPx = Math.floor(pageH * pxPerMm);
+
+      let rendered = 0;
+      let page = 0;
+
+      while (rendered < canvas.height) {
+        if (page > 0) pdf.addPage();
+
+        const sliceHeight = Math.min(pageHeightPx, canvas.height - rendered);
+
+        const pageCanvas = document.createElement("canvas");
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = sliceHeight;
+
+        const ctx = pageCanvas.getContext("2d");
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+
+        ctx.drawImage(
+          canvas,
+          0,
+          rendered,
+          canvas.width,
+          sliceHeight,
+          0,
+          0,
+          canvas.width,
+          sliceHeight
+        );
+
+        const imgH = sliceHeight / pxPerMm;
+
+        pdf.addImage(
+          pageCanvas.toDataURL("image/jpeg", 0.96),
+          "JPEG",
+          0,
+          0,
+          pageW,
+          imgH,
+          undefined,
+          "FAST"
+        );
+
+        rendered += sliceHeight;
+        page++;
+      }
+
+      return pdf.output("blob");
+    } finally {
+      el.style.display = prevDisplay;
+      el.style.width = prevWidth;
+    }
+  }
+
   async function shareNodeAsPaginatedPdf(nodeId, filename, titleText, widthPx = 1480) {
-  const el = document.getElementById(nodeId);
-  if (!el) {
-    alert("Area PDF non trovata");
-    return;
-  }
+    try {
+      const blob = await buildPdfFromNode(nodeId, widthPx);
 
-  const { html2canvas, jsPDF } = pdfLibs;
-  if (!html2canvas || !jsPDF) {
-    alert("Le librerie PDF non sono ancora pronte. Riprova tra un secondo.");
-    return;
-  }
+      const file = new File([blob], filename, {
+        type: "application/pdf",
+        lastModified: Date.now(),
+      });
 
-  const prevDisplay = el.style.display;
-  const prevWidth = el.style.width;
+      const shareData = {
+        files: [file],
+        title: titleText,
+        text: titleText,
+      };
 
-  try {
-    el.style.display = "block";
-    el.style.width = `${widthPx}px`;
+      const canUseNativeShare =
+        window.isSecureContext &&
+        typeof navigator.share === "function" &&
+        (
+          typeof navigator.canShare !== "function" ||
+          navigator.canShare(shareData)
+        );
 
-    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      if (canUseNativeShare) {
+        await navigator.share(shareData);
+        return;
+      }
 
-    const canvas = await html2canvas(el, {
-      scale: 1.5,
-      useCORS: true,
-      backgroundColor: "#ffffff",
-      logging: false,
-      windowWidth: el.scrollWidth,
-      windowHeight: el.scrollHeight,
-    });
-
-    const pdf = new jsPDF({
-      orientation: "portrait",
-      unit: "mm",
-      format: "a4",
-      compress: true,
-    });
-
-    const pageW = pdf.internal.pageSize.getWidth();
-    const pageH = pdf.internal.pageSize.getHeight();
-
-    const pxPerMm = canvas.width / pageW;
-    const pageHeightPx = Math.floor(pageH * pxPerMm);
-
-    let rendered = 0;
-    let page = 0;
-
-    while (rendered < canvas.height) {
-      if (page > 0) pdf.addPage();
-
-      const sliceHeight = Math.min(pageHeightPx, canvas.height - rendered);
-
-      const pageCanvas = document.createElement("canvas");
-      pageCanvas.width = canvas.width;
-      pageCanvas.height = sliceHeight;
-
-      const ctx = pageCanvas.getContext("2d");
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
-
-      ctx.drawImage(
-        canvas,
-        0,
-        rendered,
-        canvas.width,
-        sliceHeight,
-        0,
-        0,
-        canvas.width,
-        sliceHeight
-      );
-
-      const imgH = sliceHeight / pxPerMm;
-
-      pdf.addImage(
-        pageCanvas.toDataURL("image/jpeg", 0.95),
-        "JPEG",
-        0,
-        0,
-        pageW,
-        imgH,
-        undefined,
-        "FAST"
-      );
-
-      rendered += sliceHeight;
-      page++;
+      downloadBlob(blob, filename);
+      alert("Condivisione non disponibile su questo dispositivo/browser. PDF scaricato.");
+    } catch (e) {
+      console.error("Errore condivisione PDF:", e);
+      alert(`Operazione non riuscita: ${e.message}`);
     }
-
-    const blob = pdf.output("blob");
-    const file = new File([blob], filename, {
-      type: "application/pdf",
-      lastModified: Date.now(),
-    });
-
-    const shareData = {
-      files: [file],
-      title: titleText,
-      text: titleText,
-    };
-
-    if (!window.isSecureContext) throw new Error("L'app non è in HTTPS");
-    if (typeof navigator.share !== "function") throw new Error("navigator.share non disponibile");
-    if (typeof navigator.canShare === "function" && !navigator.canShare(shareData)) {
-      throw new Error("Il browser non accetta la condivisione di questo file");
-    }
-
-    await navigator.share(shareData);
-  } catch (e) {
-    console.error("Errore condivisione PDF:", e);
-    alert(`Condivisione non riuscita: ${e.message}`);
-  } finally {
-    el.style.display = prevDisplay;
-    el.style.width = prevWidth;
   }
-}
-async function shareWA() {
-  await shareNodeAsPdf(
-    "print-doc",
-    `produzione_${date}.pdf`,
-    `Report produzione ${fmtD(date)}`,
-    1200
-  );
-}
+
+  async function shareWA() {
+    await shareNodeAsPaginatedPdf(
+      "print-doc",
+      `produzione_${date}.pdf`,
+      `Report produzione ${fmtD(date)}`,
+      1480
+    );
+  }
 
   async function shareAnalysisPdf() {
-  if (!anRes || anRes.empty) {
-    alert("Esegui prima un'analisi con dati disponibili.");
-    return;
-  }
+    if (!anRes || anRes.empty) {
+      alert("Esegui prima un'analisi con dati disponibili.");
+      return;
+    }
 
-  await shareNodeAsPaginatedPdf(
-    "analysis-print-doc",
-    `analisi_${anFrom}_${anTo}.pdf`,
-    `Report analisi ${fmtD(anFrom)} - ${fmtD(anTo)}`,
-    1480
-  );
-}
+    await shareNodeAsPaginatedPdf(
+      "analysis-print-doc",
+      `analisi_${anFrom}_${anTo}.pdf`,
+      `Report analisi ${fmtD(anFrom)} - ${fmtD(anTo)}`,
+      1480
+    );
+  }
 
   function runAnalysis() {
     const activeBrands = Object.entries(anBrands).filter(([, ok]) => ok).map(([b]) => b);
@@ -1229,19 +1254,18 @@ function AnalisiTab({
               </div>
 
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
-               <KpiSmall 
-  label="Totale periodo" 
-  value={anRes.total} 
-  color={bc(anRes.brand)} 
-  sub={`in ${anRes.days} giorni`} 
-/>
-
-<KpiSmall 
-  label="Media giornaliera" 
-  value={anRes.avg} 
-  color={bc(anRes.brand)} 
-  sub="paia/giorno" 
-/>
+                <KpiSmall
+                  label="Totale periodo"
+                  value={anRes.total}
+                  color={M}
+                  sub={`in ${anRes.days} giorni`}
+                />
+                <KpiSmall
+                  label="Media giornaliera"
+                  value={anRes.avg}
+                  color={M}
+                  sub="paia/giorno"
+                />
                 <KpiSmall label="Giorno migliore" value={anRes.max} color={GRN} sub={fmtD(anRes.maxDay?.date)} arrow="▲" />
                 <KpiSmall label="Giorno peggiore" value={anRes.min} color={RED} sub={fmtD(anRes.minDay?.date)} arrow="▼" />
               </div>
