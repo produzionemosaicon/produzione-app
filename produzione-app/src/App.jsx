@@ -463,14 +463,14 @@ export default function App() {
     el.style.width = prevWidth;
   }
 }
-  async function shareWA() {
-    await shareNodeAsPdf(
-      "print-doc",
-      `produzione_${date}.pdf`,
-      `Report produzione ${fmtD(date)}`,
-      1480
-    );
-  }
+async function shareWA() {
+  await shareNodeAsPdf(
+    "print-doc",
+    `produzione_${date}.pdf`,
+    `Report produzione ${fmtD(date)}`,
+    1200
+  );
+}
 
   async function shareAnalysisPdf() {
   if (!anRes || anRes.empty) {
