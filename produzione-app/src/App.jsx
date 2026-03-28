@@ -187,15 +187,21 @@ export default function App() {
   const [anTo, setAnTo] = useState(() => todayStr());
   const [anRes, setAnRes] = useState(null);
 
-  useEffect(() => {
-    const on = () => setOnline(true), off = () => setOnline(false);
-    window.addEventListener("online", on);
-    window.addEventListener("offline", off);
-    return () => {
-      window.removeEventListener("online", on);
-      window.removeEventListener("offline", off);
-    };
-  }, []);
+ useEffect(() => {
+  return onValue(ref(db, "stations"), async (snap) => {
+    if (snap.exists()) {
+      setStations(snap.val());
+    } else {
+      // inizializza Firebase con le stazioni di default la prima volta
+      try {
+        await set(ref(db, "stations"), DEF_STATIONS);
+        setStations(DEF_STATIONS);
+      } catch (e) {
+        console.error("Errore inizializzazione stations:", e);
+      }
+    }
+  });
+}, []);
 
   useEffect(() => {
     let mounted = true;
