@@ -160,7 +160,7 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
   const [savedKeys, setSavedKeys] = useState(new Set());
-
+const [addPosition, setAddPosition] = useState("");
   const [pdfLibs, setPdfLibs] = useState({ html2canvas: null, jsPDF: null });
 
   const [cellModal, setCellModal] = useState(null);
