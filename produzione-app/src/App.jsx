@@ -4,8 +4,8 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
 } from "recharts";
-import { db, ref, set, onValue, remove } from "./firebase.js";
-
+import { db, ref, set, onValue } from "./firebase.js";
+import { remove } from "firebase/database";
 /* ═══ COLORI ═══ */
 const M = "#1A5CFF", ML = "#EBF0FF";
 const E = "#00A896", EL = "#E6FAF8";
