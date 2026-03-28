@@ -1353,7 +1353,7 @@ function AnalisiTab({
 
 /* ═══ PRINT DOC PRODUZIONE ═══ */
 function PrintDoc({ date, stations, getV, getN }) {
-  const COL = "620px repeat(4, 170px)";
+  const COL = "430px repeat(4, 1fr)";
 
   const mosaiconTargets = {
     "10:00": 75,
@@ -1369,31 +1369,31 @@ function PrintDoc({ date, stations, getV, getN }) {
   };
 
   return (
-    <div style={{ fontFamily: FONT, background: "#EAF0F8", padding: 30 }}>
+    <div style={{ fontFamily: FONT, background: "#EAF0F8", padding: 18 }}>
       <div
         data-print-row="true"
         style={{
           background: "linear-gradient(135deg,#0A3D9C 0%,#1A5CFF 58%,#00A0D6 100%)",
-          borderRadius: 34,
-          padding: "42px 48px",
-          marginBottom: 30,
+          borderRadius: 22,
+          padding: "22px 26px",
+          marginBottom: 18,
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          boxShadow: "0 18px 40px rgba(26,92,255,0.24)",
+          boxShadow: "0 10px 24px rgba(26,92,255,0.18)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 22 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <div
             style={{
-              width: 82,
-              height: 82,
-              borderRadius: 22,
+              width: 52,
+              height: 52,
+              borderRadius: 14,
               background: "rgba(255,255,255,0.16)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 42,
+              fontSize: 26,
             }}
           >
             🏭
@@ -1401,11 +1401,11 @@ function PrintDoc({ date, stations, getV, getN }) {
           <div>
             <div
               style={{
-                fontSize: 16,
-                color: "rgba(255,255,255,0.70)",
-                letterSpacing: "0.24em",
+                fontSize: 10,
+                color: "rgba(255,255,255,0.72)",
+                letterSpacing: "0.18em",
                 textTransform: "uppercase",
-                marginBottom: 8,
+                marginBottom: 4,
                 fontWeight: 700,
               }}
             >
@@ -1413,20 +1413,20 @@ function PrintDoc({ date, stations, getV, getN }) {
             </div>
             <div
               style={{
-                fontSize: 54,
+                fontSize: 30,
                 fontWeight: 900,
                 color: "#fff",
-                letterSpacing: "0.08em",
                 lineHeight: 1,
+                letterSpacing: "0.04em",
               }}
             >
               MOSAICON + EMOS
             </div>
             <div
               style={{
-                fontSize: 24,
-                color: "rgba(255,255,255,0.84)",
-                marginTop: 14,
+                fontSize: 13,
+                color: "rgba(255,255,255,0.86)",
+                marginTop: 6,
                 fontWeight: 500,
               }}
             >
@@ -1439,21 +1439,21 @@ function PrintDoc({ date, stations, getV, getN }) {
           style={{
             background: "rgba(255,255,255,0.14)",
             color: "#fff",
-            padding: "24px 32px",
-            borderRadius: 20,
-            border: "1px solid rgba(255,255,255,0.22)",
+            padding: "14px 18px",
+            borderRadius: 14,
+            border: "1px solid rgba(255,255,255,0.20)",
             textAlign: "right",
-            minWidth: 240,
+            minWidth: 170,
           }}
         >
           <div
             style={{
-              fontSize: 12,
+              fontSize: 10,
               textTransform: "uppercase",
-              letterSpacing: "0.18em",
+              letterSpacing: "0.14em",
               color: "rgba(255,255,255,0.66)",
               fontWeight: 700,
-              marginBottom: 8,
+              marginBottom: 4,
             }}
           >
             Data
@@ -1461,7 +1461,7 @@ function PrintDoc({ date, stations, getV, getN }) {
           <div
             style={{
               fontFamily: MONO,
-              fontSize: 56,
+              fontSize: 30,
               fontWeight: 900,
               lineHeight: 1,
               letterSpacing: "-0.02em",
@@ -1479,11 +1479,11 @@ function PrintDoc({ date, stations, getV, getN }) {
           <div
             key={brand}
             style={{
-              marginBottom: 32,
+              marginBottom: 18,
               background: "#fff",
-              borderRadius: 30,
+              borderRadius: 18,
               overflow: "hidden",
-              boxShadow: "0 8px 26px rgba(13,27,42,0.08)",
+              boxShadow: "0 4px 14px rgba(13,27,42,0.06)",
               border: `1px solid ${BRD}`,
             }}
           >
@@ -1492,14 +1492,14 @@ function PrintDoc({ date, stations, getV, getN }) {
               style={{
                 display: "grid",
                 gridTemplateColumns: COL,
-                background: `linear-gradient(135deg, ${bc(brand)}14, #ffffff 72%)`,
+                background: `linear-gradient(135deg, ${bc(brand)}18, #ffffff 78%)`,
                 borderBottom: `1px solid ${BRD}`,
               }}
             >
               <div
                 style={{
-                  padding: "30px 34px",
-                  borderLeft: `10px solid ${bc(brand)}`,
+                  padding: "18px 20px",
+                  borderLeft: `6px solid ${bc(brand)}`,
                   display: "flex",
                   alignItems: "center",
                 }}
@@ -1507,10 +1507,10 @@ function PrintDoc({ date, stations, getV, getN }) {
                 <div>
                   <div
                     style={{
-                      fontSize: 48,
+                      fontSize: 30,
                       fontWeight: 900,
                       color: bc(brand),
-                      letterSpacing: "0.16em",
+                      letterSpacing: "0.10em",
                       lineHeight: 1,
                     }}
                   >
@@ -1518,9 +1518,9 @@ function PrintDoc({ date, stations, getV, getN }) {
                   </div>
                   <div
                     style={{
-                      fontSize: 24,
+                      fontSize: 12,
                       color: T2,
-                      marginTop: 12,
+                      marginTop: 6,
                       fontWeight: 600,
                     }}
                   >
@@ -1537,18 +1537,18 @@ function PrintDoc({ date, stations, getV, getN }) {
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    padding: "30px 12px",
+                    padding: "18px 8px",
                     background: `${bc(brand)}08`,
                   }}
                 >
                   <div
                     style={{
                       fontFamily: MONO,
-                      fontSize: 46,
+                      fontSize: 28,
                       fontWeight: 900,
                       color: bc(brand),
                       lineHeight: 1,
-                      letterSpacing: "0.03em",
+                      letterSpacing: "0.02em",
                     }}
                   >
                     {t}
@@ -1561,7 +1561,11 @@ function PrintDoc({ date, stations, getV, getN }) {
               ?.filter((st) => st.name !== "DA INSCATOLARE/GIÀ CQ")
               .map((st, i) => {
                 const isHighlight = st.id === highlightId;
-                const borderColor = isHighlight ? bc(brand) : "transparent";
+                const rowBg = isHighlight
+                  ? `${bc(brand)}10`
+                  : i % 2 === 0
+                  ? "#FFFFFF"
+                  : "#F6F8FC";
 
                 return (
                   <div
@@ -1570,37 +1574,33 @@ function PrintDoc({ date, stations, getV, getN }) {
                     style={{
                       display: "grid",
                       gridTemplateColumns: COL,
-                      background: isHighlight
-                        ? `${bc(brand)}12`
-                        : i % 2 === 0
-                        ? "#fff"
-                        : "#F8FBFF",
+                      background: rowBg,
                       borderBottom: `1px solid ${BRD}`,
                     }}
                   >
                     <div
                       style={{
-                        padding: "30px 32px",
-                        borderLeft: `10px solid ${borderColor}`,
+                        padding: "18px 20px",
+                        borderLeft: isHighlight
+                          ? `6px solid ${bc(brand)}`
+                          : "6px solid transparent",
                         borderRight: `1px solid ${BRD}`,
                         display: "flex",
                         alignItems: "center",
-                        minHeight: 140,
+                        minHeight: 82,
                       }}
                     >
-                      <div style={{ width: "100%" }}>
-                        <div
-                          style={{
-                            fontSize: isHighlight ? 46 : 42,
-                            fontWeight: isHighlight ? 900 : 800,
-                            color: isHighlight ? bc(brand) : TXT,
-                            lineHeight: 1.1,
-                            letterSpacing: isHighlight ? "0.02em" : "0.01em",
-                            wordBreak: "break-word",
-                          }}
-                        >
-                          {st.name}
-                        </div>
+                      <div
+                        style={{
+                          fontSize: isHighlight ? 28 : 22,
+                          fontWeight: isHighlight ? 900 : 800,
+                          color: isHighlight ? bc(brand) : TXT,
+                          lineHeight: 1.08,
+                          letterSpacing: "0.01em",
+                          wordBreak: "break-word",
+                        }}
+                      >
+                        {st.name}
                       </div>
                     </div>
 
@@ -1623,9 +1623,9 @@ function PrintDoc({ date, stations, getV, getN }) {
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            padding: "18px 8px",
-                            background: isHighlight ? `${bc(brand)}10` : "transparent",
-                            minHeight: 132,
+                            padding: "10px 6px",
+                            background: isHighlight ? `${bc(brand)}08` : "transparent",
+                            minHeight: 82,
                           }}
                         >
                           <div
@@ -1634,7 +1634,7 @@ function PrintDoc({ date, stations, getV, getN }) {
                               flexDirection: "column",
                               alignItems: "center",
                               justifyContent: "center",
-                              gap: 8,
+                              gap: note ? 5 : 0,
                               width: "100%",
                               overflow: "hidden",
                             }}
@@ -1642,13 +1642,18 @@ function PrintDoc({ date, stations, getV, getN }) {
                             <div
                               style={{
                                 fontFamily: MONO,
-                                fontSize: isMosaiconTotalRow ? 38 : isHighlight ? 64 : 56,
+                                fontSize: isMosaiconTotalRow
+                                  ? 26
+                                  : isHighlight
+                                  ? 34
+                                  : 30,
                                 fontWeight: 900,
                                 lineHeight: 1,
                                 color: v ? bc(brand) : "#C7D3E0",
-                                letterSpacing: isMosaiconTotalRow ? "-0.05em" : "-0.03em",
+                                letterSpacing: isMosaiconTotalRow ? "-0.04em" : "-0.02em",
                                 textAlign: "center",
                                 whiteSpace: "nowrap",
+                                fontVariantNumeric: "tabular-nums",
                               }}
                             >
                               {displayValue}
@@ -1657,15 +1662,15 @@ function PrintDoc({ date, stations, getV, getN }) {
                             {note ? (
                               <div
                                 style={{
-                                  fontSize: 13,
+                                  fontSize: 9,
                                   fontWeight: 800,
                                   color: ACC,
                                   background: ACL,
                                   border: "1px solid rgba(255,82,0,0.18)",
                                   borderRadius: 999,
-                                  padding: "4px 8px",
-                                  lineHeight: 1.1,
-                                  maxWidth: "92%",
+                                  padding: "3px 6px",
+                                  lineHeight: 1.05,
+                                  maxWidth: "90%",
                                   textAlign: "center",
                                   whiteSpace: "nowrap",
                                   overflow: "hidden",
@@ -1692,15 +1697,15 @@ function PrintDoc({ date, stations, getV, getN }) {
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          padding: "10px 8px 2px",
+          padding: "4px 4px 0",
         }}
       >
         <span
           style={{
-            fontSize: 15,
+            fontSize: 10,
             fontWeight: 700,
             color: T2,
-            letterSpacing: "0.12em",
+            letterSpacing: "0.08em",
             textTransform: "uppercase",
           }}
         >
@@ -1709,137 +1714,13 @@ function PrintDoc({ date, stations, getV, getN }) {
         <span
           style={{
             fontFamily: MONO,
-            fontSize: 18,
+            fontSize: 12,
             fontWeight: 700,
             color: T2,
           }}
         >
           {fmtD(date)}
         </span>
-      </div>
-    </div>
-  );
-}
-
-/* ═══ PRINT DOC ANALISI ═══ */
-function PrintAnalysisDoc({ anRes }) {
-  return (
-    <div style={{ fontFamily: FONT, background: "#EAF0F8", padding: 30 }}>
-      <div
-        data-print-row="true"
-        style={{
-          background: "linear-gradient(135deg,#102A63 0%,#1A5CFF 58%,#00A0D6 100%)",
-          borderRadius: 34,
-          padding: "38px 44px",
-          marginBottom: 30,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          boxShadow: "0 18px 40px rgba(26,92,255,0.24)",
-        }}
-      >
-        <div>
-          <div style={{ fontSize: 15, color: "rgba(255,255,255,0.70)", letterSpacing: "0.24em", textTransform: "uppercase", marginBottom: 8, fontWeight: 700 }}>
-            Report Analisi KPI
-          </div>
-          <div style={{ fontSize: 44, fontWeight: 900, color: "#fff", letterSpacing: "0.08em", lineHeight: 1 }}>
-            {anRes.brands.join(" + ")}
-          </div>
-          <div style={{ fontSize: 18, color: "rgba(255,255,255,0.84)", marginTop: 12, fontWeight: 500 }}>
-            Periodo {fmtD(anRes.from)} → {fmtD(anRes.to)}
-          </div>
-        </div>
-
-        <div style={{ background: "rgba(255,255,255,0.14)", color: "#fff", padding: "22px 30px", borderRadius: 20, border: "1px solid rgba(255,255,255,0.22)", textAlign: "right", minWidth: 260 }}>
-          <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.18em", color: "rgba(255,255,255,0.66)", fontWeight: 700, marginBottom: 8 }}>
-            Stazioni
-          </div>
-          <div style={{ fontFamily: MONO, fontSize: 28, fontWeight: 900, lineHeight: 1 }}>
-            {anRes.selectedStations.length}
-          </div>
-        </div>
-      </div>
-
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:20 }}>
-        {[
-          ["Totale periodo", anRes.total, M],
-          ["Media giornaliera", anRes.avg, M],
-          ["Giorno migliore", anRes.max, GRN],
-          ["Giorno peggiore", anRes.min, RED],
-        ].map(([label, value, color]) => (
-          <div key={label} data-print-row="true" style={{ background:"#fff", border:`1px solid ${BRD}`, borderRadius:22, padding:"22px 24px" }}>
-            <div style={{ fontSize:12, fontWeight:800, color:T3, textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:10 }}>
-              {label}
-            </div>
-            <div style={{ fontFamily:MONO, fontSize:42, fontWeight:900, color, lineHeight:1 }}>
-              {value}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div data-print-row="true" style={{ background:"#fff", border:`1px solid ${BRD}`, borderRadius:22, padding:"20px 24px", marginBottom:20 }}>
-        <div style={{ fontSize:12, fontWeight:800, color:T3, textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:12 }}>
-          Totale per brand
-        </div>
-        {anRes.byBrandTotals.map((b, i) => (
-          <div key={b.brand} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding: i === 0 ? "0 0 10px" : "10px 0 0", borderTop: i === 0 ? "none" : `1px solid ${BRD}` }}>
-            <div style={{ fontSize:18, fontWeight:800, color:bc(b.brand) }}>{b.brand}</div>
-            <div style={{ fontFamily:MONO, fontSize:28, fontWeight:900, color:bc(b.brand) }}>{b.total}</div>
-          </div>
-        ))}
-      </div>
-
-      <div data-print-row="true" style={{ background:"#fff", border:`1px solid ${BRD}`, borderRadius:22, padding:"20px 24px", marginBottom:20 }}>
-        <div style={{ fontSize:12, fontWeight:800, color:T3, textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:12 }}>
-          Stazioni analizzate
-        </div>
-        <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
-          {anRes.selectedStations.map((s) => (
-            <span key={s.key} style={{ fontSize:12, fontWeight:800, color:bc(s.brand), background:bl(s.brand), padding:"6px 10px", borderRadius:999 }}>
-              {s.brand} · {s.name}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <div data-print-row="true" style={{ background:"#fff", border:`1px solid ${BRD}`, borderRadius:22, padding:"20px 24px", marginBottom:20 }}>
-        <div style={{ fontSize:12, fontWeight:800, color:T3, textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:12 }}>
-          Totale per stazione
-        </div>
-        {anRes.stationSeries.map((serie, i) => (
-          <div key={serie.key} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding: i === 0 ? "0 0 10px" : "10px 0 0", borderTop: i === 0 ? "none" : `1px solid ${BRD}` }}>
-            <div>
-              <div style={{ fontSize:18, fontWeight:800, color:TXT }}>{serie.name}</div>
-              <div style={{ fontSize:12, color:T3 }}>{serie.brand}</div>
-            </div>
-            <div style={{ fontFamily:MONO, fontSize:28, fontWeight:900, color:bc(serie.brand) }}>{serie.total}</div>
-          </div>
-        ))}
-      </div>
-
-      <div data-print-row="true" style={{ background:"#fff", border:`1px solid ${BRD}`, borderRadius:22, overflow:"hidden" }}>
-        <div style={{ padding:"16px 20px", borderBottom:`1px solid ${BRD}`, fontSize:12, fontWeight:800, color:T3, textTransform:"uppercase", letterSpacing:"0.12em" }}>
-          Dettaglio giornaliero aggregato
-        </div>
-        {[...anRes.totalPts].reverse().map((pt, i) => (
-          <div key={pt.date} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"14px 20px", background:i%2===0 ? "#fff" : "#F8FBFF", borderBottom:`1px solid ${BRD}` }}>
-            <div style={{ fontSize:16, fontWeight:700, color:TXT }}>{pt.label}</div>
-            <div style={{ fontFamily:MONO, fontSize:28, fontWeight:900, color:M }}>{pt.value}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ═══ SHARED COMPONENTS ═══ */
-function Modal({ children, onClose }) {
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(13,27,42,0.5)", display:"flex", alignItems:"flex-end", zIndex:9999 }} onClick={onClose}>
-      <div style={{ background:S0, width:"100%", maxWidth:900, margin:"0 auto", borderRadius:"20px 20px 0 0", padding:"20px 20px 40px", borderTop:`1px solid ${BRD2}`, boxShadow:"0 -8px 32px rgba(13,27,42,0.18)" }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ width:32, height:3, background:BRD2, borderRadius:2, margin:"0 auto 16px" }} />
-        {children}
       </div>
     </div>
   );
