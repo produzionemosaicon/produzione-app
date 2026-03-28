@@ -1160,7 +1160,7 @@ function FoglioTab({ stations, getV, getN, openCell, savedKeys, onEditSt, onAddS
 }
 
 /* ═══ STORICO TAB ═══ */
-function StoricoTab({ reports, stations, onOpen }) {
+function StoricoTab({ reports, stations, onOpen, onDelete }) {
   const sorted = useMemo(
     () => Object.keys(reports).filter((k) => reports[k]._meta).sort((a, b) => b.localeCompare(a)),
     [reports]
