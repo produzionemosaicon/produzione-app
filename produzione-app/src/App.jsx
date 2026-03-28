@@ -823,16 +823,17 @@ async function deleteReportDay(day) {
           />
         )}
 
-        {tab === "storico" && (
-          <StoricoTab
-            reports={reports}
-            stations={stations}
-            onOpen={(d) => {
-              setDate(d);
-              setTab("foglio");
-            }}
-          />
-        )}
+      {tab === "storico" && (
+  <StoricoTab
+    reports={reports}
+    stations={stations}
+    onOpen={(d) => {
+      setDate(d);
+      setTab("foglio");
+    }}
+    onDelete={deleteReportDay}
+  />
+)}
 
         {tab === "analisi" && (
           <AnalisiTab
