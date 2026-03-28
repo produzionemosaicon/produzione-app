@@ -960,25 +960,75 @@ async function deleteReportDay(day) {
         </Modal>
       )}
 
-      {addModal && (
-        <Modal onClose={() => setAddModal(null)}>
-          <div style={{ fontSize:9, fontWeight:700, color:T3, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:3 }}>Nuova stazione · {addModal.brand}</div>
-          <div style={{ fontSize:18, fontWeight:800, color:TXT, marginBottom:14 }}>Aggiungi stazione</div>
-          <input
-            autoFocus
-            value={addName}
-            onChange={(e) => setAddName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addName.trim() && addStation(addModal.brand, addModal.afterId, addName)}
-            placeholder="Nome stazione…"
-            style={{ width:"100%", background:BG, border:`2px solid ${bc(addModal.brand)}`, borderRadius:10, padding:"11px 12px", fontSize:15, color:TXT, outline:"none", marginBottom:14, fontFamily:FONT }}
-          />
-          <Btn color={bc(addModal.brand)} onClick={() => addName.trim() && addStation(addModal.brand, addModal.afterId, addName)}>+ AGGIUNGI</Btn>
-          <Btn color={BG} textColor={T3} style={{ marginTop:8 }} onClick={() => setAddModal(null)}>Annulla</Btn>
-        </Modal>
-      )}
+     {addModal && (
+  <Modal onClose={() => setAddModal(null)}>
+    <div style={{ fontSize:9, fontWeight:700, color:T3, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:3 }}>
+      Nuova stazione · {addModal.brand}
     </div>
-  );
-}
+
+    <div style={{ fontSize:18, fontWeight:800, color:TXT, marginBottom:14 }}>
+      Aggiungi stazione
+    </div>
+
+    <input
+      autoFocus
+      value={addName}
+      onChange={(e) => setAddName(e.target.value)}
+      placeholder="Nome stazione…"
+      style={{
+        width:"100%",
+        background:BG,
+        border:`2px solid ${bc(addModal.brand)}`,
+        borderRadius:10,
+        padding:"11px 12px",
+        fontSize:15,
+        color:TXT,
+        outline:"none",
+        marginBottom:12,
+        fontFamily:FONT
+      }}
+    />
+
+    <div style={{ fontSize:10, fontWeight:700, color:T2, marginBottom:6, letterSpacing:"0.08em", textTransform:"uppercase" }}>
+      Posizione
+    </div>
+
+    <select
+      value={addPosition}
+      onChange={(e) => setAddPosition(e.target.value)}
+      style={{
+        width:"100%",
+        background:BG,
+        border:`1.5px solid ${BRD}`,
+        borderRadius:10,
+        padding:"11px 12px",
+        fontSize:14,
+        color:TXT,
+        outline:"none",
+        marginBottom:14,
+        fontFamily:FONT
+      }}
+    >
+      <option value="">In fondo</option>
+      {stations[addModal.brand]?.map((st) => (
+        <option key={st.id} value={st.id}>
+          Prima di: {st.name}
+        </option>
+      ))}
+    </select>
+
+    <Btn
+      color={bc(addModal.brand)}
+      onClick={() => addName.trim() && addStation(addModal.brand, addPosition, addName)}
+    >
+      + AGGIUNGI
+    </Btn>
+
+    <Btn color={BG} textColor={T3} style={{ marginTop:8 }} onClick={() => setAddModal(null)}>
+      Annulla
+    </Btn>
+  </Modal>
+)}
 
 /* ═══ HOME TAB ═══ */
 function HomeTab({ date, reports, stations, onGoFoglio }) {
