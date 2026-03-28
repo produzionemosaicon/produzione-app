@@ -827,7 +827,7 @@ async function deleteReportDay(day) {
       stations={stations}
       onGoFoglio={() => setTab("foglio")}
     />
-  )}
+ 
 
   {tab === "foglio" && (
     <FoglioTab
