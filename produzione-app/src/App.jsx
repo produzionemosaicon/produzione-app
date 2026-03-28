@@ -243,63 +243,63 @@ const [addPosition, setAddPosition] = useState("");
     setAnSids((prev) => prev.filter((k) => available.includes(k)));
   }, [anBrands, stations]);
 
- const saveStations = useCallback(async (s) => {
-  setStations(s);
-
+const saveStations = useCallback(async (s) => {
   try {
     await set(ref(db, "stations"), s);
+    setStations(s);
   } catch (e) {
     console.error("Errore salvataggio stations:", e);
     alert("Errore nel salvataggio delle stazioni.");
   }
 }, []);
 
-  const saveCell = useCallback(async (val, note) => {
-    if (!cellModal) return;
+const saveCell = useCallback(async (val, note) => {
+  if (!cellModal) return;
 
-    const { brand, sid, t } = cellModal;
-    const tKey = timeKey(t);
-    const flashKey = `${brand}_${sid}_${tKey}`;
-    setSaving(true);
+  const { brand, sid, t } = cellModal;
+  const tKey = timeKey(t);
+  const flashKey = `${brand}_${sid}_${tKey}`;
+  setSaving(true);
 
-    try {
-      await set(ref(db, `reports/${date}/${brand}/${sid}/${tKey}`), {
-        value: val,
-        note,
+  try {
+    await set(ref(db, `reports/${date}/${brand}/${sid}/${tKey}`), {
+      value: val,
+      note,
+    });
+    await set(ref(db, `reports/${date}/_meta`), {
+      date,
+      ts: Date.now(),
+      updated: Date.now(),
+    });
+
+    setSavedKeys((prev) => new Set([...prev, flashKey]));
+    setTimeout(() => {
+      setSavedKeys((prev) => {
+        const n = new Set(prev);
+        n.delete(flashKey);
+        return n;
       });
-      await set(ref(db, `reports/${date}/_meta`), {
-        date,
-        ts: Date.now(),
-        updated: Date.now(),
-      });
-
-      setSavedKeys((prev) => new Set([...prev, flashKey]));
-      setTimeout(() => {
-        setSavedKeys((prev) => {
-          const n = new Set(prev);
-          n.delete(flashKey);
-          return n;
-        });
-      }, 1500);
-    } catch (e) {
-      console.error(e);
-    }
-
-    setSaving(false);
-    setCellModal(null);
-  }, [cellModal, date]);
-
-  const getV = (brand, sid, t) =>
-    reports[date]?.[brand]?.[sid]?.[timeKey(t)]?.value ?? "";
-
-  const getN = (brand, sid, t) =>
-    reports[date]?.[brand]?.[sid]?.[timeKey(t)]?.note ?? "";
-
-  function openCell(brand, sid, t, name) {
-    setCellVal(reports[date]?.[brand]?.[sid]?.[timeKey(t)]?.value ?? "");
-    setCellNote(reports[date]?.[brand]?.[sid]?.[timeKey(t)]?.note ?? "");
-    setCellModal({ brand, sid, t, name });
+    }, 1500);
+  } catch (e) {
+    console.error(e);
   }
+
+  setSaving(false);
+  setCellModal(null);
+}, [cellModal, date]);
+
+const getV = (brand, sid, t) =>
+  reports[date]?.[brand]?.[sid]?.[timeKey(t)]?.value ?? "";
+
+const getN = (brand, sid, t) =>
+  reports[date]?.[brand]?.[sid]?.[timeKey(t)]?.note ?? "";
+
+function openCell(brand, sid, t, name) {
+  setCellVal(reports[date]?.[brand]?.[sid]?.[timeKey(t)]?.value ?? "");
+  setCellNote(reports[date]?.[brand]?.[sid]?.[timeKey(t)]?.note ?? "");
+  setCellModal({ brand, sid, t, name });
+}
+
 async function deleteReportDay(day) {
   const ok = window.confirm(
     `Vuoi eliminare definitivamente il report del giorno ${fmtD(day)}?\n\nQuesta azione rimuoverà i dati dallo storico e dalle analisi.`
@@ -314,24 +314,31 @@ async function deleteReportDay(day) {
     alert("Errore durante l'eliminazione del report.");
   }
 }
-  async function renameStation(brand, sid, name) {
-    await saveStations({
-      ...stations,
-      [brand]: stations[brand].map((s) => s.id === sid ? { ...s, name } : s),
-    });
-    setStModal(null);
-  }
 
-  async function deleteStation(brand, sid) {
-    await saveStations({
-      ...stations,
-      [brand]: stations[brand].filter((s) => s.id !== sid),
-    });
-    setStModal(null);
-  }
+async function renameStation(brand, sid, name) {
+  const cleanName = name.trim();
+  if (!cleanName) return;
 
- async function addStation(brand, positionId, name) {
-  const arr = stations[brand] || [];
+  await saveStations({
+    ...stations,
+    [brand]: (stations[brand] || []).map((s) =>
+      s.id === sid ? { ...s, name: cleanName } : s
+    ),
+  });
+
+  setStModal(null);
+}
+
+async function deleteStation(brand, sid) {
+  await saveStations({
+    ...stations,
+    [brand]: (stations[brand] || []).filter((s) => s.id !== sid),
+  });
+  setStModal(null);
+}
+
+async function addStation(brand, positionId, name) {
+  const arr = [...(stations[brand] || [])];
   const cleanName = name.trim();
   if (!cleanName) return;
 
@@ -339,9 +346,7 @@ async function deleteReportDay(day) {
 
   if (positionId) {
     const foundIndex = arr.findIndex((s) => s.id === positionId);
-    if (foundIndex >= 0) {
-      insertIndex = foundIndex;
-    }
+    if (foundIndex >= 0) insertIndex = foundIndex;
   }
 
   const newStation = {
@@ -349,33 +354,41 @@ async function deleteReportDay(day) {
     name: cleanName,
   };
 
-  const ns = {
-    ...stations,
-    [brand]: [
-      ...arr.slice(0, insertIndex),
-      newStation,
-      ...arr.slice(insertIndex),
-    ],
-  };
+  const updatedBrandStations = [
+    ...arr.slice(0, insertIndex),
+    newStation,
+    ...arr.slice(insertIndex),
+  ];
 
-  await saveStations(ns);
+  await saveStations({
+    ...stations,
+    [brand]: updatedBrandStations,
+  });
+
   setAddModal(null);
   setAddName("");
   setAddPosition("");
 }
 
-  async function moveStation(brand, sid, dir) {
-    const arr = [...stations[brand]];
-    const i = arr.findIndex((s) => s.id === sid);
-    if (i === -1) return;
-    if (arr[i].isTotal) return;
+async function moveStation(brand, sid, dir) {
+  const arr = [...(stations[brand] || [])];
+  const i = arr.findIndex((s) => s.id === sid);
+  if (i === -1) return;
+  if (arr[i].isTotal) return;
 
-    if (dir === "up" && i > 0) [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]];
-    if (dir === "down" && i < arr.length - 1) [arr[i + 1], arr[i]] = [arr[i], arr[i + 1]];
-
-    await saveStations({ ...stations, [brand]: arr });
+  if (dir === "up" && i > 0) {
+    [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]];
   }
 
+  if (dir === "down" && i < arr.length - 1) {
+    [arr[i + 1], arr[i]] = [arr[i], arr[i + 1]];
+  }
+
+  await saveStations({
+    ...stations,
+    [brand]: arr,
+  });
+}
   function toggleBrand(brand) {
     setAnBrands((prev) => {
       const next = { ...prev, [brand]: !prev[brand] };
