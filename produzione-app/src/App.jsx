@@ -452,42 +452,151 @@ export default function App() {
     }
   }
 
-  async function shareNodeAsPaginatedPdf(nodeId, filename, titleText, widthPx = 1480) {
-    try {
-      const blob = await buildPdfFromNode(nodeId, widthPx);
-
-      const file = new File([blob], filename, {
-        type: "application/pdf",
-        lastModified: Date.now(),
-      });
-
-      const shareData = {
-        files: [file],
-        title: titleText,
-        text: titleText,
-      };
-
-      const canUseNativeShare =
-        window.isSecureContext &&
-        typeof navigator.share === "function" &&
-        (
-          typeof navigator.canShare !== "function" ||
-          navigator.canShare(shareData)
-        );
-
-      if (canUseNativeShare) {
-        await navigator.share(shareData);
-        return;
-      }
-
-      downloadBlob(blob, filename);
-      alert("Condivisione non disponibile su questo dispositivo/browser. PDF scaricato.");
-    } catch (e) {
-      console.error("Errore condivisione PDF:", e);
-      alert(`Operazione non riuscita: ${e.message}`);
-    }
+ async function shareNodeAsPaginatedPdf(nodeId, filename, titleText, widthPx = 1480) {
+  const el = document.getElementById(nodeId);
+  if (!el) {
+    alert("Area PDF non trovata");
+    return;
   }
 
+  const { html2canvas, jsPDF } = pdfLibs;
+  if (!html2canvas || !jsPDF) {
+    alert("Le librerie PDF non sono ancora pronte. Riprova tra un secondo.");
+    return;
+  }
+
+  const prevDisplay = el.style.display;
+  const prevWidth = el.style.width;
+
+  try {
+    el.style.display = "block";
+    el.style.width = `${widthPx}px`;
+
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+    const canvas = await html2canvas(el, {
+      scale: 1.5,
+      useCORS: true,
+      backgroundColor: "#ffffff",
+      logging: false,
+      windowWidth: el.scrollWidth,
+      windowHeight: el.scrollHeight,
+    });
+
+    const pdf = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+      compress: true,
+    });
+
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+
+    const pxPerMm = canvas.width / pageW;
+    const pageHeightPx = Math.floor(pageH * pxPerMm);
+
+    // Trova i punti di taglio sicuri usando gli elementi marcati con data-print-row="true"
+    const safeBreaks = Array.from(el.querySelectorAll('[data-print-row="true"]'))
+      .map((node) => {
+        const top = node.offsetTop;
+        const bottom = top + node.offsetHeight;
+        return { top, bottom };
+      })
+      .sort((a, b) => a.top - b.top);
+
+    let rendered = 0;
+    let page = 0;
+
+    while (rendered < canvas.height) {
+      if (page > 0) pdf.addPage();
+
+      let sliceEnd = Math.min(rendered + pageHeightPx, canvas.height);
+
+      // Cerca di non tagliare una riga a metà
+      const crossingRow = safeBreaks.find(
+        (row) => row.top < sliceEnd && row.bottom > sliceEnd
+      );
+
+      if (crossingRow) {
+        // sposta il taglio sopra la riga se c'è abbastanza spazio
+        if (crossingRow.top > rendered + 120) {
+          sliceEnd = crossingRow.top;
+        } else {
+          // altrimenti porta tutta la riga nella pagina successiva
+          const nextSafe = safeBreaks.find((row) => row.top >= sliceEnd);
+          if (nextSafe) {
+            sliceEnd = nextSafe.top;
+          }
+        }
+      }
+
+      const sliceHeight = Math.max(1, sliceEnd - rendered);
+
+      const pageCanvas = document.createElement("canvas");
+      pageCanvas.width = canvas.width;
+      pageCanvas.height = sliceHeight;
+
+      const ctx = pageCanvas.getContext("2d");
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+
+      ctx.drawImage(
+        canvas,
+        0,
+        rendered,
+        canvas.width,
+        sliceHeight,
+        0,
+        0,
+        canvas.width,
+        sliceHeight
+      );
+
+      const imgH = sliceHeight / pxPerMm;
+
+      pdf.addImage(
+        pageCanvas.toDataURL("image/jpeg", 0.95),
+        "JPEG",
+        0,
+        0,
+        pageW,
+        imgH,
+        undefined,
+        "FAST"
+      );
+
+      rendered += sliceHeight;
+      page++;
+    }
+
+    const blob = pdf.output("blob");
+    const file = new File([blob], filename, {
+      type: "application/pdf",
+      lastModified: Date.now(),
+    });
+
+    const shareData = {
+      files: [file],
+      title: titleText,
+      text: titleText,
+    };
+
+    if (!window.isSecureContext) throw new Error("L'app non è in HTTPS");
+    if (typeof navigator.share !== "function") throw new Error("navigator.share non disponibile");
+    if (typeof navigator.canShare === "function" && !navigator.canShare(shareData)) {
+      throw new Error("Il browser non accetta la condivisione di questo file");
+    }
+
+    await navigator.share(shareData);
+  } catch (e) {
+    console.error("Errore condivisione PDF:", e);
+    alert(`Condivisione non riuscita: ${e.message}`);
+  } finally {
+    el.style.display = prevDisplay;
+    el.style.width = prevWidth;
+  }
+}
   async function shareWA() {
     await shareNodeAsPaginatedPdf(
       "print-doc",
