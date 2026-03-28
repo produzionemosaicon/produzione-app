@@ -335,23 +335,39 @@ async function deleteReportDay(day) {
     setStModal(null);
   }
 
-  async function addStation(brand, afterId, name) {
-    const arr = stations[brand];
-    const idxFound = afterId ? arr.findIndex((s) => s.id === afterId) : arr.length - 1;
-    const idx = idxFound >= 0 ? idxFound : arr.length - 1;
+ async function addStation(brand, positionId, name) {
+  const arr = stations[brand] || [];
+  const cleanName = name.trim();
+  if (!cleanName) return;
 
-    const ns = {
-      ...stations,
-      [brand]: [
-        ...arr.slice(0, idx + 1),
-        { id: `${brand[0].toLowerCase()}_${uid()}`, name: name.trim() },
-        ...arr.slice(idx + 1),
-      ],
-    };
-    await saveStations(ns);
-    setAddModal(null);
-    setAddName("");
+  let insertIndex = arr.length;
+
+  if (positionId) {
+    const foundIndex = arr.findIndex((s) => s.id === positionId);
+    if (foundIndex >= 0) {
+      insertIndex = foundIndex;
+    }
   }
+
+  const newStation = {
+    id: `${brand[0].toLowerCase()}_${uid()}`,
+    name: cleanName,
+  };
+
+  const ns = {
+    ...stations,
+    [brand]: [
+      ...arr.slice(0, insertIndex),
+      newStation,
+      ...arr.slice(insertIndex),
+    ],
+  };
+
+  await saveStations(ns);
+  setAddModal(null);
+  setAddName("");
+  setAddPosition("");
+}
 
   async function moveStation(brand, sid, dir) {
     const arr = [...stations[brand]];
