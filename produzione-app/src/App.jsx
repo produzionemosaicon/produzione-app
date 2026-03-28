@@ -1353,7 +1353,7 @@ function AnalisiTab({
 
 /* ═══ PRINT DOC PRODUZIONE ═══ */
 function PrintDoc({ date, stations, getV, getN }) {
-  const COL = "500px repeat(4, 1fr)";
+  const COL = "760px repeat(4, 1fr)";
 
   const mosaiconTargets = {
     "10:00": 75,
@@ -1375,7 +1375,7 @@ function PrintDoc({ date, stations, getV, getN }) {
         style={{
           background: "linear-gradient(135deg,#0A3D9C 0%,#1A5CFF 58%,#00A0D6 100%)",
           borderRadius: 34,
-          padding: "38px 44px",
+          padding: "42px 48px",
           marginBottom: 30,
           display: "flex",
           justifyContent: "space-between",
@@ -1384,27 +1384,89 @@ function PrintDoc({ date, stations, getV, getN }) {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 22 }}>
-          <div style={{ width: 78, height: 78, borderRadius: 22, background: "rgba(255,255,255,0.16)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 42 }}>
+          <div
+            style={{
+              width: 82,
+              height: 82,
+              borderRadius: 22,
+              background: "rgba(255,255,255,0.16)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 42,
+            }}
+          >
             🏭
           </div>
           <div>
-            <div style={{ fontSize: 15, color: "rgba(255,255,255,0.70)", letterSpacing: "0.24em", textTransform: "uppercase", marginBottom: 8, fontWeight: 700 }}>
+            <div
+              style={{
+                fontSize: 16,
+                color: "rgba(255,255,255,0.70)",
+                letterSpacing: "0.24em",
+                textTransform: "uppercase",
+                marginBottom: 8,
+                fontWeight: 700,
+              }}
+            >
               Report Produzione Giornaliero
             </div>
-            <div style={{ fontSize: 44, fontWeight: 900, color: "#fff", letterSpacing: "0.08em", lineHeight: 1 }}>
+            <div
+              style={{
+                fontSize: 54,
+                fontWeight: 900,
+                color: "#fff",
+                letterSpacing: "0.08em",
+                lineHeight: 1,
+              }}
+            >
               MOSAICON + EMOS
             </div>
-            <div style={{ fontSize: 18, color: "rgba(255,255,255,0.84)", marginTop: 12, fontWeight: 500 }}>
+            <div
+              style={{
+                fontSize: 24,
+                color: "rgba(255,255,255,0.84)",
+                marginTop: 14,
+                fontWeight: 500,
+              }}
+            >
               Report operativo giornaliero
             </div>
           </div>
         </div>
 
-        <div style={{ background: "rgba(255,255,255,0.14)", color: "#fff", padding: "22px 30px", borderRadius: 20, border: "1px solid rgba(255,255,255,0.22)", textAlign: "right", minWidth: 220 }}>
-          <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.18em", color: "rgba(255,255,255,0.66)", fontWeight: 700, marginBottom: 8 }}>
+        <div
+          style={{
+            background: "rgba(255,255,255,0.14)",
+            color: "#fff",
+            padding: "24px 32px",
+            borderRadius: 20,
+            border: "1px solid rgba(255,255,255,0.22)",
+            textAlign: "right",
+            minWidth: 240,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 12,
+              textTransform: "uppercase",
+              letterSpacing: "0.18em",
+              color: "rgba(255,255,255,0.66)",
+              fontWeight: 700,
+              marginBottom: 8,
+            }}
+          >
             Data
           </div>
-          <div style={{ fontFamily: MONO, fontSize: 46, fontWeight: 900, lineHeight: 1, letterSpacing: "-0.02em" }}>
+          <div
+            style={{
+              fontFamily: MONO,
+              fontSize: 56,
+              fontWeight: 900,
+              lineHeight: 1,
+              letterSpacing: "-0.02em",
+            }}
+          >
             {fmtD(date)}
           </div>
         </div>
@@ -1414,22 +1476,81 @@ function PrintDoc({ date, stations, getV, getN }) {
         const highlightId = getHighlightStationId(brand);
 
         return (
-          <div key={brand} style={{ marginBottom: 32, background: "#fff", borderRadius: 30, overflow: "hidden", boxShadow: "0 8px 26px rgba(13,27,42,0.08)", border: `1px solid ${BRD}` }}>
-            <div data-print-row="true" style={{ display: "grid", gridTemplateColumns: COL, background: `linear-gradient(135deg, ${bc(brand)}14, #ffffff 72%)`, borderBottom: `1px solid ${BRD}` }}>
-              <div style={{ padding: "26px 30px", borderLeft: `10px solid ${bc(brand)}`, display: "flex", alignItems: "center" }}>
+          <div
+            key={brand}
+            style={{
+              marginBottom: 32,
+              background: "#fff",
+              borderRadius: 30,
+              overflow: "hidden",
+              boxShadow: "0 8px 26px rgba(13,27,42,0.08)",
+              border: `1px solid ${BRD}`,
+            }}
+          >
+            <div
+              data-print-row="true"
+              style={{
+                display: "grid",
+                gridTemplateColumns: COL,
+                background: `linear-gradient(135deg, ${bc(brand)}14, #ffffff 72%)`,
+                borderBottom: `1px solid ${BRD}`,
+              }}
+            >
+              <div
+                style={{
+                  padding: "30px 34px",
+                  borderLeft: `10px solid ${bc(brand)}`,
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
                 <div>
-                  <div style={{ fontSize: 38, fontWeight: 900, color: bc(brand), letterSpacing: "0.16em", lineHeight: 1 }}>
+                  <div
+                    style={{
+                      fontSize: 48,
+                      fontWeight: 900,
+                      color: bc(brand),
+                      letterSpacing: "0.16em",
+                      lineHeight: 1,
+                    }}
+                  >
                     {brand}
                   </div>
-                  <div style={{ fontSize: 18, color: T2, marginTop: 10, fontWeight: 600 }}>
+                  <div
+                    style={{
+                      fontSize: 24,
+                      color: T2,
+                      marginTop: 12,
+                      fontWeight: 600,
+                    }}
+                  >
                     Report linea produzione
                   </div>
                 </div>
               </div>
 
               {TIMES.map((t) => (
-                <div key={t} style={{ borderLeft: `1px solid ${BRD}`, display: "flex", alignItems: "center", justifyContent: "center", padding: "26px 10px", background: `${bc(brand)}08` }}>
-                  <div style={{ fontFamily: MONO, fontSize: 38, fontWeight: 900, color: bc(brand), lineHeight: 1, letterSpacing: "0.03em" }}>
+                <div
+                  key={t}
+                  style={{
+                    borderLeft: `1px solid ${BRD}`,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "30px 12px",
+                    background: `${bc(brand)}08`,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 46,
+                      fontWeight: 900,
+                      color: bc(brand),
+                      lineHeight: 1,
+                      letterSpacing: "0.03em",
+                    }}
+                  >
                     {t}
                   </div>
                 </div>
@@ -1440,45 +1561,123 @@ function PrintDoc({ date, stations, getV, getN }) {
               ?.filter((st) => st.name !== "DA INSCATOLARE/GIÀ CQ")
               .map((st, i) => {
                 const isHighlight = st.id === highlightId;
-                const hasNote = TIMES.some((t) => getN(brand, st.id, t));
-                const borderColor = isHighlight ? bc(brand) : hasNote ? ACC : "transparent";
+                const borderColor = isHighlight ? bc(brand) : "transparent";
 
                 return (
-                  <div key={st.id} data-print-row="true" style={{ display: "grid", gridTemplateColumns: COL, background: isHighlight ? `${bc(brand)}12` : i % 2 === 0 ? "#fff" : "#F8FBFF", borderBottom: `1px solid ${BRD}` }}>
-                    <div style={{ padding: "24px 28px", borderLeft: `10px solid ${borderColor}`, borderRight: `1px solid ${BRD}`, display: "flex", alignItems: "center", minHeight: 108 }}>
+                  <div
+                    key={st.id}
+                    data-print-row="true"
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: COL,
+                      background: isHighlight
+                        ? `${bc(brand)}12`
+                        : i % 2 === 0
+                        ? "#fff"
+                        : "#F8FBFF",
+                      borderBottom: `1px solid ${BRD}`,
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: "30px 32px",
+                        borderLeft: `10px solid ${borderColor}`,
+                        borderRight: `1px solid ${BRD}`,
+                        display: "flex",
+                        alignItems: "center",
+                        minHeight: 140,
+                      }}
+                    >
                       <div style={{ width: "100%" }}>
-                        <div style={{ fontSize: isHighlight ? 38 : 34, fontWeight: isHighlight ? 900 : 800, color: isHighlight ? bc(brand) : TXT, lineHeight: 1.08, letterSpacing: isHighlight ? "0.03em" : "0.01em", wordBreak: "break-word" }}>
+                        <div
+                          style={{
+                            fontSize: isHighlight ? 46 : 42,
+                            fontWeight: isHighlight ? 900 : 800,
+                            color: isHighlight ? bc(brand) : TXT,
+                            lineHeight: 1.1,
+                            letterSpacing: isHighlight ? "0.02em" : "0.01em",
+                            wordBreak: "break-word",
+                          }}
+                        >
                           {st.name}
                         </div>
-
-                        {hasNote && !isHighlight && (
-                          <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                            {TIMES.map((t) => {
-                              const note = getN(brand, st.id, t);
-                              if (!note) return null;
-                              return (
-                                <span key={t} style={{ fontSize: 11, fontWeight: 800, color: ACC, background: ACL, border: "1px solid rgba(255,82,0,0.18)", borderRadius: 999, padding: "4px 9px", letterSpacing: "0.04em" }}>
-                                  {t} · {note}
-                                </span>
-                              );
-                            })}
-                          </div>
-                        )}
                       </div>
                     </div>
 
                     {TIMES.map((t) => {
                       const v = getV(brand, st.id, t);
-                      const isMosaiconTotalRow = brand === "MOSAICON" && st.id === "m_t";
+                      const note = getN(brand, st.id, t);
+                      const isMosaiconTotalRow =
+                        brand === "MOSAICON" && st.id === "m_t";
+
                       const displayValue =
                         isMosaiconTotalRow && v
                           ? `${v}/${mosaiconTargets[t]}`
-                          : (v || "—");
+                          : v || "—";
 
                       return (
-                        <div key={t} style={{ borderLeft: `1px solid ${BRD}`, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px 8px", background: isHighlight ? `${bc(brand)}10` : "transparent", minHeight: 108 }}>
-                          <div style={{ fontFamily: MONO, fontSize: isMosaiconTotalRow ? 40 : (isHighlight ? 58 : 52), fontWeight: 900, lineHeight: 1, color: v ? bc(brand) : "#C7D3E0", letterSpacing: "-0.03em" }}>
-                            {displayValue}
+                        <div
+                          key={t}
+                          style={{
+                            borderLeft: `1px solid ${BRD}`,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: "22px 10px",
+                            background: isHighlight
+                              ? `${bc(brand)}10`
+                              : "transparent",
+                            minHeight: 140,
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              gap: 10,
+                              width: "100%",
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontFamily: MONO,
+                                fontSize: isMosaiconTotalRow
+                                  ? 54
+                                  : isHighlight
+                                  ? 74
+                                  : 66,
+                                fontWeight: 900,
+                                lineHeight: 1,
+                                color: v ? bc(brand) : "#C7D3E0",
+                                letterSpacing: "-0.03em",
+                                textAlign: "center",
+                              }}
+                            >
+                              {displayValue}
+                            </div>
+
+                            {note ? (
+                              <div
+                                style={{
+                                  fontSize: 16,
+                                  fontWeight: 800,
+                                  color: ACC,
+                                  background: ACL,
+                                  border:
+                                    "1px solid rgba(255,82,0,0.18)",
+                                  borderRadius: 999,
+                                  padding: "6px 12px",
+                                  lineHeight: 1.2,
+                                  maxWidth: "90%",
+                                  textAlign: "center",
+                                  wordBreak: "break-word",
+                                }}
+                              >
+                                {note}
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       );
@@ -1490,11 +1689,34 @@ function PrintDoc({ date, stations, getV, getN }) {
         );
       })}
 
-      <div data-print-row="true" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 8px 2px" }}>
-        <span style={{ fontSize: 15, fontWeight: 700, color: T2, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+      <div
+        data-print-row="true"
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "10px 8px 2px",
+        }}
+      >
+        <span
+          style={{
+            fontSize: 15,
+            fontWeight: 700,
+            color: T2,
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+          }}
+        >
           Ricevere Qualità · Fare Qualità · Consegnare Qualità
         </span>
-        <span style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, color: T2 }}>
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: 18,
+            fontWeight: 700,
+            color: T2,
+          }}
+        >
           {fmtD(date)}
         </span>
       </div>
