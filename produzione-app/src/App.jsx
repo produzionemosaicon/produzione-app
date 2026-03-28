@@ -493,7 +493,7 @@ export default function App() {
       "print-doc",
       `produzione_${date}.pdf`,
       `Report produzione ${fmtD(date)}`,
-      1900
+      1480
     );
   }
 
