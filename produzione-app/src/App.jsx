@@ -1642,7 +1642,7 @@ function PrintDoc({ date, stations, getV, getN }) {
                             <div
                               style={{
                                 fontFamily: MONO,
-                                fontSize: isMosaiconTotalRow ? 42 : isHighlight ? 64 : 56,
+                                fontSize: isMosaiconTotalRow ? 38 : isHighlight ? 64 : 56,
                                 fontWeight: 900,
                                 lineHeight: 1,
                                 color: v ? bc(brand) : "#C7D3E0",
