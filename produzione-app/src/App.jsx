@@ -1353,7 +1353,7 @@ function AnalisiTab({
 
 /* ═══ PRINT DOC PRODUZIONE ═══ */
 function PrintDoc({ date, stations, getV, getN }) {
-  const COL = "760px repeat(4, 1fr)";
+  const COL = "620px repeat(4, 170px)";
 
   const mosaiconTargets = {
     "10:00": 75,
@@ -1623,11 +1623,9 @@ function PrintDoc({ date, stations, getV, getN }) {
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            padding: "22px 10px",
-                            background: isHighlight
-                              ? `${bc(brand)}10`
-                              : "transparent",
-                            minHeight: 140,
+                            padding: "18px 8px",
+                            background: isHighlight ? `${bc(brand)}10` : "transparent",
+                            minHeight: 132,
                           }}
                         >
                           <div
@@ -1636,23 +1634,21 @@ function PrintDoc({ date, stations, getV, getN }) {
                               flexDirection: "column",
                               alignItems: "center",
                               justifyContent: "center",
-                              gap: 10,
+                              gap: 8,
                               width: "100%",
+                              overflow: "hidden",
                             }}
                           >
                             <div
                               style={{
                                 fontFamily: MONO,
-                                fontSize: isMosaiconTotalRow
-                                  ? 54
-                                  : isHighlight
-                                  ? 74
-                                  : 66,
+                                fontSize: isMosaiconTotalRow ? 42 : isHighlight ? 64 : 56,
                                 fontWeight: 900,
                                 lineHeight: 1,
                                 color: v ? bc(brand) : "#C7D3E0",
-                                letterSpacing: "-0.03em",
+                                letterSpacing: isMosaiconTotalRow ? "-0.05em" : "-0.03em",
                                 textAlign: "center",
+                                whiteSpace: "nowrap",
                               }}
                             >
                               {displayValue}
@@ -1661,18 +1657,19 @@ function PrintDoc({ date, stations, getV, getN }) {
                             {note ? (
                               <div
                                 style={{
-                                  fontSize: 16,
+                                  fontSize: 13,
                                   fontWeight: 800,
                                   color: ACC,
                                   background: ACL,
-                                  border:
-                                    "1px solid rgba(255,82,0,0.18)",
+                                  border: "1px solid rgba(255,82,0,0.18)",
                                   borderRadius: 999,
-                                  padding: "6px 12px",
-                                  lineHeight: 1.2,
-                                  maxWidth: "90%",
+                                  padding: "4px 8px",
+                                  lineHeight: 1.1,
+                                  maxWidth: "92%",
                                   textAlign: "center",
-                                  wordBreak: "break-word",
+                                  whiteSpace: "nowrap",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
                                 }}
                               >
                                 {note}
