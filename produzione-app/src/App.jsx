@@ -1998,7 +1998,46 @@ function PrintDoc({ date, stations, getV, getN }) {
     </div>
   );
 }
-
+function Modal({ children, onClose }) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(13,27,42,0.5)",
+        display: "flex",
+        alignItems: "flex-end",
+        zIndex: 9999,
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: S0,
+          width: "100%",
+          maxWidth: 900,
+          margin: "0 auto",
+          borderRadius: "20px 20px 0 0",
+          padding: "20px 20px 40px",
+          borderTop: `1px solid ${BRD2}`,
+          boxShadow: "0 -8px 32px rgba(13,27,42,0.18)",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          style={{
+            width: 32,
+            height: 3,
+            background: BRD2,
+            borderRadius: 2,
+            margin: "0 auto 16px",
+          }}
+        />
+        {children}
+      </div>
+    </div>
+  );
+}
 function Btn({ children, color = M, textColor = "#fff", onClick, style = {} }) {
   return (
     <button
