@@ -1353,7 +1353,7 @@ function AnalisiTab({
 
 /* ═══ PRINT DOC PRODUZIONE ═══ */
 function PrintDoc({ date, stations, getV, getN }) {
-  const COL = "430px repeat(4, 1fr)";
+  const COL = "340px repeat(4, 1fr)";
 
   const mosaiconTargets = {
     "10:00": 75,
