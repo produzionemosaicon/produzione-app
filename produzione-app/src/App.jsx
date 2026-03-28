@@ -1476,16 +1476,18 @@ function PrintDoc({ date, stations, getV, getN }) {
         const highlightId = getHighlightStationId(brand);
 
         return (
-          <div
-            key={brand}
-            style={{
-              marginBottom: 18,
-              background: "#fff",
-              borderRadius: 18,
-              overflow: "hidden",
-              boxShadow: "0 4px 14px rgba(13,27,42,0.06)",
-              border: `1px solid ${BRD}`,
-            }}
+         <div
+  key={brand}
+  style={{
+    marginBottom: 18,
+    background: "#fff",
+    borderRadius: 18,
+    overflow: "hidden",
+    boxShadow: "0 4px 14px rgba(13,27,42,0.06)",
+    border: `1px solid ${BRD}`,
+    breakInside: "avoid",
+    pageBreakInside: "avoid",
+  }}
           >
             <div
               data-print-row="true"
