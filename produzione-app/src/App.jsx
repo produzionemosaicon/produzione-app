@@ -248,14 +248,16 @@ export default function App() {
     setAnSids((prev) => prev.filter((k) => available.includes(k)));
   }, [anBrands, stations]);
 
-  const saveStations = useCallback(async (s) => {
-    setStations(s);
-    try {
-      await set(ref(db, "stations"), s);
-    } catch (e) {
-      console.error(e);
-    }
-  }, []);
+ const saveStations = useCallback(async (s) => {
+  setStations(s);
+
+  try {
+    await set(ref(db, "stations"), s);
+  } catch (e) {
+    console.error("Errore salvataggio stations:", e);
+    alert("Errore nel salvataggio delle stazioni.");
+  }
+}, []);
 
   const saveCell = useCallback(async (val, note) => {
     if (!cellModal) return;
