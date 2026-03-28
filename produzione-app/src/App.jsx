@@ -824,12 +824,11 @@ async function deleteReportDay(day) {
               setStModal({ brand, st });
               setStNewName(st.name);
             }}
-            onAddSt={(brand, afterId) => {
-              setAddModal({ brand, afterId });
-              setAddName("");
-            }}
-          />
-        )}
+           onAddSt={(brand, afterId) => {
+  setAddModal({ brand, afterId });
+  setAddName("");
+  setAddPosition(afterId || "");
+}}
 
       {tab === "storico" && (
   <StoricoTab
