@@ -819,7 +819,7 @@ async function deleteReportDay(day) {
         </div>
       </div>
 
-     <div className="no-print" style={{ flex:1, overflowY:"auto" }}>
+    <div className="no-print" style={{ flex:1, overflowY:"auto" }}>
   {tab === "home" && (
     <HomeTab
       date={date}
@@ -827,7 +827,7 @@ async function deleteReportDay(day) {
       stations={stations}
       onGoFoglio={() => setTab("foglio")}
     />
- 
+  )}
 
   {tab === "foglio" && (
     <FoglioTab
