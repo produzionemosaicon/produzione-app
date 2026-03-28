@@ -223,12 +223,7 @@ const [addPosition, setAddPosition] = useState("");
     };
   }, []);
 
-  useEffect(() => {
-    return onValue(ref(db, "stations"), (snap) => {
-      if (snap.exists()) setStations(snap.val());
-    });
-  }, []);
-
+ 
   useEffect(() => {
     return onValue(
       ref(db, "reports"),
