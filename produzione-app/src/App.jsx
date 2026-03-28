@@ -1355,6 +1355,13 @@ function AnalisiTab({
 function PrintDoc({ date, stations, getV, getN }) {
   const COL = "500px repeat(4, 1fr)";
 
+  const mosaiconTargets = {
+    "10:00": 75,
+    "12:00": 150,
+    "15:00": 225,
+    "17:00": 300,
+  };
+
   const getHighlightStationId = (brand) => {
     if (brand === "MOSAICON") return "m32";
     if (brand === "EMOS") return "e18";
@@ -1462,10 +1469,16 @@ function PrintDoc({ date, stations, getV, getN }) {
 
                     {TIMES.map((t) => {
                       const v = getV(brand, st.id, t);
+                      const isMosaiconTotalRow = brand === "MOSAICON" && st.id === "m_t";
+                      const displayValue =
+                        isMosaiconTotalRow && v
+                          ? `${v}/${mosaiconTargets[t]}`
+                          : (v || "—");
+
                       return (
                         <div key={t} style={{ borderLeft: `1px solid ${BRD}`, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px 8px", background: isHighlight ? `${bc(brand)}10` : "transparent", minHeight: 108 }}>
-                          <div style={{ fontFamily: MONO, fontSize: isHighlight ? 58 : 52, fontWeight: 900, lineHeight: 1, color: v ? bc(brand) : "#C7D3E0", letterSpacing: "-0.03em" }}>
-                            {v || "—"}
+                          <div style={{ fontFamily: MONO, fontSize: isMosaiconTotalRow ? 40 : (isHighlight ? 58 : 52), fontWeight: 900, lineHeight: 1, color: v ? bc(brand) : "#C7D3E0", letterSpacing: "-0.03em" }}>
+                            {displayValue}
                           </div>
                         </div>
                       );
