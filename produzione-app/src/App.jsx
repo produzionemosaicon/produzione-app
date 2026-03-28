@@ -819,62 +819,64 @@ async function deleteReportDay(day) {
         </div>
       </div>
 
-      <div className="no-print" style={{ flex:1, overflowY:"auto" }}>
-        {tab === "home" && (
-          <HomeTab
-            date={date}
-            reports={reports}
-            stations={stations}
-            onGoFoglio={() => setTab("foglio")}
-          />
-        )}
+     <div className="no-print" style={{ flex:1, overflowY:"auto" }}>
+  {tab === "home" && (
+    <HomeTab
+      date={date}
+      reports={reports}
+      stations={stations}
+      onGoFoglio={() => setTab("foglio")}
+    />
+  )}
 
-        {tab === "foglio" && (
-          <FoglioTab
-            stations={stations}
-            getV={getV}
-            getN={getN}
-            openCell={openCell}
-            savedKeys={savedKeys}
-            onEditSt={(brand, st) => {
-              setStModal({ brand, st });
-              setStNewName(st.name);
-            }}
-           onAddSt={(brand, afterId) => {
-  setAddModal({ brand, afterId });
-  setAddName("");
-  setAddPosition(afterId || "");
-}}
+  {tab === "foglio" && (
+    <FoglioTab
+      stations={stations}
+      getV={getV}
+      getN={getN}
+      openCell={openCell}
+      savedKeys={savedKeys}
+      onEditSt={(brand, st) => {
+        setStModal({ brand, st });
+        setStNewName(st.name);
+      }}
+      onAddSt={(brand, afterId) => {
+        setAddModal({ brand, afterId });
+        setAddName("");
+        setAddPosition(afterId || "");
+      }}
+    />
+  )}
 
-      {tab === "storico" && (
-  <StoricoTab
-    reports={reports}
-    stations={stations}
-    onOpen={(d) => {
-      setDate(d);
-      setTab("foglio");
-    }}
-    onDelete={deleteReportDay}
-  />
-)}
+  {tab === "storico" && (
+    <StoricoTab
+      reports={reports}
+      stations={stations}
+      onOpen={(d) => {
+        setDate(d);
+        setTab("foglio");
+      }}
+      onDelete={deleteReportDay}
+    />
+  )}
 
-        {tab === "analisi" && (
-          <AnalisiTab
-            stations={stations}
-            anBrands={anBrands}
-            toggleBrand={toggleBrand}
-            anSids={anSids}
-            toggleStation={toggleStation}
-            anFrom={anFrom}
-            setAnFrom={setAnFrom}
-            anTo={anTo}
-            setAnTo={setAnTo}
-            anRes={anRes}
-            run={runAnalysis}
-            onShare={shareAnalysisPdf}
-          />
-        )}
-      </div>
+  {tab === "analisi" && (
+    <AnalisiTab
+      stations={stations}
+      anBrands={anBrands}
+      toggleBrand={toggleBrand}
+      anSids={anSids}
+      toggleStation={toggleStation}
+      anFrom={anFrom}
+      setAnFrom={setAnFrom}
+      anTo={anTo}
+      setAnTo={setAnTo}
+      anRes={anRes}
+      run={runAnalysis}
+      onShare={shareAnalysisPdf}
+    />
+  )}
+</div>
 
       <div id="print-doc" style={{ display:"none", padding:"30px", background:"#fff" }}>
         <PrintDoc date={date} stations={stations} getV={getV} getN={getN} />
