@@ -1194,25 +1194,88 @@ function StoricoTab({ reports, stations, onOpen, onDelete }) {
         const dt = new Date(d + "T12:00:00");
 
         return (
-          <button key={d} onClick={() => onOpen(d)} style={{ display:"flex", alignItems:"center", gap:14, padding:"13px 16px", background: idx%2===0 ? S0 : S1, border:"none", borderBottom:`1px solid ${BRD}`, width:"100%", cursor:"pointer", textAlign:"left", fontFamily:FONT }}>
+          <div
+            key={d}
+            style={{
+              display:"flex",
+              alignItems:"center",
+              gap:14,
+              padding:"13px 16px",
+              background: idx%2===0 ? S0 : S1,
+              borderBottom:`1px solid ${BRD}`,
+              width:"100%",
+              textAlign:"left",
+              fontFamily:FONT
+            }}
+          >
             <div style={{ flexShrink:0, textAlign:"center", width:36 }}>
-              <div style={{ fontFamily:MONO, fontSize:22, fontWeight:800, color:M, lineHeight:1 }}>{String(dt.getDate()).padStart(2,"0")}</div>
+              <div style={{ fontFamily:MONO, fontSize:22, fontWeight:800, color:M, lineHeight:1 }}>
+                {String(dt.getDate()).padStart(2,"0")}
+              </div>
               <div style={{ fontSize:8, fontWeight:700, color:T3, letterSpacing:"0.06em", textTransform:"uppercase" }}>
                 {dt.toLocaleDateString("it-IT",{month:"short"})}
               </div>
             </div>
+
             <div style={{ flex:1, minWidth:0 }}>
               <div style={{ fontSize:12, fontWeight:700, color:TXT, textTransform:"capitalize" }}>
                 {dt.toLocaleDateString("it-IT",{weekday:"long"})} {fmtD(d)}
               </div>
               <div style={{ display:"flex", gap:5, marginTop:5, flexWrap:"wrap" }}>
-                {mPack !== null && <span style={{ fontFamily:MONO, fontSize:8, fontWeight:700, background:ML, color:M, padding:"2px 7px", borderRadius:4 }}>MOA PACK {mPack}</span>}
-                {ePack !== null && <span style={{ fontFamily:MONO, fontSize:8, fontWeight:700, background:EL, color:E, padding:"2px 7px", borderRadius:4 }}>EMS PACK {ePack}</span>}
-                {notesN > 0 && <span style={{ fontSize:8, fontWeight:700, background:ACL, color:ACC, padding:"2px 7px", borderRadius:4 }}>{notesN} nota{notesN>1?"e":""}</span>}
+                {mPack !== null && (
+                  <span style={{ fontFamily:MONO, fontSize:8, fontWeight:700, background:ML, color:M, padding:"2px 7px", borderRadius:4 }}>
+                    MOA PACK {mPack}
+                  </span>
+                )}
+                {ePack !== null && (
+                  <span style={{ fontFamily:MONO, fontSize:8, fontWeight:700, background:EL, color:E, padding:"2px 7px", borderRadius:4 }}>
+                    EMS PACK {ePack}
+                  </span>
+                )}
+                {notesN > 0 && (
+                  <span style={{ fontSize:8, fontWeight:700, background:ACL, color:ACC, padding:"2px 7px", borderRadius:4 }}>
+                    {notesN} nota{notesN>1?"e":""}
+                  </span>
+                )}
               </div>
             </div>
-            <span style={{ fontSize:20, color:BRD2, flexShrink:0 }}>›</span>
-          </button>
+
+            <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
+              <button
+                onClick={() => onOpen(d)}
+                style={{
+                  background: BG,
+                  border: `1px solid ${BRD}`,
+                  borderRadius: 8,
+                  padding: "7px 10px",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: TXT,
+                  cursor: "pointer",
+                  fontFamily: FONT,
+                }}
+              >
+                Apri
+              </button>
+
+              <button
+                onClick={() => onDelete(d)}
+                style={{
+                  background: "#FEE2E2",
+                  border: "1px solid #FCA5A5",
+                  borderRadius: 8,
+                  padding: "7px 10px",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: RED,
+                  cursor: "pointer",
+                  fontFamily: FONT,
+                }}
+              >
+                Elimina
+              </button>
+            </div>
+          </div>
         );
       })}
       <div style={{ height:24 }} />
