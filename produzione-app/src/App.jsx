@@ -297,7 +297,20 @@ export default function App() {
     setCellNote(reports[date]?.[brand]?.[sid]?.[timeKey(t)]?.note ?? "");
     setCellModal({ brand, sid, t, name });
   }
+async function deleteReportDay(day) {
+  const ok = window.confirm(
+    `Vuoi eliminare definitivamente il report del giorno ${fmtD(day)}?\n\nQuesta azione rimuoverà i dati dallo storico e dalle analisi.`
+  );
 
+  if (!ok) return;
+
+  try {
+    await remove(ref(db, `reports/${day}`));
+  } catch (e) {
+    console.error(e);
+    alert("Errore durante l'eliminazione del report.");
+  }
+}
   async function renameStation(brand, sid, name) {
     await saveStations({
       ...stations,
