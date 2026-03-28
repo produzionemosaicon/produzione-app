@@ -1031,7 +1031,9 @@ async function deleteReportDay(day) {
     </Btn>
   </Modal>
 )}
-
+    </div>
+  );
+}
 /* ═══ HOME TAB ═══ */
 function HomeTab({ date, reports, stations, onGoFoglio }) {
   const getPacking17 = (rDay, brand) => {
