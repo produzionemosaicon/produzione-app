@@ -1998,6 +1998,349 @@ function PrintDoc({ date, stations, getV, getN }) {
     </div>
   );
 }
+function PrintAnalysisDoc({ anRes }) {
+  return (
+    <div style={{ fontFamily: FONT, background: "#EAF0F8", padding: 30 }}>
+      <div
+        data-print-row="true"
+        style={{
+          background: "linear-gradient(135deg,#0A3D9C 0%,#1A5CFF 58%,#00A0D6 100%)",
+          borderRadius: 22,
+          padding: "22px 26px",
+          marginBottom: 18,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          boxShadow: "0 10px 24px rgba(26,92,255,0.18)",
+        }}
+      >
+        <div>
+          <div
+            style={{
+              fontSize: 10,
+              color: "rgba(255,255,255,0.72)",
+              letterSpacing: "0.18em",
+              textTransform: "uppercase",
+              marginBottom: 4,
+              fontWeight: 700,
+            }}
+          >
+            Report Analisi
+          </div>
+          <div
+            style={{
+              fontSize: 30,
+              fontWeight: 900,
+              color: "#fff",
+              lineHeight: 1,
+              letterSpacing: "0.04em",
+            }}
+          >
+            {anRes.brands.join(" + ")}
+          </div>
+          <div
+            style={{
+              fontSize: 13,
+              color: "rgba(255,255,255,0.86)",
+              marginTop: 6,
+              fontWeight: 500,
+            }}
+          >
+            Periodo {fmtD(anRes.from)} → {fmtD(anRes.to)}
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: "rgba(255,255,255,0.14)",
+            color: "#fff",
+            padding: "14px 18px",
+            borderRadius: 14,
+            border: "1px solid rgba(255,255,255,0.20)",
+            textAlign: "right",
+            minWidth: 170,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 10,
+              textTransform: "uppercase",
+              letterSpacing: "0.14em",
+              color: "rgba(255,255,255,0.66)",
+              fontWeight: 700,
+              marginBottom: 4,
+            }}
+          >
+            Giorni
+          </div>
+          <div
+            style={{
+              fontFamily: MONO,
+              fontSize: 30,
+              fontWeight: 900,
+              lineHeight: 1,
+              letterSpacing: "-0.02em",
+            }}
+          >
+            {anRes.days}
+          </div>
+        </div>
+      </div>
+
+      <div
+        data-print-row="true"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr 1fr 1fr",
+          gap: 12,
+          marginBottom: 18,
+        }}
+      >
+        {[
+          { label: "Totale periodo", value: anRes.total, color: M },
+          { label: "Media giornaliera", value: anRes.avg, color: M },
+          { label: "Giorno migliore", value: anRes.max, color: GRN },
+          { label: "Giorno peggiore", value: anRes.min, color: RED },
+        ].map((item) => (
+          <div
+            key={item.label}
+            style={{
+              background: "#fff",
+              border: `1px solid ${BRD}`,
+              borderRadius: 16,
+              padding: "16px 18px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: T3,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                marginBottom: 8,
+              }}
+            >
+              {item.label}
+            </div>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 28,
+                fontWeight: 900,
+                color: item.color,
+                lineHeight: 1,
+              }}
+            >
+              {item.value}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div
+        data-print-row="true"
+        style={{
+          background: "#fff",
+          border: `1px solid ${BRD}`,
+          borderRadius: 18,
+          padding: "18px 20px",
+          marginBottom: 18,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: T2,
+            marginBottom: 12,
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+          }}
+        >
+          Totale per brand
+        </div>
+
+        {anRes.byBrandTotals.map((b, i) => (
+          <div
+            key={b.brand}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: i === 0 ? "0 0 10px" : "10px 0 0",
+              borderTop: i === 0 ? "none" : `1px solid ${BRD}`,
+            }}
+          >
+            <div style={{ fontSize: 18, fontWeight: 800, color: bc(b.brand) }}>
+              {b.brand}
+            </div>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 24,
+                fontWeight: 900,
+                color: bc(b.brand),
+              }}
+            >
+              {b.total}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div
+        data-print-row="true"
+        style={{
+          background: "#fff",
+          border: `1px solid ${BRD}`,
+          borderRadius: 18,
+          padding: "18px 20px",
+          marginBottom: 18,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: T2,
+            marginBottom: 12,
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+          }}
+        >
+          Stazioni analizzate
+        </div>
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {anRes.selectedStations.map((s) => (
+            <span
+              key={s.key}
+              style={{
+                fontSize: 11,
+                fontWeight: 800,
+                color: bc(s.brand),
+                background: bl(s.brand),
+                padding: "5px 9px",
+                borderRadius: 999,
+              }}
+            >
+              {s.brand} · {s.name}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div
+        data-print-row="true"
+        style={{
+          background: "#fff",
+          border: `1px solid ${BRD}`,
+          borderRadius: 18,
+          overflow: "hidden",
+          marginBottom: 18,
+        }}
+      >
+        <div
+          style={{
+            padding: "12px 16px",
+            borderBottom: `1px solid ${BRD}`,
+            fontSize: 11,
+            fontWeight: 700,
+            color: T2,
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+          }}
+        >
+          Totale per stazione
+        </div>
+
+        {anRes.stationSeries.map((serie, i) => (
+          <div
+            key={serie.key}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "12px 16px",
+              background: i % 2 === 0 ? "#fff" : "#F8FBFF",
+              borderBottom: `1px solid ${BRD}`,
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: TXT }}>
+                {serie.name}
+              </div>
+              <div style={{ fontSize: 10, color: T3 }}>{serie.brand}</div>
+            </div>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 22,
+                fontWeight: 900,
+                color: bc(serie.brand),
+              }}
+            >
+              {serie.total}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div
+        data-print-row="true"
+        style={{
+          background: "#fff",
+          border: `1px solid ${BRD}`,
+          borderRadius: 18,
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            padding: "12px 16px",
+            borderBottom: `1px solid ${BRD}`,
+            fontSize: 11,
+            fontWeight: 700,
+            color: T2,
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+          }}
+        >
+          Dettaglio giornaliero aggregato
+        </div>
+
+        {[...anRes.totalPts].reverse().map((pt, i) => (
+          <div
+            key={pt.date}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "12px 16px",
+              background: i % 2 === 0 ? "#fff" : "#F8FBFF",
+              borderBottom: `1px solid ${BRD}`,
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 700, color: TXT }}>
+              {pt.label}
+            </div>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 20,
+                fontWeight: 900,
+                color: M,
+              }}
+            >
+              {pt.value}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 function Modal({ children, onClose }) {
   return (
     <div
