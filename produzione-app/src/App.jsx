@@ -890,8 +890,8 @@ async function moveStation(brand, sid, dir) {
         <PrintDoc date={date} stations={stations} getV={getV} getN={getN} />
       </div>
 
-     <div id="analysis-print-doc" style={{ display:"none", padding:"30px", background:"#fff" }}>
-  {anRes && !anRes.empty ? <div /> : null}
+    <div id="analysis-print-doc" style={{ display:"none", padding:"30px", background:"#fff" }}>
+  {anRes && !anRes.empty ? <PrintAnalysisDoc anRes={anRes} /> : null}
 </div>
 
       <div className="no-print" style={{ background:S0, borderTop:`1px solid ${BRD}`, display:"flex", flexShrink:0, boxShadow:"0 -2px 12px rgba(13,27,42,0.07)" }}>
