@@ -661,7 +661,7 @@ async function moveStation(brand, sid, dir) {
       "analysis-print-doc",
       `analisi_${anFrom}_${anTo}.pdf`,
       `Report analisi ${fmtD(anFrom)} - ${fmtD(anTo)}`,
-      1480
+      520
     );
   }
 
