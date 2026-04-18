@@ -1999,200 +1999,149 @@ function PrintDoc({ date, stations, getV, getN }) {
   );
 }
 function PrintAnalysisDoc({ anRes }) {
-  const trend = anRes.trend ?? 0;
-  const isUp = trend >= 0;
-
   return (
-    <div style={{ fontFamily: FONT, background: "#EAF0F8", padding: 20, width: "100%" }}>
+    <div style={{ fontFamily: FONT, background: "#EAF0F8", padding: 16, width: "100%" }}>
 
       {/* HEADER */}
       <div
         data-print-row="true"
         style={{
           background: "linear-gradient(135deg,#0A3D9C 0%,#1A5CFF 58%,#00A0D6 100%)",
-          borderRadius: 20,
-          padding: "28px 24px",
-          marginBottom: 16,
-          boxShadow: "0 8px 24px rgba(26,92,255,0.22)",
+          borderRadius: 18,
+          padding: "20px 22px",
+          marginBottom: 12,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
-          <div style={{ width: 60, height: 60, borderRadius: 16, background: "rgba(255,255,255,0.16)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+          <div style={{ width: 52, height: 52, borderRadius: 14, background: "rgba(255,255,255,0.16)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, flexShrink: 0 }}>
             📊
           </div>
           <div>
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", letterSpacing: "0.14em", textTransform: "uppercase", fontWeight: 700, marginBottom: 4 }}>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.65)", letterSpacing: "0.14em", textTransform: "uppercase", fontWeight: 700, marginBottom: 3 }}>
               Report Analisi Produzione
             </div>
-            <div style={{ fontSize: 32, fontWeight: 900, color: "#fff", lineHeight: 1, letterSpacing: "0.04em" }}>
+            <div style={{ fontSize: 26, fontWeight: 900, color: "#fff", lineHeight: 1 }}>
               {anRes.brands.join(" + ")}
             </div>
           </div>
         </div>
-
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-          <div style={{ background: "rgba(255,255,255,0.14)", padding: "10px 16px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.20)" }}>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.60)", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700, marginBottom: 2 }}>Periodo</div>
-            <div style={{ fontFamily: MONO, fontSize: 18, fontWeight: 900, color: "#fff" }}>
-              {fmtD(anRes.from)} → {fmtD(anRes.to)}
-            </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <div style={{ flex: 1, background: "rgba(255,255,255,0.14)", padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.20)" }}>
+            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.60)", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700, marginBottom: 2 }}>Periodo</div>
+            <div style={{ fontFamily: MONO, fontSize: 15, fontWeight: 900, color: "#fff" }}>{fmtD(anRes.from)} → {fmtD(anRes.to)}</div>
           </div>
-          <div style={{ background: "rgba(255,255,255,0.14)", padding: "10px 16px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.20)", textAlign: "center" }}>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.60)", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700, marginBottom: 2 }}>Giorni</div>
-            <div style={{ fontFamily: MONO, fontSize: 28, fontWeight: 900, color: "#fff", lineHeight: 1 }}>{anRes.days}</div>
-          </div>
-          <div style={{
-            background: isUp ? "rgba(0,184,122,0.25)" : "rgba(229,62,62,0.25)",
-            color: isUp ? "#86EFAC" : "#FCA5A5",
-            padding: "10px 16px",
-            borderRadius: 12,
-            fontSize: 18,
-            fontWeight: 800,
-            fontFamily: MONO,
-            border: `1px solid ${isUp ? "rgba(134,239,172,0.3)" : "rgba(252,165,165,0.3)"}`,
-          }}>
-            {isUp ? "▲" : "▼"} {Math.abs(trend)}% trend
+          <div style={{ background: "rgba(255,255,255,0.14)", padding: "8px 18px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.20)", textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.60)", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700, marginBottom: 2 }}>Giorni</div>
+            <div style={{ fontFamily: MONO, fontSize: 22, fontWeight: 900, color: "#fff", lineHeight: 1 }}>{anRes.days}</div>
           </div>
         </div>
       </div>
 
-      {/* KPI — 2 colonne */}
+      {/* KPI 2x2 */}
       <div
         data-print-row="true"
-        style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}
+        style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}
       >
         {[
-          { label: "Totale periodo",    value: anRes.total, color: M,        bg: `rgba(26,92,255,0.08)`,   border: `rgba(26,92,255,0.20)`,   icon: "📦", sub: `${anRes.days} giorni` },
-          { label: "Media giornaliera", value: anRes.avg,   color: "#0099CC", bg: `rgba(0,153,204,0.08)`,  border: `rgba(0,153,204,0.20)`,   icon: "📈", sub: "paia / giorno" },
-          { label: "Giorno migliore",   value: anRes.max,   color: GRN,      bg: `rgba(0,184,122,0.08)`,   border: `rgba(0,184,122,0.20)`,   icon: "🏆", sub: `▲ ${fmtD(anRes.maxDay?.date)}` },
-          { label: "Giorno peggiore",   value: anRes.min,   color: RED,      bg: `rgba(229,62,62,0.08)`,   border: `rgba(229,62,62,0.20)`,   icon: "⚠️", sub: `▼ ${fmtD(anRes.minDay?.date)}` },
+          { label: "Totale periodo",    value: anRes.total, color: M,         bg: "rgba(26,92,255,0.08)",  border: "rgba(26,92,255,0.20)",  icon: "📦", sub: `${anRes.days} giorni` },
+          { label: "Media giornaliera", value: anRes.avg,   color: "#0099CC", bg: "rgba(0,153,204,0.08)", border: "rgba(0,153,204,0.20)", icon: "📈", sub: "paia / giorno" },
+          { label: "Giorno migliore",   value: anRes.max,   color: GRN,       bg: "rgba(0,184,122,0.08)", border: "rgba(0,184,122,0.20)", icon: "🏆", sub: `▲ ${fmtD(anRes.maxDay?.date)}` },
+          { label: "Giorno peggiore",   value: anRes.min,   color: RED,       bg: "rgba(229,62,62,0.08)", border: "rgba(229,62,62,0.20)", icon: "⚠️", sub: `▼ ${fmtD(anRes.minDay?.date)}` },
         ].map((item) => (
           <div
             key={item.label}
             style={{
               background: item.bg,
               border: `2px solid ${item.border}`,
-              borderRadius: 18,
-              padding: "20px 16px 16px",
+              borderRadius: 14,
+              padding: "14px 14px 12px",
               position: "relative",
               overflow: "hidden",
             }}
           >
-            <div style={{ fontSize: 26, marginBottom: 10 }}>{item.icon}</div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: T2, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 6 }}>
+            <div style={{ fontSize: 20, marginBottom: 6 }}>{item.icon}</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: T2, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}>
               {item.label}
             </div>
-            <div style={{ fontFamily: MONO, fontSize: 38, fontWeight: 900, color: item.color, lineHeight: 1, marginBottom: 6 }}>
+            <div style={{ fontFamily: MONO, fontSize: 30, fontWeight: 900, color: item.color, lineHeight: 1, marginBottom: 4 }}>
               {item.value}
             </div>
-            <div style={{ fontSize: 12, color: T2, fontWeight: 600 }}>{item.sub}</div>
-            <div style={{ position: "absolute", top: -12, right: -12, width: 70, height: 70, borderRadius: "50%", background: item.border }} />
+            <div style={{ fontSize: 11, color: T2, fontWeight: 600 }}>{item.sub}</div>
+            <div style={{ position: "absolute", top: -10, right: -10, width: 55, height: 55, borderRadius: "50%", background: item.border }} />
           </div>
         ))}
       </div>
 
-      {/* BRAND — colonna singola */}
-      <div data-print-row="true" style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
+      {/* BRAND */}
+      <div data-print-row="true" style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
         {anRes.byBrandTotals.map((b) => (
           <div
             key={b.brand}
             style={{
               background: "#fff",
-              border: `2px solid ${bc(b.brand)}30`,
-              borderLeft: `8px solid ${bc(b.brand)}`,
-              borderRadius: "0 16px 16px 0",
-              padding: "20px 22px",
+              border: `1.5px solid ${bc(b.brand)}30`,
+              borderLeft: `7px solid ${bc(b.brand)}`,
+              borderRadius: "0 14px 14px 0",
+              padding: "14px 18px",
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
             }}
           >
             <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: T3, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 6 }}>
-                Totale periodo
-              </div>
-              <div style={{ fontSize: 26, fontWeight: 900, color: bc(b.brand), letterSpacing: "0.06em" }}>
-                {b.brand}
-              </div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: T3, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 4 }}>Totale periodo</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: bc(b.brand) }}>{b.brand}</div>
             </div>
             <div style={{ textAlign: "right" }}>
-              <div style={{ fontFamily: MONO, fontSize: 48, fontWeight: 900, color: bc(b.brand), lineHeight: 1 }}>
-                {b.total}
-              </div>
-              <div style={{ fontSize: 13, color: T2, marginTop: 4 }}>
-                ~{(b.total / anRes.days).toFixed(1)} / giorno
-              </div>
+              <div style={{ fontFamily: MONO, fontSize: 40, fontWeight: 900, color: bc(b.brand), lineHeight: 1 }}>{b.total}</div>
+              <div style={{ fontSize: 12, color: T2, marginTop: 3 }}>~{(b.total / anRes.days).toFixed(1)} / giorno</div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* STAZIONI */}
+      {/* STAZIONI + TOTALI in un unico blocco compatto */}
       <div
         data-print-row="true"
-        style={{ background: "#fff", border: `1px solid ${BRD}`, borderRadius: 18, padding: "20px 22px", marginBottom: 16 }}
+        style={{ background: "#fff", border: `1px solid ${BRD}`, borderRadius: 16, overflow: "hidden", marginBottom: 12 }}
       >
-        <div style={{ fontSize: 12, fontWeight: 700, color: T2, marginBottom: 14, textTransform: "uppercase", letterSpacing: "0.10em", display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ display: "inline-block", width: 5, height: 18, background: M, borderRadius: 2 }} />
-          Stazioni analizzate
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-          {anRes.selectedStations.map((s) => (
-            <span key={s.key} style={{ fontSize: 14, fontWeight: 800, color: bc(s.brand), background: bl(s.brand), padding: "8px 16px", borderRadius: 999, border: `1px solid ${bc(s.brand)}30` }}>
-              {s.brand} · {s.name}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* TOTALE PER STAZIONE */}
-      <div
-        data-print-row="true"
-        style={{ background: "#fff", border: `1px solid ${BRD}`, borderRadius: 18, overflow: "hidden", marginBottom: 16 }}
-      >
-        <div style={{ padding: "16px 22px", borderBottom: `1px solid ${BRD}`, display: "flex", alignItems: "center", gap: 8, background: "linear-gradient(90deg,#F0F4FF,#fff)" }}>
-          <span style={{ display: "inline-block", width: 5, height: 18, background: M, borderRadius: 2 }} />
-          <span style={{ fontSize: 12, fontWeight: 700, color: T2, textTransform: "uppercase", letterSpacing: "0.10em" }}>
-            Totale per stazione
-          </span>
+        <div style={{ padding: "12px 18px", borderBottom: `1px solid ${BRD}`, display: "flex", alignItems: "center", gap: 8, background: "linear-gradient(90deg,#F0F4FF,#fff)" }}>
+          <span style={{ display: "inline-block", width: 4, height: 16, background: M, borderRadius: 2 }} />
+          <span style={{ fontSize: 11, fontWeight: 700, color: T2, textTransform: "uppercase", letterSpacing: "0.10em" }}>Totale per stazione</span>
         </div>
         {anRes.stationSeries.map((serie, i) => {
           const pct = anRes.total > 0 ? (serie.total / anRes.total) * 100 : 0;
           return (
             <div
               key={serie.key}
-              style={{ padding: "18px 22px", background: i % 2 === 0 ? "#fff" : "#F8FBFF", borderBottom: `1px solid ${BRD}` }}
+              style={{ padding: "14px 18px", background: i % 2 === 0 ? "#fff" : "#F8FBFF", borderBottom: `1px solid ${BRD}` }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: TXT }}>{serie.name}</div>
-                  <div style={{ fontSize: 12, color: T3, marginTop: 2 }}>{serie.brand}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: TXT }}>{serie.name}</div>
+                  <div style={{ fontSize: 11, color: T3 }}>{serie.brand}</div>
                 </div>
-                <div style={{ fontFamily: MONO, fontSize: 32, fontWeight: 900, color: bc(serie.brand) }}>
-                  {serie.total}
-                </div>
+                <div style={{ fontFamily: MONO, fontSize: 28, fontWeight: 900, color: bc(serie.brand) }}>{serie.total}</div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ flex: 1, height: 10, background: BRD, borderRadius: 5, overflow: "hidden" }}>
-                  <div style={{ width: `${pct}%`, height: "100%", background: `linear-gradient(90deg, ${bc(serie.brand)}, ${bc(serie.brand)}99)`, borderRadius: 5 }} />
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ flex: 1, height: 8, background: BRD, borderRadius: 4, overflow: "hidden" }}>
+                  <div style={{ width: `${pct}%`, height: "100%", background: `linear-gradient(90deg,${bc(serie.brand)},${bc(serie.brand)}99)`, borderRadius: 4 }} />
                 </div>
-                <span style={{ fontSize: 13, color: T3, fontFamily: MONO, fontWeight: 700, width: 42, textAlign: "right" }}>{pct.toFixed(1)}%</span>
+                <span style={{ fontSize: 11, color: T3, fontFamily: MONO, fontWeight: 700, width: 40, textAlign: "right" }}>{pct.toFixed(1)}%</span>
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* DETTAGLIO GIORNALIERO */}
+      {/* DETTAGLIO GIORNALIERO compatto */}
       <div
         data-print-row="true"
-        style={{ background: "#fff", border: `1px solid ${BRD}`, borderRadius: 18, overflow: "hidden" }}
+        style={{ background: "#fff", border: `1px solid ${BRD}`, borderRadius: 16, overflow: "hidden" }}
       >
-        <div style={{ padding: "16px 22px", borderBottom: `1px solid ${BRD}`, display: "flex", alignItems: "center", gap: 8, background: "linear-gradient(90deg,#F0F4FF,#fff)" }}>
-          <span style={{ display: "inline-block", width: 5, height: 18, background: M, borderRadius: 2 }} />
-          <span style={{ fontSize: 12, fontWeight: 700, color: T2, textTransform: "uppercase", letterSpacing: "0.10em" }}>
-            Dettaglio giornaliero
-          </span>
+        <div style={{ padding: "12px 18px", borderBottom: `1px solid ${BRD}`, display: "flex", alignItems: "center", gap: 8, background: "linear-gradient(90deg,#F0F4FF,#fff)" }}>
+          <span style={{ display: "inline-block", width: 4, height: 16, background: M, borderRadius: 2 }} />
+          <span style={{ fontSize: 11, fontWeight: 700, color: T2, textTransform: "uppercase", letterSpacing: "0.10em" }}>Dettaglio giornaliero</span>
         </div>
 
         {[...anRes.totalPts].reverse().map((pt, i) => {
@@ -2201,47 +2150,42 @@ function PrintAnalysisDoc({ anRes }) {
           return (
             <div
               key={pt.date}
-              style={{ padding: "16px 22px", background: i % 2 === 0 ? "#fff" : "#F8FBFF", borderBottom: `1px solid ${BRD}` }}
+              style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 18px", background: i % 2 === 0 ? "#fff" : "#F8FBFF", borderBottom: `1px solid ${BRD}` }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: TXT }}>{pt.label}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ fontFamily: MONO, fontSize: 28, fontWeight: 900, color: M }}>{pt.value}</div>
-                  <div style={{
-                    fontSize: 12, fontWeight: 800, padding: "4px 8px", borderRadius: 8,
-                    background: isAboveAvg ? "#DCFCE7" : "#FEE2E2",
-                    color: isAboveAvg ? GRN : RED,
-                  }}>
-                    {isAboveAvg ? "▲" : "▼"}
-                  </div>
-                </div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: TXT, width: 80, flexShrink: 0 }}>{pt.label}</div>
+              <div style={{ flex: 1, height: 8, background: BRD, borderRadius: 4, overflow: "hidden" }}>
+                <div style={{ width: `${barPct}%`, height: "100%", background: `linear-gradient(90deg,${M},#0099CC)`, borderRadius: 4 }} />
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ flex: 1, height: 10, background: BRD, borderRadius: 5, overflow: "hidden" }}>
-                  <div style={{ width: `${barPct}%`, height: "100%", background: `linear-gradient(90deg, ${M}, #0099CC)`, borderRadius: 5 }} />
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                <div style={{ fontFamily: MONO, fontSize: 18, fontWeight: 900, color: M }}>{pt.value}</div>
+                <div style={{
+                  fontSize: 10, fontWeight: 800, padding: "3px 6px", borderRadius: 6,
+                  background: isAboveAvg ? "#DCFCE7" : "#FEE2E2",
+                  color: isAboveAvg ? GRN : RED,
+                }}>
+                  {isAboveAvg ? "▲" : "▼"}
                 </div>
-                <span style={{ fontSize: 12, color: T3, fontFamily: MONO, fontWeight: 700, width: 42, textAlign: "right" }}>{barPct.toFixed(0)}%</span>
               </div>
             </div>
           );
         })}
 
         {/* footer media */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 22px", background: "#EEF4FF", borderTop: `2px solid ${M}30` }}>
-          <div style={{ fontSize: 16, fontWeight: 800, color: M }}>Media periodo</div>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-            <div style={{ fontFamily: MONO, fontSize: 32, fontWeight: 900, color: M }}>{anRes.avg}</div>
-            <div style={{ fontSize: 13, color: T2 }}>paia / giorno</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", background: "#EEF4FF", borderTop: `2px solid ${M}30` }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: M }}>Media periodo</div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+            <div style={{ fontFamily: MONO, fontSize: 26, fontWeight: 900, color: M }}>{anRes.avg}</div>
+            <div style={{ fontSize: 12, color: T2 }}>paia / giorno</div>
           </div>
         </div>
       </div>
 
       {/* FOOTER */}
-      <div data-print-row="true" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 4px 0", flexWrap: "wrap", gap: 8 }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: T2, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+      <div data-print-row="true" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 4px 0", flexWrap: "wrap", gap: 6 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: T2, letterSpacing: "0.06em", textTransform: "uppercase" }}>
           Ricevere Qualità · Fare Qualità · Consegnare Qualità
         </span>
-        <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, color: T2 }}>
+        <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: T2 }}>
           {fmtD(anRes.from)} → {fmtD(anRes.to)}
         </span>
       </div>
