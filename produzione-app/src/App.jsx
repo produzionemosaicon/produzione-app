@@ -188,6 +188,24 @@ export default function App() {
   const [anRes, setAnRes] = useState(null);
 
   const [goals, setGoals] = useState({});
+  const [tg, setTg] = useState({});
+
+  useEffect(() => {
+    return onValue(ref(db, "taglioGiunteria"), (snap) => {
+      setTg(snap.exists() ? snap.val() : {});
+    });
+  }, []);
+
+  const saveTg = useCallback(async (day, taglio, giunteria, note) => {
+    const num = (v) => (v === "" || isNaN(+v) || +v < 0 ? null : Math.round(+v));
+    await set(ref(db, `taglioGiunteria/${day}`), {
+      date: day,
+      taglio: num(taglio),
+      giunteria: num(giunteria),
+      note: (note || "").slice(0, 300),
+      ts: Date.now(),
+    });
+  }, []);
 
   useEffect(() => {
     return onValue(ref(db, "goals"), (snap) => {
@@ -695,6 +713,9 @@ export default function App() {
             anRes={anRes} run={runAnalysis} onShare={shareAnalysisPdf}
           />
         )}
+        {tab === "taglio" && (
+          <TaglioTab date={date} tg={tg} saveTg={saveTg} onOpen={(d) => setDate(d)} />
+        )}
         {tab === "setting" && (
           <SettingsTab stations={stations} goals={goals} saveGoal={saveGoal} />
         )}
@@ -714,6 +735,7 @@ export default function App() {
           { id:"foglio",  icon:"📋", label:"Foglio" },
           { id:"storico", icon:"📁", label:"Storico" },
           { id:"analisi", icon:"📊", label:"Analisi" },
+          { id:"taglio",  icon:"✂️", label:"Taglio" },
           { id:"setting", icon:"⚙️", label:"Setting" },
         ].map(({ id, icon, label }) => (
           <button
@@ -1363,6 +1385,99 @@ function PrintAnalysisDoc({ anRes }) {
 }
 
 /* ═══ MODAL ═══ */
+function TaglioTab({ date, tg, saveTg, onOpen }) {
+  const cur = tg[date] || {};
+  const [taglio, setTaglio] = useState("");
+  const [giunteria, setGiunteria] = useState("");
+  const [note, setNote] = useState("");
+  const [state, setState] = useState("idle");
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    setTaglio(cur.taglio ?? "");
+    setGiunteria(cur.giunteria ?? "");
+    setNote(cur.note ?? "");
+    setState("idle");
+  }, [date, cur.taglio, cur.giunteria, cur.note]);
+
+  const days = Object.keys(tg).sort().reverse().slice(0, 14);
+
+  const doSave = async () => {
+    setState("saving");
+    try {
+      await saveTg(date, taglio, giunteria, note);
+      setState("ok");
+    } catch (e) {
+      console.error(e);
+      setState("err");
+    }
+  };
+
+  const copyAll = async () => {
+    const rows = Object.keys(tg).sort().map((d) => ({ date: d, taglio: tg[d].taglio ?? null, giunteria: tg[d].giunteria ?? null, note: tg[d].note || "" }));
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(rows));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (e) {
+      alert("Copia non riuscita.");
+    }
+  };
+
+  const field = (label, value, setValue, color) => (
+    <div style={{ marginBottom:14 }}>
+      <div style={{ fontSize:10, fontWeight:700, color, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:6 }}>{label}</div>
+      <input
+        type="number" inputMode="numeric" value={value}
+        onChange={(e) => setValue(e.target.value)}
+        style={{ width:"100%", boxSizing:"border-box", background:S0, border:`2.5px solid ${color}`, borderRadius:14, padding:"14px 16px", fontFamily:MONO, fontSize:34, fontWeight:700, color, outline:"none" }}
+      />
+    </div>
+  );
+
+  return (
+    <div style={{ padding:16 }}>
+      <div style={{ fontSize:18, fontWeight:800, color:TXT }}>Taglio e giunteria</div>
+      <div style={{ fontSize:12, color:T2, marginBottom:16 }}>Paia del giorno {fmtD(date)}. Cambia la data in alto per correggere un altro giorno.</div>
+
+      {field("Taglio · paia del giorno", taglio, setTaglio, M)}
+      {field("Giunteria · paia del giorno", giunteria, setGiunteria, E)}
+
+      <div style={{ marginBottom:14 }}>
+        <div style={{ fontSize:10, fontWeight:700, color:T2, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:6 }}>Nota (facoltativa)</div>
+        <input
+          type="text" value={note} maxLength={300} onChange={(e) => setNote(e.target.value)}
+          placeholder="Es. fermo macchina, mancanza materiale"
+          style={{ width:"100%", boxSizing:"border-box", background:S0, border:`1.5px solid ${BRD2}`, borderRadius:12, padding:"12px 14px", fontFamily:FONT, fontSize:15, color:TXT, outline:"none" }}
+        />
+      </div>
+
+      <Btn color={ACC} onClick={doSave} style={{ width:"100%", padding:"16px 0", fontSize:16 }}>
+        {state === "saving" ? "Salvataggio…" : "Salva giornata"}
+      </Btn>
+      {state === "ok" && <div style={{ marginTop:8, fontSize:13, fontWeight:700, color:GRN }}>Salvato.</div>}
+      {state === "err" && <div style={{ marginTop:8, fontSize:13, fontWeight:700, color:RED }}>Non salvato: riprova o avvisa Stefano.</div>}
+
+      <div style={{ marginTop:22, fontSize:10, fontWeight:700, color:T2, letterSpacing:"0.1em", textTransform:"uppercase" }}>Ultimi giorni (tocca per correggere)</div>
+      <div style={{ background:S0, border:`1px solid ${BRD}`, borderRadius:12, marginTop:8 }}>
+        {days.length === 0 && <div style={{ padding:14, fontSize:13, color:T3 }}>Nessun dato inserito.</div>}
+        {days.map((d, i) => (
+          <button key={d} onClick={() => onOpen(d)} style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center", minHeight:44, padding:"0 14px", background:"none", border:"none", borderTop: i ? `1px solid ${BRD}` : "none", cursor:"pointer", fontFamily:FONT, fontSize:14, color:TXT }}>
+            <span>{fmtD(d)}</span>
+            <span style={{ fontFamily:MONO, fontWeight:700 }}>
+              <span style={{ color:M }}>{tg[d].taglio ?? "–"}</span> · <span style={{ color:E }}>{tg[d].giunteria ?? "–"}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <button onClick={copyAll} style={{ marginTop:18, background:"none", border:`1px solid ${BRD2}`, borderRadius:10, padding:"10px 14px", fontFamily:FONT, fontSize:12, fontWeight:700, color:T2, cursor:"pointer" }}>
+        {copied ? "Copiato" : "Copia tutti i dati"}
+      </button>
+    </div>
+  );
+}
+
 function Modal({ children, onClose }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(13,27,42,0.5)", display: "flex", alignItems: "flex-end", zIndex: 9999 }} onClick={onClose}>
