@@ -187,6 +187,31 @@ export default function App() {
   const [anTo, setAnTo] = useState(() => todayStr());
   const [anRes, setAnRes] = useState(null);
 
+  const [goals, setGoals] = useState({});
+
+  useEffect(() => {
+    return onValue(ref(db, "goals"), (snap) => {
+      if (snap.exists()) setGoals(snap.val());
+      else setGoals({});
+    });
+  }, []);
+
+  const saveGoal = useCallback(async (brand, sid, value) => {
+    const key = `${brand}::${sid}`;
+    const newGoals = { ...goals };
+    if (value === "" || value === null || isNaN(+value) || +value <= 0) {
+      delete newGoals[key];
+    } else {
+      newGoals[key] = +value;
+    }
+    setGoals(newGoals);
+    try {
+      await set(ref(db, "goals"), newGoals);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [goals]);
+
   useEffect(() => {
     return onValue(ref(db, "stations"), async (snap) => {
       if (snap.exists()) {
@@ -670,10 +695,13 @@ export default function App() {
             anRes={anRes} run={runAnalysis} onShare={shareAnalysisPdf}
           />
         )}
+        {tab === "setting" && (
+          <SettingsTab stations={stations} goals={goals} saveGoal={saveGoal} />
+        )}
       </div>
 
       <div id="print-doc" style={{ display:"none", padding:"30px", background:"#fff" }}>
-        <PrintDoc date={date} stations={stations} getV={getV} getN={getN} />
+        <PrintDoc date={date} stations={stations} getV={getV} getN={getN} goals={goals} />
       </div>
 
       <div id="analysis-print-doc" style={{ display:"none", padding:"30px", background:"#EAF0F8" }}>
@@ -686,6 +714,7 @@ export default function App() {
           { id:"foglio",  icon:"📋", label:"Foglio" },
           { id:"storico", icon:"📁", label:"Storico" },
           { id:"analisi", icon:"📊", label:"Analisi" },
+          { id:"setting", icon:"⚙️", label:"Setting" },
         ].map(({ id, icon, label }) => (
           <button
             key={id}
@@ -1130,7 +1159,7 @@ function AnalisiTab({ stations, anBrands, toggleBrand, anSids, toggleStation, an
 }
 
 /* ═══ PRINT DOC PRODUZIONE ═══ */
-function PrintDoc({ date, stations, getV, getN }) {
+function PrintDoc({ date, stations, getV, getN, goals = {} }) {
   const COL = "340px repeat(4, 1fr)";
   const mosaiconTargets = { "10:00": 75, "12:00": 150, "15:00": 225, "17:00": 300 };
   const getHighlightStationId = (brand) => {
@@ -1183,11 +1212,20 @@ function PrintDoc({ date, stations, getV, getN }) {
                     const v = getV(brand, st.id, t);
                     const note = getN(brand, st.id, t);
                     const isMosaiconTotalRow = brand === "MOSAICON" && st.id === "m_t";
-                    const displayValue = isMosaiconTotalRow && v ? `${v}/${mosaiconTargets[t]}` : v || "—";
+                    const stGoal = goals[`${brand}::${st.id}`];
+                    const goalDenominators = stGoal ? {
+                      "10:00": Math.round(stGoal * 0.25),
+                      "12:00": Math.round(stGoal * 0.50),
+                      "15:00": Math.round(stGoal * 0.75),
+                      "17:00": stGoal,
+                    } : null;
+                    const displayValue = isMosaiconTotalRow && v
+                      ? `${v}/${mosaiconTargets[t]}`
+                      : (goalDenominators && v ? `${v}/${goalDenominators[t]}` : v || "—");
                     return (
                       <div key={t} style={{ borderLeft: `1px solid ${BRD}`, display: "flex", alignItems: "center", justifyContent: "center", padding: "10px 6px", background: isHighlight ? `${bc(brand)}08` : "transparent", minHeight: 82 }}>
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: note ? 5 : 0, width: "100%", overflow: "hidden" }}>
-                          <div style={{ fontFamily: MONO, fontSize: isMosaiconTotalRow ? 26 : isHighlight ? 34 : 30, fontWeight: 900, lineHeight: 1, color: v ? bc(brand) : "#C7D3E0", letterSpacing: isMosaiconTotalRow ? "-0.04em" : "-0.02em", textAlign: "center", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{displayValue}</div>
+                          <div style={{ fontFamily: MONO, fontSize: (isMosaiconTotalRow || goalDenominators) ? 26 : isHighlight ? 34 : 30, fontWeight: 900, lineHeight: 1, color: v ? bc(brand) : "#C7D3E0", letterSpacing: isMosaiconTotalRow ? "-0.04em" : "-0.02em", textAlign: "center", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{displayValue}</div>
                           {note ? <div style={{ fontSize: 9, fontWeight: 800, color: ACC, background: ACL, border: "1px solid rgba(255,82,0,0.18)", borderRadius: 999, padding: "3px 6px", lineHeight: 1.05, maxWidth: "90%", textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{note}</div> : null}
                         </div>
                       </div>
@@ -1352,6 +1390,60 @@ function KpiSmall({ label, value, color, sub, arrow }) {
       <div style={{ fontSize:7.5, fontWeight:700, color:T3, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:5 }}>{label}</div>
       <div style={{ fontFamily:MONO, fontSize:26, fontWeight:700, color, lineHeight:1 }}>{value}</div>
       {sub && <div style={{ fontSize:10, color:T2, marginTop:5 }}>{arrow && <span style={{ marginRight:3 }}>{arrow}</span>}{sub}</div>}
+    </div>
+  );
+}
+
+/* ═══ SETTINGS TAB ═══ */
+function SettingsTab({ stations, goals, saveGoal }) {
+  const [localGoals, setLocalGoals] = useState({});
+
+  useEffect(() => {
+    setLocalGoals(goals);
+  }, [goals]);
+
+  return (
+    <div style={{ fontFamily: FONT, padding: "14px 14px", paddingBottom: 32 }}>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 18, fontWeight: 900, color: TXT, marginBottom: 4 }}>Obiettivi giornalieri</div>
+        <div style={{ fontSize: 12, color: T2 }}>Imposta il target di paia al giorno per ogni stazione. Apparirà nel PDF come x/obiettivo per ogni orario.</div>
+      </div>
+
+      {["MOSAICON", "EMOS"].map((brand) => (
+        <div key={brand} style={{ marginBottom: 20, background: S0, borderRadius: 16, border: `1px solid ${BRD}`, overflow: "hidden", boxShadow: "0 2px 10px rgba(13,27,42,0.05)" }}>
+          <div style={{ padding: "12px 16px", background: bl(brand), borderBottom: `2px solid ${bc(brand)}`, borderLeft: `5px solid ${bc(brand)}` }}>
+            <span style={{ fontSize: 14, fontWeight: 900, color: bc(brand), letterSpacing: "0.1em" }}>{brand}</span>
+          </div>
+          {(stations[brand] || []).filter(st => !st.isTotal).map((st, i) => {
+            const key = `${brand}::${st.id}`;
+            const val = localGoals[key] ?? "";
+            const goal = goals[key];
+            return (
+              <div key={st.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 16px", background: i % 2 === 0 ? S0 : S1, borderBottom: `1px solid ${BRD}` }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: TXT }}>{st.name}</div>
+                  {goal ? (
+                    <div style={{ fontSize: 10, color: T2, marginTop: 2 }}>
+                      10:00 /{Math.round(goal*0.25)} · 12:00 /{Math.round(goal*0.50)} · 15:00 /{Math.round(goal*0.75)} · 17:00 /{goal}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 10, color: T3, marginTop: 2 }}>Nessun obiettivo</div>
+                  )}
+                </div>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="—"
+                  value={val}
+                  onChange={(e) => setLocalGoals(prev => ({ ...prev, [key]: e.target.value }))}
+                  onBlur={(e) => saveGoal(brand, st.id, e.target.value)}
+                  style={{ width: 72, padding: "8px 10px", border: `2px solid ${goal ? bc(brand) : BRD}`, borderRadius: 10, fontFamily: MONO, fontSize: 16, fontWeight: 700, color: goal ? bc(brand) : TXT, textAlign: "center", outline: "none", background: goal ? `${bc(brand)}10` : BG }}
+                />
+              </div>
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 }
