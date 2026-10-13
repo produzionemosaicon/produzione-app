@@ -1211,17 +1211,18 @@ function PrintDoc({ date, stations, getV, getN, goals = {} }) {
                   {TIMES.map((t) => {
                     const v = getV(brand, st.id, t);
                     const note = getN(brand, st.id, t);
-                    const isMosaiconTotalRow = brand === "MOSAICON" && st.id === "m_t";
                     const stGoal = goals[`${brand}::${st.id}`];
-                    const goalDenominators = stGoal ? {
-                      "10:00": Math.round(stGoal * 0.25),
-                      "12:00": Math.round(stGoal * 0.50),
-                      "15:00": Math.round(stGoal * 0.75),
-                      "17:00": stGoal,
+                    const isMosaiconTotalRow = brand === "MOSAICON" && st.id === "m_t";
+                    const effectiveGoal = stGoal || (isMosaiconTotalRow ? mosaiconTargets["17:00"] : null);
+                    const goalDenominators = effectiveGoal ? {
+                      "10:00": stGoal ? Math.round(stGoal * 0.25) : mosaiconTargets["10:00"],
+                      "12:00": stGoal ? Math.round(stGoal * 0.50) : mosaiconTargets["12:00"],
+                      "15:00": stGoal ? Math.round(stGoal * 0.75) : mosaiconTargets["15:00"],
+                      "17:00": stGoal || mosaiconTargets["17:00"],
                     } : null;
-                    const displayValue = isMosaiconTotalRow && v
-                      ? `${v}/${mosaiconTargets[t]}`
-                      : (goalDenominators && v ? `${v}/${goalDenominators[t]}` : v || "—");
+                    const displayValue = (goalDenominators && v)
+                      ? `${v}/${goalDenominators[t]}`
+                      : v || "—";
                     return (
                       <div key={t} style={{ borderLeft: `1px solid ${BRD}`, display: "flex", alignItems: "center", justifyContent: "center", padding: "10px 6px", background: isHighlight ? `${bc(brand)}08` : "transparent", minHeight: 82 }}>
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: note ? 5 : 0, width: "100%", overflow: "hidden" }}>
@@ -1414,7 +1415,7 @@ function SettingsTab({ stations, goals, saveGoal }) {
           <div style={{ padding: "12px 16px", background: bl(brand), borderBottom: `2px solid ${bc(brand)}`, borderLeft: `5px solid ${bc(brand)}` }}>
             <span style={{ fontSize: 14, fontWeight: 900, color: bc(brand), letterSpacing: "0.1em" }}>{brand}</span>
           </div>
-          {(stations[brand] || []).filter(st => !st.isTotal).map((st, i) => {
+          {(stations[brand] || []).map((st, i) => {
             const key = `${brand}::${st.id}`;
             const val = localGoals[key] ?? "";
             const goal = goals[key];
