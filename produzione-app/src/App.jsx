@@ -19,6 +19,18 @@ const FONT = "'Outfit', sans-serif";
 const MONO = "'JetBrains Mono', monospace";
 const TIMES = ["10:00", "12:00", "15:00", "17:00"];
 
+/* Voci di navigazione (in alto, 4 per riga): per aggiungere un bottone basta una riga qui
+   e il relativo blocco {tab === "id" && ...} nel render. */
+const TABS = [
+  { id: "home",     icon: "🏠", label: "Home" },
+  { id: "foglio",   icon: "📋", label: "Foglio" },
+  { id: "storico",  icon: "📁", label: "Storico" },
+  { id: "analisi",  icon: "📊", label: "Analisi" },
+  { id: "taglio",   icon: "✂️", label: "Taglio" },
+  { id: "giacenza", icon: "📦", label: "Giacenza" },
+  { id: "setting",  icon: "⚙️", label: "Setting" },
+];
+
 const bc = (b) => (b === "MOSAICON" ? M : E);
 const bl = (b) => (b === "MOSAICON" ? ML : EL);
 
@@ -724,6 +736,22 @@ export default function App() {
         </div>
       </div>
 
+      <div className="no-print" style={{ background:S0, borderBottom:`1px solid ${BRD}`, padding:"8px 10px", display:"grid", gridTemplateColumns:"repeat(4, minmax(0, 1fr))", gap:6, flexShrink:0, boxShadow:"0 2px 10px rgba(13,27,42,0.05)" }}>
+        {TABS.map(({ id, icon, label }) => {
+          const on = tab === id;
+          return (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              aria-current={on ? "page" : undefined}
+              style={{ height:40, display:"flex", alignItems:"center", justifyContent:"center", gap:5, padding:"0 2px", minWidth:0, overflow:"hidden", borderRadius:12, cursor:"pointer", fontFamily:FONT, fontSize:12, fontWeight:800, whiteSpace:"nowrap", border:`1px solid ${on ? M : BRD}`, background: on ? M : S1, color: on ? "#fff" : T2, boxShadow: on ? "0 3px 10px rgba(26,92,255,0.25)" : "none" }}
+            >
+              <span style={{ fontSize:15, lineHeight:1 }}>{icon}</span>
+              <span>{label}</span>
+            </button>
+          );
+        })}
+      </div>
       <div className="no-print" style={{ flex:1, overflowY:"auto" }}>
         {tab === "home" && (
           <HomeTab date={date} reports={reports} stations={stations} onGoFoglio={() => setTab("foglio")} />
@@ -763,28 +791,6 @@ export default function App() {
 
       <div id="analysis-print-doc" style={{ display:"none", padding:"30px", background:"#EAF0F8" }}>
         {anRes && !anRes.empty ? <PrintAnalysisDoc anRes={anRes} /> : null}
-      </div>
-
-      <div className="no-print" style={{ background:S0, borderTop:`1px solid ${BRD}`, display:"flex", flexShrink:0, boxShadow:"0 -2px 12px rgba(13,27,42,0.07)" }}>
-        {[
-          { id:"home",    icon:"🏠", label:"Home" },
-          { id:"foglio",  icon:"📋", label:"Foglio" },
-          { id:"storico", icon:"📁", label:"Storico" },
-          { id:"analisi", icon:"📊", label:"Analisi" },
-          { id:"taglio",  icon:"✂️", label:"Taglio" },
-          { id:"giacenza", icon:"📦", label:"Giacenza" },
-          { id:"setting", icon:"⚙️", label:"Setting" },
-        ].map(({ id, icon, label }) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            style={{ flex:1, background:"none", border:"none", padding:"10px 4px 8px", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, fontFamily:FONT }}
-          >
-            <span style={{ fontSize:19 }}>{icon}</span>
-            <span style={{ fontSize:9, fontWeight:700, color: tab === id ? M : T3 }}>{label}</span>
-            {tab === id && <div style={{ width:20, height:2, background:M, borderRadius:1 }} />}
-          </button>
-        ))}
       </div>
 
       {cellModal && (
