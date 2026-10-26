@@ -109,6 +109,17 @@ const yesterdayStr = () => {
   return `${y}-${m}-${day}`;
 };
 
+// Venerdì più recente (oggi incluso, se è venerdì)
+const lastFridayStr = () => {
+  const d = new Date();
+  const back = (d.getDay() + 2) % 7; // venerdì = 5 → 0 giorni indietro
+  d.setDate(d.getDate() - back);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
 const timeKey = (t) => t.replace(":", "_");
 const encodedStationKey = (brand, sid) => `${brand}::${sid}`;
 const parseStationKey = (key) => {
@@ -189,6 +200,28 @@ export default function App() {
 
   const [goals, setGoals] = useState({});
   const [tg, setTg] = useState({});
+  const [giac, setGiac] = useState({});
+
+  useEffect(() => {
+    return onValue(ref(db, "giacenze"), (snap) => {
+      setGiac(snap.exists() ? snap.val() : {});
+    });
+  }, []);
+
+  // Salva (o aggiorna, se id esiste) una riga di giacenza del venerdì
+  const saveGiacRow = useCallback(async (day, id, articolo, ordine, paia) => {
+    const rowId = id || uid();
+    await set(ref(db, `giacenze/${day}/${rowId}`), {
+      articolo: (articolo || "").trim().slice(0, 80),
+      ordine: (ordine || "").trim().slice(0, 40),
+      paia: Math.round(+paia),
+      ts: Date.now(),
+    });
+  }, []);
+
+  const deleteGiacRow = useCallback(async (day, id) => {
+    await remove(ref(db, `giacenze/${day}/${id}`));
+  }, []);
 
   useEffect(() => {
     return onValue(ref(db, "taglioGiunteria"), (snap) => {
@@ -717,7 +750,7 @@ export default function App() {
           <TaglioTab date={date} tg={tg} saveTg={saveTg} onOpen={(d) => setDate(d)} />
         )}
         {tab === "setting" && (
-          <SettingsTab stations={stations} goals={goals} saveGoal={saveGoal} />
+          <SettingsTab stations={stations} goals={goals} saveGoal={saveGoal} giac={giac} saveGiacRow={saveGiacRow} deleteGiacRow={deleteGiacRow} />
         )}
       </div>
 
@@ -1511,7 +1544,183 @@ function KpiSmall({ label, value, color, sub, arrow }) {
 }
 
 /* ═══ SETTINGS TAB ═══ */
-function SettingsTab({ stations, goals, saveGoal }) {
+function SettingsTab({ stations, goals, saveGoal, giac, saveGiacRow, deleteGiacRow }) {
+  const [section, setSection] = useState("giacenza");
+
+  const pill = (id, label) => (
+    <button
+      key={id}
+      onClick={() => setSection(id)}
+      style={{ flex: 1, padding: "10px 0", border: "none", borderRadius: 10, cursor: "pointer", fontFamily: FONT, fontSize: 13, fontWeight: 800, background: section === id ? M : "transparent", color: section === id ? "#fff" : T2 }}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 4, margin: "14px 14px 0", padding: 4, background: S2, borderRadius: 12 }}>
+        {pill("giacenza", "Giacenza venerdì")}
+        {pill("obiettivi", "Obiettivi")}
+      </div>
+      {section === "giacenza"
+        ? <GiacenzaSection giac={giac} saveGiacRow={saveGiacRow} deleteGiacRow={deleteGiacRow} />
+        : <ObiettiviSection stations={stations} goals={goals} saveGoal={saveGoal} />}
+    </div>
+  );
+}
+
+/* ═══ GIACENZA DEL VENERDÌ SERA ═══ */
+function GiacenzaSection({ giac, saveGiacRow, deleteGiacRow }) {
+  const [day, setDay] = useState(() => lastFridayStr());
+  const [editId, setEditId] = useState(null);
+  const [articolo, setArticolo] = useState("");
+  const [ordine, setOrdine] = useState("");
+  const [paia, setPaia] = useState("");
+  const [state, setState] = useState("idle");
+  const [err, setErr] = useState("");
+
+  const rows = Object.entries(giac[day] || {})
+    .map(([id, r]) => ({ id, ...r }))
+    .sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  const totale = rows.reduce((s, r) => s + (+r.paia || 0), 0);
+  const isFriday = new Date(day + "T12:00:00").getDay() === 5;
+  const savedDays = Object.keys(giac).filter((d) => Object.keys(giac[d] || {}).length > 0).sort().reverse().slice(0, 8);
+
+  const reset = () => {
+    setEditId(null);
+    setArticolo("");
+    setOrdine("");
+    setPaia("");
+    setErr("");
+  };
+
+  const changeDay = (d) => {
+    setDay(d);
+    reset();
+    setState("idle");
+  };
+
+  const doSave = async () => {
+    const p = Math.round(+paia);
+    if (!articolo.trim()) return setErr("Inserisci l'articolo.");
+    if (!ordine.trim()) return setErr("Inserisci il numero d'ordine (es. 7/20410/1).");
+    if (paia === "" || isNaN(p) || p <= 0) return setErr("Inserisci un numero di paia maggiore di zero.");
+    setErr("");
+    setState("saving");
+    try {
+      await saveGiacRow(day, editId, articolo, ordine, p);
+      reset();
+      setState("ok");
+    } catch (e) {
+      console.error(e);
+      setState("err");
+    }
+  };
+
+  const startEdit = (r) => {
+    setEditId(r.id);
+    setArticolo(r.articolo || "");
+    setOrdine(r.ordine || "");
+    setPaia(String(r.paia ?? ""));
+    setErr("");
+    setState("idle");
+  };
+
+  const doDelete = async (r) => {
+    if (!window.confirm(`Eliminare la riga ${r.articolo} · ${r.ordine} (${r.paia} paia)?`)) return;
+    try {
+      await deleteGiacRow(day, r.id);
+      if (editId === r.id) reset();
+    } catch (e) {
+      console.error(e);
+      alert("Errore durante l'eliminazione.");
+    }
+  };
+
+  const label = (txt, color = T2) => (
+    <div style={{ fontSize: 10, fontWeight: 700, color, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>{txt}</div>
+  );
+  const inputStyle = { width: "100%", boxSizing: "border-box", background: S0, border: `1.5px solid ${BRD2}`, borderRadius: 12, padding: "12px 14px", fontFamily: FONT, fontSize: 15, color: TXT, outline: "none" };
+
+  return (
+    <div style={{ fontFamily: FONT, padding: "14px 14px", paddingBottom: 32 }}>
+      <div style={{ fontSize: 18, fontWeight: 900, color: TXT, marginBottom: 4 }}>Giacenza del venerdì sera</div>
+      <div style={{ fontSize: 12, color: T2, marginBottom: 14 }}>Inserisci una riga per ogni articolo e ordine rimasto in giacenza a fine settimana.</div>
+
+      <div style={{ marginBottom: 14 }}>
+        {label("Venerdì di riferimento")}
+        <input type="date" value={day} onChange={(e) => e.target.value && changeDay(e.target.value)} style={{ ...inputStyle, fontFamily: MONO, fontWeight: 700 }} />
+        {!isFriday && <div style={{ fontSize: 11, color: ACC, marginTop: 6, fontWeight: 600 }}>Attenzione: la data scelta non è un venerdì.</div>}
+      </div>
+
+      <div style={{ background: S0, border: `1px solid ${BRD}`, borderRadius: 16, padding: 14, marginBottom: 16, boxShadow: "0 2px 10px rgba(13,27,42,0.05)" }}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: editId ? ACC : M, marginBottom: 12 }}>{editId ? "Modifica riga" : "Nuova riga"}</div>
+        <div style={{ marginBottom: 12 }}>
+          {label("Articolo")}
+          <input type="text" value={articolo} maxLength={80} onChange={(e) => setArticolo(e.target.value)} placeholder="Codice o nome articolo" style={inputStyle} />
+        </div>
+        <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+          <div style={{ flex: 1.4 }}>
+            {label("N° ordine")}
+            <input type="text" value={ordine} maxLength={40} onChange={(e) => setOrdine(e.target.value)} placeholder="7/20410/1" style={{ ...inputStyle, fontFamily: MONO, fontWeight: 700 }} />
+          </div>
+          <div style={{ flex: 1 }}>
+            {label("Paia")}
+            <input type="number" inputMode="numeric" min="1" value={paia} onChange={(e) => setPaia(e.target.value)} placeholder="0" style={{ ...inputStyle, fontFamily: MONO, fontWeight: 700, color: M }} />
+          </div>
+        </div>
+        {err && <div style={{ fontSize: 12, fontWeight: 700, color: RED, marginBottom: 10 }}>{err}</div>}
+        <Btn color={editId ? ACC : M} onClick={doSave}>
+          {state === "saving" ? "Salvataggio…" : editId ? "✓ AGGIORNA RIGA" : "+ AGGIUNGI RIGA"}
+        </Btn>
+        {editId && <Btn color={BG} textColor={T2} style={{ marginTop: 8 }} onClick={reset}>Annulla modifica</Btn>}
+        {state === "ok" && !editId && <div style={{ marginTop: 8, fontSize: 13, fontWeight: 700, color: GRN }}>Riga salvata.</div>}
+        {state === "err" && <div style={{ marginTop: 8, fontSize: 13, fontWeight: 700, color: RED }}>Non salvato: riprova o avvisa Stefano.</div>}
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: T2, letterSpacing: "0.1em", textTransform: "uppercase" }}>Giacenza del {fmtD(day)}</div>
+        <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: TXT }}>{rows.length} righe · {totale} paia</div>
+      </div>
+      <div style={{ background: S0, border: `1px solid ${BRD}`, borderRadius: 12, overflow: "hidden" }}>
+        {rows.length === 0 && <div style={{ padding: 14, fontSize: 13, color: T3 }}>Nessuna riga inserita per questo venerdì.</div>}
+        {rows.map((r, i) => (
+          <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderTop: i ? `1px solid ${BRD}` : "none", background: editId === r.id ? ACL : "transparent" }}>
+            <button onClick={() => startEdit(r)} style={{ flex: 1, minWidth: 0, textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: FONT }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: TXT, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.articolo}</div>
+              <div style={{ fontFamily: MONO, fontSize: 12, color: T2, marginTop: 2 }}>{r.ordine}</div>
+            </button>
+            <div style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, color: M }}>{r.paia}</div>
+            <button onClick={() => doDelete(r)} aria-label="Elimina riga" style={{ background: "#FEE2E2", color: RED, border: "none", borderRadius: 8, width: 34, height: 34, cursor: "pointer", fontSize: 14 }}>🗑</button>
+          </div>
+        ))}
+      </div>
+      {rows.length > 0 && <div style={{ fontSize: 11, color: T3, marginTop: 6 }}>Tocca una riga per modificarla.</div>}
+
+      {savedDays.length > 0 && (
+        <div style={{ marginTop: 22 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: T2, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>Venerdì già inseriti</div>
+          <div style={{ background: S0, border: `1px solid ${BRD}`, borderRadius: 12 }}>
+            {savedDays.map((d, i) => {
+              const rs = Object.values(giac[d] || {});
+              const tot = rs.reduce((s, r) => s + (+r.paia || 0), 0);
+              return (
+                <button key={d} onClick={() => changeDay(d)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 44, padding: "0 14px", background: d === day ? ML : "none", border: "none", borderTop: i ? `1px solid ${BRD}` : "none", cursor: "pointer", fontFamily: FONT, fontSize: 14, color: TXT }}>
+                  <span>{fmtD(d)}</span>
+                  <span style={{ fontFamily: MONO, fontWeight: 700, color: M }}>{rs.length} righe · {tot} paia</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══ OBIETTIVI GIORNALIERI ═══ */
+function ObiettiviSection({ stations, goals, saveGoal }) {
   const [localGoals, setLocalGoals] = useState({});
 
   useEffect(() => {
