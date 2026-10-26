@@ -173,6 +173,35 @@ function downloadBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/* ═══ PDF: PUNTI DI TAGLIO TRA LE PAGINE ═══ */
+// Posizioni (in pixel del canvas) delle righe che il cambio pagina non deve tagliare.
+// Sono misurate rispetto all'elemento stampato e con la stessa scala dell'immagine:
+// offsetTop non va bene perché parte dall'inizio della pagina web, non del documento.
+function getSafeBreaks(el, canvas, selector) {
+  const base = el.getBoundingClientRect();
+  const scale = canvas.width / base.width;
+  return Array.from(el.querySelectorAll(selector))
+    .map((node) => {
+      const r = node.getBoundingClientRect();
+      return {
+        top: Math.round((r.top - base.top) * scale),
+        bottom: Math.round((r.bottom - base.top) * scale),
+      };
+    })
+    .filter((r) => r.bottom > r.top)
+    .sort((a, b) => a.top - b.top);
+}
+
+// Dove finisce la pagina che parte da `start`: se il taglio cadrebbe dentro una riga,
+// la pagina si ferma all'inizio di quella riga, che passa intera alla pagina dopo.
+function pageSliceEnd(start, pageHeightPx, totalHeight, breaks) {
+  const end = Math.min(start + pageHeightPx, totalHeight);
+  if (end >= totalHeight) return end;
+  const crossing = breaks.find((r) => r.top < end && r.bottom > end);
+  if (crossing && crossing.top > start + pageHeightPx * 0.3) return crossing.top;
+  return end;
+}
+
 /* ═══ APP ROOT ═══ */
 export default function App() {
   const [tab, setTab] = useState("home");
@@ -475,27 +504,12 @@ export default function App() {
       const pageH = pdf.internal.pageSize.getHeight();
       const pxPerMm = canvas.width / pageW;
       const pageHeightPx = Math.floor(pageH * pxPerMm);
-      const safeBreaks = Array.from(el.querySelectorAll('[data-print-row="true"]'))
-        .map((node) => {
-          const top = node.offsetTop;
-          const bottom = top + node.offsetHeight;
-          return { top, bottom };
-        })
-        .sort((a, b) => a.top - b.top);
+      const safeBreaks = getSafeBreaks(el, canvas, '[data-print-row="true"]');
       let rendered = 0;
       let page = 0;
       while (rendered < canvas.height) {
         if (page > 0) pdf.addPage();
-        let sliceEnd = Math.min(rendered + pageHeightPx, canvas.height);
-        const crossingRow = safeBreaks.find((row) => row.top < sliceEnd && row.bottom > sliceEnd);
-        if (crossingRow) {
-          if (crossingRow.top > rendered + 120) {
-            sliceEnd = crossingRow.top;
-          } else {
-            const nextSafe = safeBreaks.find((row) => row.top >= sliceEnd);
-            if (nextSafe) sliceEnd = nextSafe.top;
-          }
-        }
+        const sliceEnd = pageSliceEnd(rendered, pageHeightPx, canvas.height, safeBreaks);
         const sliceHeight = Math.max(1, sliceEnd - rendered);
         const pageCanvas = document.createElement("canvas");
         pageCanvas.width = canvas.width;
@@ -562,29 +576,12 @@ export default function App() {
       const pageH = pdf.internal.pageSize.getHeight();
       const pxPerMm = canvas.width / pageW;
       const pageHeightPx = Math.floor(pageH * pxPerMm);
-      const scale = canvas.width / el.offsetWidth;
-      const safeBreaks = Array.from(
-        el.querySelectorAll('[data-print-row="true"], [data-day-cell="true"]')
-      )
-        .map((node) => ({
-          top: Math.floor(node.offsetTop * scale),
-          bottom: Math.floor((node.offsetTop + node.offsetHeight) * scale),
-        }))
-        .sort((a, b) => a.top - b.top);
+      const safeBreaks = getSafeBreaks(el, canvas, '[data-print-row="true"], [data-day-cell="true"]');
       let rendered = 0;
       let page = 0;
       while (rendered < canvas.height) {
         if (page > 0) pdf.addPage();
-        let sliceEnd = Math.min(rendered + pageHeightPx, canvas.height);
-        const crossingRow = safeBreaks.find((row) => row.top < sliceEnd && row.bottom > sliceEnd);
-        if (crossingRow) {
-          if (crossingRow.top > rendered + pageHeightPx * 0.3) {
-            sliceEnd = crossingRow.top;
-          } else {
-            const nextSafe = safeBreaks.find((row) => row.bottom >= sliceEnd);
-            if (nextSafe) sliceEnd = nextSafe.bottom;
-          }
-        }
+        const sliceEnd = pageSliceEnd(rendered, pageHeightPx, canvas.height, safeBreaks);
         const sliceHeight = Math.max(1, sliceEnd - rendered);
         const pageCanvas = document.createElement("canvas");
         pageCanvas.width = canvas.width;
