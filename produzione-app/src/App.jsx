@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceLine,
+  ResponsiveContainer, ReferenceLine, Cell,
 } from "recharts";
 import { db, ref, set, onValue } from "./firebase.js";
 import { remove } from "firebase/database";
@@ -750,7 +750,10 @@ export default function App() {
           <TaglioTab date={date} tg={tg} saveTg={saveTg} onOpen={(d) => setDate(d)} />
         )}
         {tab === "setting" && (
-          <SettingsTab stations={stations} goals={goals} saveGoal={saveGoal} giac={giac} saveGiacRow={saveGiacRow} deleteGiacRow={deleteGiacRow} />
+          <SettingsTab stations={stations} goals={goals} saveGoal={saveGoal} />
+        )}
+        {tab === "giacenza" && (
+          <GiacenzaTab giac={giac} saveGiacRow={saveGiacRow} deleteGiacRow={deleteGiacRow} />
         )}
       </div>
 
@@ -769,6 +772,7 @@ export default function App() {
           { id:"storico", icon:"📁", label:"Storico" },
           { id:"analisi", icon:"📊", label:"Analisi" },
           { id:"taglio",  icon:"✂️", label:"Taglio" },
+          { id:"giacenza", icon:"📦", label:"Giacenza" },
           { id:"setting", icon:"⚙️", label:"Setting" },
         ].map(({ id, icon, label }) => (
           <button
@@ -867,6 +871,7 @@ function HomeTab({ date, reports, stations, onGoFoglio }) {
     const sid = getPackingStationId(brand, stations);
     return sid ? getNumericCell(rDay, brand, sid, "17:00") : null;
   };
+  const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const rToday = reports[date];
   const rYest = reports[yesterdayStr()];
   const mTod = getPacking17(rToday, "MOSAICON");
@@ -876,92 +881,130 @@ function HomeTab({ date, reports, stations, onGoFoglio }) {
   const combined = (mTod ?? 0) + (eTod ?? 0);
   const combinedYest = (mYest ?? 0) + (eYest ?? 0);
   const pct = (a, b) => (b && a !== null ? +((((a - b) / b) * 100)).toFixed(1) : null);
+
   const last7 = useMemo(() => {
     const pts = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      const ds = d.toISOString().split("T")[0];
+      const ds = ymd(d);
       const m = getPacking17(reports[ds], "MOSAICON") ?? 0;
       const e = getPacking17(reports[ds], "EMOS") ?? 0;
-      pts.push({ label:`${d.getDate()}/${d.getMonth()+1}`, MOSAICON:m, EMOS:e, total:m+e });
+      pts.push({ ds, label: `${d.getDate()}/${d.getMonth() + 1}`, MOSAICON: m, EMOS: e, total: m + e });
     }
     return pts;
   }, [reports, stations]);
 
+  const activeDays = last7.filter((p) => p.total > 0);
+  const avg7 = activeDays.length ? Math.round(activeDays.reduce((s, p) => s + p.total, 0) / activeDays.length) : 0;
+  const hasSel = last7.some((p) => p.ds === date);
+
+  // Unico momento animato: la barra delle quote si allarga al caricamento
+  const [grown, setGrown] = useState(false);
+  useEffect(() => {
+    const reduce = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) { setGrown(true); return undefined; }
+    const t = setTimeout(() => setGrown(true), 80);
+    return () => clearTimeout(t);
+  }, []);
+
+  const mShare = combined > 0 ? ((mTod ?? 0) / combined) * 100 : 0;
+  const eShare = combined > 0 ? 100 - mShare : 0;
+  const grow = "width 900ms cubic-bezier(0.2,0.7,0.2,1)";
+  const num = { fontWeight: 800, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.02em" };
+  const card = { background: S0, borderRadius: 20, border: `1px solid ${BRD}`, boxShadow: "0 2px 12px rgba(13,27,42,0.05)" };
+
+  const chip = (p) => p === null ? null : (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: p >= 0 ? "#DCFCE7" : "#FEE2E2", color: p >= 0 ? GRN : RED, borderRadius: 8, padding: "3px 8px", fontSize: 12, fontWeight: 800 }}>
+      {p >= 0 ? "▲" : "▼"} {Math.abs(p)}%
+    </span>
+  );
+
+  const brandStat = (name, val, yest, color, align) => {
+    const p = pct(val, yest);
+    return (
+      <div style={{ flex: 1, textAlign: align }}>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, color: T2 }}>
+          <span style={{ width: 9, height: 9, borderRadius: "50%", background: color }} />
+          {name}
+        </div>
+        <div style={{ ...num, fontSize: 30, color, lineHeight: 1.1, marginTop: 4 }}>{val ?? "—"}</div>
+        <div style={{ fontSize: 12, color: T2, marginTop: 3 }}>
+          {yest !== null && yest !== undefined ? `ieri ${yest}` : "ieri non inserito"}
+          {p !== null && <span style={{ marginLeft: 6, fontWeight: 800, color: p >= 0 ? GRN : RED }}>{p >= 0 ? "▲" : "▼"} {Math.abs(p)}%</span>}
+        </div>
+      </div>
+    );
+  };
+
+  const totalDelta = combinedYest > 0 ? pct(combined, combinedYest) : null;
+
   return (
-    <div style={{ padding:"16px 14px", fontFamily:FONT }}>
-      <div style={{ marginBottom:14, padding:"10px 16px", background:S0, borderRadius:16, border:`1px solid ${BRD}`, boxShadow:"0 2px 10px rgba(13,27,42,0.05)" }}>
-        <div style={{ fontSize:9, fontWeight:700, color:T3, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:2 }}>
-          {date === todayStr() ? "Oggi" : "Data selezionata"}
-        </div>
-        <div style={{ fontSize:18, fontWeight:800, color:TXT }}>
-          {new Date(date + "T12:00:00").toLocaleDateString("it-IT", { weekday:"long", day:"numeric", month:"long", year:"numeric" })}
-        </div>
-      </div>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
-        {[
-          { brand:"MOSAICON", val:mTod, yest:mYest, color:M },
-          { brand:"EMOS", val:eTod, yest:eYest, color:E },
-        ].map(({ brand, val, yest, color }) => {
-          const p = pct(val, yest);
-          const isUp = p !== null && p >= 0;
-          return (
-            <div key={brand} style={{ background:S0, borderRadius:16, border:`1.5px solid ${color}30`, padding:"14px 13px", boxShadow:"0 2px 10px rgba(13,27,42,0.05)", borderLeft:`4px solid ${color}` }}>
-              <div style={{ fontSize:8, fontWeight:700, color, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:6 }}>{brand} · Inscatolamento 17:00</div>
-              <div style={{ fontFamily:MONO, fontSize:32, fontWeight:700, color, lineHeight:1, marginBottom:6 }}>{val ?? "—"}</div>
-              {p !== null && (
-                <div style={{ display:"inline-flex", alignItems:"center", gap:3, background: isUp ? "#DCFCE7" : "#FEE2E2", borderRadius:6, padding:"2px 7px", marginBottom:4 }}>
-                  <span style={{ fontSize:9, fontWeight:800, color: isUp ? GRN : RED }}>{isUp ? "▲" : "▼"} {Math.abs(p)}%</span>
-                </div>
-              )}
-              {yest !== null && yest !== undefined && <div style={{ fontSize:9, color:T3 }}>ieri: {yest}</div>}
-            </div>
-          );
-        })}
-      </div>
-      <div style={{ background:"linear-gradient(135deg,#0A3D9C,#1A5CFF 60%,#0099CC)", borderRadius:18, padding:"18px 20px", marginBottom:16, boxShadow:"0 6px 24px rgba(26,92,255,0.28)", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <div>
-          <div style={{ fontSize:9, fontWeight:700, color:"rgba(255,255,255,0.6)", letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:4 }}>Totale combinato · Inscatolamento 17:00</div>
-          <div style={{ fontFamily:MONO, fontSize:44, fontWeight:700, color:"#fff", lineHeight:1 }}>{combined || "—"}</div>
-          {combinedYest > 0 && (() => {
-            const p = pct(combined, combinedYest);
-            return p !== null ? (
-              <div style={{ marginTop:6, fontSize:11, fontWeight:700, color: p >= 0 ? "#86EFAC" : "#FCA5A5" }}>
-                {p >= 0 ? "▲" : "▼"} {Math.abs(p)}% rispetto a ieri ({combinedYest})
-              </div>
-            ) : null;
+    <div style={{ padding: "18px 14px 24px", fontFamily: FONT }}>
+      <div style={{ padding: "0 4px", marginBottom: 14 }}>
+        <div style={{ fontSize: 24, fontWeight: 800, color: TXT, letterSpacing: "-0.01em" }}>
+          {(() => {
+            const s = new Date(date + "T12:00:00").toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" });
+            return s.charAt(0).toUpperCase() + s.slice(1);
           })()}
         </div>
-        <div style={{ fontSize:40, opacity:0.35 }}>📦</div>
+        <div style={{ fontSize: 13, color: T2, marginTop: 2 }}>
+          {date === todayStr() ? "Oggi" : "Giorno selezionato"} · {new Date(date + "T12:00:00").getFullYear()}
+        </div>
       </div>
-      <div style={{ background:S0, borderRadius:16, border:`1px solid ${BRD}`, padding:"14px 10px 10px", marginBottom:16, boxShadow:"0 2px 10px rgba(13,27,42,0.05)" }}>
-        <div style={{ fontSize:10, fontWeight:700, color:T2, paddingLeft:6, marginBottom:12, letterSpacing:"0.08em", textTransform:"uppercase" }}>Ultimi 7 giorni · Inscatolamento 17:00</div>
-        <ResponsiveContainer width="100%" height={140}>
-          <BarChart data={last7} margin={{ top:4, right:8, left:0, bottom:0 }} barCategoryGap="30%">
+
+      <div style={{ ...card, padding: "20px 20px 22px", marginBottom: 14 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: T2 }}>Paia inscatolate alle 17:00</div>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginTop: 6, flexWrap: "wrap" }}>
+          <div style={{ ...num, fontSize: 68, color: TXT, lineHeight: 1 }}>{combined || "—"}</div>
+          {chip(totalDelta)}
+        </div>
+        {totalDelta !== null && <div style={{ fontSize: 12, color: T2, marginTop: 6 }}>rispetto a ieri ({combinedYest} paia)</div>}
+
+        <div style={{ display: "flex", gap: 3, height: 14, marginTop: 20, background: S2, borderRadius: 7, overflow: "hidden" }}>
+          <div style={{ width: grown ? `${mShare}%` : "0%", background: M, borderRadius: 7, transition: grow }} />
+          <div style={{ width: grown ? `${eShare}%` : "0%", background: E, borderRadius: 7, transition: grow }} />
+        </div>
+
+        <div style={{ display: "flex", gap: 16, marginTop: 16 }}>
+          {brandStat("Mosaicon", mTod, mYest, M, "left")}
+          {brandStat("EMOS", eTod, eYest, E, "right")}
+        </div>
+      </div>
+
+      <div style={{ ...card, padding: "18px 12px 12px", marginBottom: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "0 8px", marginBottom: 14, flexWrap: "wrap", gap: 6 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: TXT }}>Ultimi 7 giorni</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, fontSize: 12, fontWeight: 600, color: T2 }}>
+            {avg7 > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: ACC }}><span style={{ width: 14, borderTop: `2px dashed ${ACC}` }} />media {avg7}</span>}
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: M }} />Mosaicon</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: E }} />EMOS</span>
+          </div>
+        </div>
+        <ResponsiveContainer width="100%" height={176}>
+          <BarChart data={last7} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barCategoryGap="28%">
             <CartesianGrid strokeDasharray="3 3" stroke={BRD} vertical={false} />
-            <XAxis dataKey="label" tick={{ fontSize:8, fill:T3, fontFamily:MONO }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fontSize:8, fill:T3, fontFamily:MONO }} axisLine={false} tickLine={false} width={34} />
-            <Tooltip contentStyle={{ background:S0, border:`1px solid ${BRD}`, borderRadius:8, fontFamily:FONT, fontSize:12 }} labelStyle={{ color:TXT, fontWeight:700 }} />
-            <Bar dataKey="MOSAICON" fill={M} radius={[4,4,0,0]} maxBarSize={20} />
-            <Bar dataKey="EMOS" fill={E} radius={[4,4,0,0]} maxBarSize={20} />
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: T2, fontFamily: FONT }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 10, fill: T3, fontFamily: FONT }} axisLine={false} tickLine={false} width={34} />
+            <Tooltip cursor={{ fill: "rgba(26,92,255,0.06)" }} contentStyle={{ background: S0, border: `1px solid ${BRD}`, borderRadius: 10, fontFamily: FONT, fontSize: 12 }} labelStyle={{ color: TXT, fontWeight: 700 }} />
+            <Bar dataKey="MOSAICON" stackId="paia" fill={M} maxBarSize={28}>
+              {last7.map((p) => <Cell key={p.ds} fillOpacity={hasSel && p.ds !== date ? 0.55 : 1} />)}
+            </Bar>
+            <Bar dataKey="EMOS" stackId="paia" fill={E} radius={[6, 6, 0, 0]} maxBarSize={28}>
+              {last7.map((p) => <Cell key={p.ds} fillOpacity={hasSel && p.ds !== date ? 0.55 : 1} />)}
+            </Bar>
+            {avg7 > 0 && <ReferenceLine y={avg7} stroke={ACC} strokeDasharray="5 4" />}
           </BarChart>
         </ResponsiveContainer>
       </div>
+
       <button
         onClick={onGoFoglio}
-        style={{ width:"100%", background:S0, border:`1.5px solid ${BRD}`, borderRadius:16, padding:"14px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:FONT, boxShadow:"0 2px 10px rgba(13,27,42,0.05)" }}
+        style={{ width: "100%", background: ACC, color: "#fff", border: "none", borderRadius: 16, padding: "17px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", fontFamily: FONT, fontSize: 16, fontWeight: 800, boxShadow: "0 8px 20px rgba(255,82,0,0.28)" }}
       >
-        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-          <span style={{ fontSize:24 }}>📋</span>
-          <div style={{ textAlign:"left" }}>
-            <div style={{ fontSize:13, fontWeight:700, color:TXT }}>Inserisci dati produzione</div>
-            <div style={{ fontSize:10, color:T2, marginTop:2 }}>Apri il foglio di oggi</div>
-          </div>
-        </div>
-        <span style={{ fontSize:22, color:BRD2 }}>›</span>
+        <span>{date === todayStr() ? "Inserisci i dati di oggi" : `Inserisci i dati del ${fmtD(date)}`}</span>
+        <span style={{ fontSize: 24, lineHeight: 1 }}>›</span>
       </button>
-      <div style={{ height:24 }} />
     </div>
   );
 }
@@ -1544,34 +1587,8 @@ function KpiSmall({ label, value, color, sub, arrow }) {
 }
 
 /* ═══ SETTINGS TAB ═══ */
-function SettingsTab({ stations, goals, saveGoal, giac, saveGiacRow, deleteGiacRow }) {
-  const [section, setSection] = useState("giacenza");
-
-  const pill = (id, label) => (
-    <button
-      key={id}
-      onClick={() => setSection(id)}
-      style={{ flex: 1, padding: "10px 0", border: "none", borderRadius: 10, cursor: "pointer", fontFamily: FONT, fontSize: 13, fontWeight: 800, background: section === id ? M : "transparent", color: section === id ? "#fff" : T2 }}
-    >
-      {label}
-    </button>
-  );
-
-  return (
-    <div>
-      <div style={{ display: "flex", gap: 4, margin: "14px 14px 0", padding: 4, background: S2, borderRadius: 12 }}>
-        {pill("giacenza", "Giacenza venerdì")}
-        {pill("obiettivi", "Obiettivi")}
-      </div>
-      {section === "giacenza"
-        ? <GiacenzaSection giac={giac} saveGiacRow={saveGiacRow} deleteGiacRow={deleteGiacRow} />
-        : <ObiettiviSection stations={stations} goals={goals} saveGoal={saveGoal} />}
-    </div>
-  );
-}
-
 /* ═══ GIACENZA DEL VENERDÌ SERA ═══ */
-function GiacenzaSection({ giac, saveGiacRow, deleteGiacRow }) {
+function GiacenzaTab({ giac, saveGiacRow, deleteGiacRow }) {
   const [day, setDay] = useState(() => lastFridayStr());
   const [editId, setEditId] = useState(null);
   const [articolo, setArticolo] = useState("");
@@ -1719,8 +1736,8 @@ function GiacenzaSection({ giac, saveGiacRow, deleteGiacRow }) {
   );
 }
 
-/* ═══ OBIETTIVI GIORNALIERI ═══ */
-function ObiettiviSection({ stations, goals, saveGoal }) {
+/* ═══ SETTINGS TAB (obiettivi giornalieri) ═══ */
+function SettingsTab({ stations, goals, saveGoal }) {
   const [localGoals, setLocalGoals] = useState({});
 
   useEffect(() => {
