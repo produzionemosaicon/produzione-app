@@ -220,19 +220,19 @@ export default function App() {
     });
   }, []);
 
-  // Salva (o aggiorna, se id esiste) una riga di giacenza del venerdì
-  const saveGiacRow = useCallback(async (day, id, articolo, ordine, paia) => {
-    const rowId = id || uid();
-    await set(ref(db, `giacenze/${day}/${rowId}`), {
-      articolo: (articolo || "").trim().slice(0, 80),
-      ordine: (ordine || "").trim().slice(0, 40),
-      paia: Math.round(+paia),
-      ts: Date.now(),
+  // Salva l'intera giacenza di un venerdì: sostituisce il nodo del giorno con le righe correnti
+  const saveGiacDay = useCallback(async (day, rows) => {
+    const node = {};
+    rows.forEach((r) => {
+      node[r.id] = {
+        articolo: (r.articolo || "").trim().slice(0, 80),
+        ordine: (r.ordine || "").trim().slice(0, 40),
+        paia: Math.round(+r.paia),
+        ts: r.ts || Date.now(),
+      };
     });
-  }, []);
-
-  const deleteGiacRow = useCallback(async (day, id) => {
-    await remove(ref(db, `giacenze/${day}/${id}`));
+    node._meta = { savedAt: Date.now() };
+    await set(ref(db, `giacenze/${day}`), node);
   }, []);
 
   useEffect(() => {
@@ -780,9 +780,9 @@ export default function App() {
         {tab === "setting" && (
           <SettingsTab stations={stations} goals={goals} saveGoal={saveGoal} />
         )}
-        {tab === "giacenza" && (
-          <GiacenzaTab giac={giac} saveGiacRow={saveGiacRow} deleteGiacRow={deleteGiacRow} />
-        )}
+        <div style={{ display: tab === "giacenza" ? "block" : "none" }}>
+          <GiacenzaTab giac={giac} saveGiacDay={saveGiacDay} />
+        </div>
       </div>
 
       <div id="print-doc" style={{ display:"none", padding:"30px", background:"#fff" }}>
@@ -1592,25 +1592,49 @@ function KpiSmall({ label, value, color, sub, arrow }) {
   );
 }
 
-/* ═══ SETTINGS TAB ═══ */
 /* ═══ GIACENZA DEL VENERDÌ SERA ═══ */
-function GiacenzaTab({ giac, saveGiacRow, deleteGiacRow }) {
+function GiacenzaTab({ giac, saveGiacDay }) {
   const [day, setDay] = useState(() => lastFridayStr());
+  const [draft, setDraft] = useState([]);
+  const [dirty, setDirty] = useState(false);
   const [editId, setEditId] = useState(null);
   const [articolo, setArticolo] = useState("");
   const [ordine, setOrdine] = useState("");
   const [paia, setPaia] = useState("");
-  const [state, setState] = useState("idle");
   const [err, setErr] = useState("");
+  const [saveState, setSaveState] = useState("idle");
 
-  const rows = Object.entries(giac[day] || {})
-    .map(([id, r]) => ({ id, ...r }))
-    .sort((a, b) => (a.ts || 0) - (b.ts || 0));
-  const totale = rows.reduce((s, r) => s + (+r.paia || 0), 0);
+  // Righe e data di salvataggio come stanno nel database per il venerdì scelto
+  const node = giac[day];
+  const exists = node !== undefined;
+  const savedAt = node?._meta?.savedAt || null;
+  const dbRows = useMemo(
+    () => Object.entries(node || {})
+      .filter(([k]) => k !== "_meta")
+      .map(([id, r]) => ({ id, ...r }))
+      .sort((a, b) => (a.ts || 0) - (b.ts || 0)),
+    [node]
+  );
+
+  // Finché non ci sono modifiche in sospeso, la bozza segue il database
+  useEffect(() => {
+    if (!dirty) setDraft(dbRows);
+  }, [dbRows, dirty]);
+
+  // Avvisa se si chiude la pagina con modifiche non salvate
+  useEffect(() => {
+    if (!dirty) return undefined;
+    const h = (e) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", h);
+    return () => window.removeEventListener("beforeunload", h);
+  }, [dirty]);
+
+  const totale = draft.reduce((s, r) => s + (+r.paia || 0), 0);
   const isFriday = new Date(day + "T12:00:00").getDay() === 5;
-  const savedDays = Object.keys(giac).filter((d) => Object.keys(giac[d] || {}).length > 0).sort().reverse().slice(0, 8);
+  const savedDays = Object.keys(giac).sort().reverse().slice(0, 8);
+  const formHasText = articolo.trim() !== "" || ordine.trim() !== "" || paia !== "";
 
-  const reset = () => {
+  const resetForm = () => {
     setEditId(null);
     setArticolo("");
     setOrdine("");
@@ -1619,26 +1643,28 @@ function GiacenzaTab({ giac, saveGiacRow, deleteGiacRow }) {
   };
 
   const changeDay = (d) => {
+    if (d === day) return;
+    if ((dirty || formHasText) && !window.confirm("Ci sono modifiche non salvate. Cambiando venerdì andranno perse. Continuare?")) return;
     setDay(d);
-    reset();
-    setState("idle");
+    setDirty(false);
+    setSaveState("idle");
+    resetForm();
   };
 
-  const doSave = async () => {
+  const addOrUpdateRow = () => {
     const p = Math.round(+paia);
     if (!articolo.trim()) return setErr("Inserisci l'articolo.");
     if (!ordine.trim()) return setErr("Inserisci il numero d'ordine (es. 7/20410/1).");
     if (paia === "" || isNaN(p) || p <= 0) return setErr("Inserisci un numero di paia maggiore di zero.");
-    setErr("");
-    setState("saving");
-    try {
-      await saveGiacRow(day, editId, articolo, ordine, p);
-      reset();
-      setState("ok");
-    } catch (e) {
-      console.error(e);
-      setState("err");
+    const row = { articolo: articolo.trim(), ordine: ordine.trim(), paia: p };
+    if (editId) {
+      setDraft((prev) => prev.map((r) => (r.id === editId ? { ...r, ...row } : r)));
+    } else {
+      setDraft((prev) => [...prev, { id: uid(), ts: Date.now(), ...row }]);
     }
+    setDirty(true);
+    setSaveState("idle");
+    resetForm();
   };
 
   const startEdit = (r) => {
@@ -1647,17 +1673,34 @@ function GiacenzaTab({ giac, saveGiacRow, deleteGiacRow }) {
     setOrdine(r.ordine || "");
     setPaia(String(r.paia ?? ""));
     setErr("");
-    setState("idle");
   };
 
-  const doDelete = async (r) => {
-    if (!window.confirm(`Eliminare la riga ${r.articolo} · ${r.ordine} (${r.paia} paia)?`)) return;
+  const removeRow = (id) => {
+    setDraft((prev) => prev.filter((r) => r.id !== id));
+    setDirty(true);
+    setSaveState("idle");
+    if (editId === id) resetForm();
+  };
+
+  const discard = () => {
+    if (!window.confirm("Annullare le modifiche non salvate e tornare all'ultima versione salvata?")) return;
+    setDirty(false);
+    setDraft(dbRows);
+    setSaveState("idle");
+    resetForm();
+  };
+
+  const doSave = async () => {
+    if (formHasText) return setErr("C'è una riga non ancora aggiunta: premi «Aggiungi riga» oppure svuota i campi.");
+    setErr("");
+    setSaveState("saving");
     try {
-      await deleteGiacRow(day, r.id);
-      if (editId === r.id) reset();
+      await saveGiacDay(day, draft);
+      setDirty(false);
+      setSaveState("ok");
     } catch (e) {
       console.error(e);
-      alert("Errore durante l'eliminazione.");
+      setSaveState("err");
     }
   };
 
@@ -1666,10 +1709,20 @@ function GiacenzaTab({ giac, saveGiacRow, deleteGiacRow }) {
   );
   const inputStyle = { width: "100%", boxSizing: "border-box", background: S0, border: `1.5px solid ${BRD2}`, borderRadius: 12, padding: "12px 14px", fontFamily: FONT, fontSize: 15, color: TXT, outline: "none" };
 
+  const fmtSaved = (ts) => {
+    const d = new Date(ts);
+    return `${d.toLocaleDateString("it-IT", { day: "numeric", month: "long" })} alle ${d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}`;
+  };
+  let status = { text: "Non ancora salvata", color: T2, bg: S2 };
+  if (dirty) status = { text: "Modifiche non salvate", color: ACC, bg: ACL };
+  else if (exists) status = { text: savedAt ? `Salvata il ${fmtSaved(savedAt)}` : "Salvata", color: GRN, bg: "#DCFCE7" };
+
+  const canSave = dirty || !exists;
+
   return (
     <div style={{ fontFamily: FONT, padding: "14px 14px", paddingBottom: 32 }}>
       <div style={{ fontSize: 18, fontWeight: 900, color: TXT, marginBottom: 4 }}>Giacenza del venerdì sera</div>
-      <div style={{ fontSize: 12, color: T2, marginBottom: 14 }}>Inserisci una riga per ogni articolo e ordine rimasto in giacenza a fine settimana.</div>
+      <div style={{ fontSize: 12, color: T2, marginBottom: 14 }}>Aggiungi una riga per ogni articolo e ordine rimasto in giacenza, poi premi «Salva giacenza».</div>
 
       <div style={{ marginBottom: 14 }}>
         {label("Venerdì di riferimento")}
@@ -1694,44 +1747,52 @@ function GiacenzaTab({ giac, saveGiacRow, deleteGiacRow }) {
           </div>
         </div>
         {err && <div style={{ fontSize: 12, fontWeight: 700, color: RED, marginBottom: 10 }}>{err}</div>}
-        <Btn color={editId ? ACC : M} onClick={doSave}>
-          {state === "saving" ? "Salvataggio…" : editId ? "✓ AGGIORNA RIGA" : "+ AGGIUNGI RIGA"}
+        <Btn color={editId ? ACC : M} onClick={addOrUpdateRow}>
+          {editId ? "✓ AGGIORNA RIGA" : "+ AGGIUNGI RIGA"}
         </Btn>
-        {editId && <Btn color={BG} textColor={T2} style={{ marginTop: 8 }} onClick={reset}>Annulla modifica</Btn>}
-        {state === "ok" && !editId && <div style={{ marginTop: 8, fontSize: 13, fontWeight: 700, color: GRN }}>Riga salvata.</div>}
-        {state === "err" && <div style={{ marginTop: 8, fontSize: 13, fontWeight: 700, color: RED }}>Non salvato: riprova o avvisa Stefano.</div>}
+        {(editId || formHasText) && <Btn color={BG} textColor={T2} style={{ marginTop: 8 }} onClick={resetForm}>{editId ? "Annulla modifica" : "Svuota i campi"}</Btn>}
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: T2, letterSpacing: "0.1em", textTransform: "uppercase" }}>Giacenza del {fmtD(day)}</div>
-        <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: TXT }}>{rows.length} righe · {totale} paia</div>
+        <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: TXT }}>{draft.length} {draft.length === 1 ? "riga" : "righe"} · {totale} paia</div>
       </div>
       <div style={{ background: S0, border: `1px solid ${BRD}`, borderRadius: 12, overflow: "hidden" }}>
-        {rows.length === 0 && <div style={{ padding: 14, fontSize: 13, color: T3 }}>Nessuna riga inserita per questo venerdì.</div>}
-        {rows.map((r, i) => (
+        {draft.length === 0 && <div style={{ padding: 14, fontSize: 13, color: T3 }}>Nessuna riga inserita per questo venerdì.</div>}
+        {draft.map((r, i) => (
           <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderTop: i ? `1px solid ${BRD}` : "none", background: editId === r.id ? ACL : "transparent" }}>
             <button onClick={() => startEdit(r)} style={{ flex: 1, minWidth: 0, textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: FONT }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: TXT, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.articolo}</div>
               <div style={{ fontFamily: MONO, fontSize: 12, color: T2, marginTop: 2 }}>{r.ordine}</div>
             </button>
             <div style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, color: M }}>{r.paia}</div>
-            <button onClick={() => doDelete(r)} aria-label="Elimina riga" style={{ background: "#FEE2E2", color: RED, border: "none", borderRadius: 8, width: 34, height: 34, cursor: "pointer", fontSize: 14 }}>🗑</button>
+            <button onClick={() => removeRow(r.id)} aria-label="Elimina riga" style={{ background: "#FEE2E2", color: RED, border: "none", borderRadius: 8, width: 34, height: 34, cursor: "pointer", fontSize: 14 }}>🗑</button>
           </div>
         ))}
       </div>
-      {rows.length > 0 && <div style={{ fontSize: 11, color: T3, marginTop: 6 }}>Tocca una riga per modificarla.</div>}
+      {draft.length > 0 && <div style={{ fontSize: 11, color: T3, marginTop: 6 }}>Tocca una riga per modificarla.</div>}
+
+      <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 8, background: status.bg, color: status.color, borderRadius: 10, padding: "9px 12px", fontSize: 13, fontWeight: 700 }}>
+        <span style={{ width: 8, height: 8, borderRadius: "50%", background: status.color }} />
+        {status.text}
+      </div>
+      <Btn color={canSave ? ACC : BRD} textColor={canSave ? "#fff" : T3} style={{ marginTop: 10, padding: 16, fontSize: 15, cursor: canSave ? "pointer" : "default" }} onClick={() => { if (canSave && saveState !== "saving") doSave(); }}>
+        {saveState === "saving" ? "Salvataggio…" : canSave ? "Salva giacenza" : "Giacenza salvata"}
+      </Btn>
+      {dirty && <Btn color={BG} textColor={T2} style={{ marginTop: 8 }} onClick={discard}>Annulla modifiche</Btn>}
+      {saveState === "err" && <div style={{ marginTop: 8, fontSize: 13, fontWeight: 700, color: RED }}>Non salvata: controlla la connessione e riprova.</div>}
 
       {savedDays.length > 0 && (
-        <div style={{ marginTop: 22 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: T2, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>Venerdì già inseriti</div>
+        <div style={{ marginTop: 24 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: T2, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>Venerdì già salvati</div>
           <div style={{ background: S0, border: `1px solid ${BRD}`, borderRadius: 12 }}>
             {savedDays.map((d, i) => {
-              const rs = Object.values(giac[d] || {});
+              const rs = Object.entries(giac[d] || {}).filter(([k]) => k !== "_meta").map(([, r]) => r);
               const tot = rs.reduce((s, r) => s + (+r.paia || 0), 0);
               return (
                 <button key={d} onClick={() => changeDay(d)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 44, padding: "0 14px", background: d === day ? ML : "none", border: "none", borderTop: i ? `1px solid ${BRD}` : "none", cursor: "pointer", fontFamily: FONT, fontSize: 14, color: TXT }}>
                   <span>{fmtD(d)}</span>
-                  <span style={{ fontFamily: MONO, fontWeight: 700, color: M }}>{rs.length} righe · {tot} paia</span>
+                  <span style={{ fontFamily: MONO, fontWeight: 700, color: M }}>{rs.length} {rs.length === 1 ? "riga" : "righe"} · {tot} paia</span>
                 </button>
               );
             })}
