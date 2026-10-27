@@ -1855,6 +1855,93 @@ function manSum(v) {
 }
 const manRowTot = (r) => MAN_STAGES.reduce((s, st) => s + (manSum(r.q?.[st.k]) || 0), 0);
 
+// Excel del giorno, stesso schema del modello (cliente / modello / colore + 14 fasi + totali).
+// Le somme scritte nell'app (es. 17+11) restano formule. exceljs si carica solo quando serve.
+async function exportManoviaXlsx(day, rows) {
+  const ExcelJS = (await import("exceljs")).default;
+  const d = new Date(day + "T12:00:00");
+  const giorno = d.toLocaleDateString("it-IT", { weekday: "long" });
+  const dd = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getFullYear()).slice(2)}`;
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+  const week = Math.ceil(((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / 864e5 + 1) / 7);
+  const heads = ["Cliente", "Modello", "Colore", "Inscatolate", "Controllate", "Inguarnite", "Scorta sott.", "Scorta no sott.", "ATTESA", "Sformate non inchiodate", "Suolate non inchiodate", "Smerigliate non suolate", "Calzerate non smerigliate", "Montate non calzerate", "Caricate Non Montate", "Da caricare", "Rip.sala comitato"];
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet(day.split("-").reverse().join("."), { views: [{ state: "frozen", xSplit: 3, ySplit: 3 }], pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
+  const line = { style: "thin", color: { argb: "FF999999" } };
+  const box = { top: line, left: line, bottom: line, right: line };
+  ws.mergeCells("A1:Q1");
+  ws.getCell("A1").value = `${giorno.charAt(0).toUpperCase() + giorno.slice(1)} ${dd} (SITUAZIONE H. 17:00)`;
+  ws.getCell("A1").font = { bold: true, size: 14 };
+  ws.getCell("A1").alignment = { horizontal: "center" };
+  ws.mergeCells("A2:Q2");
+  ws.getCell("A2").value = `W ${String(week).padStart(2, "0")}`;
+  ws.getCell("A2").font = { bold: true };
+  ws.getCell("A2").alignment = { horizontal: "center" };
+  heads.forEach((h, i) => {
+    const c = ws.getCell(3, i + 1);
+    c.value = h;
+    c.font = { bold: true };
+    c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDDE3F5" } };
+    c.alignment = { wrapText: true, horizontal: "center", vertical: "middle" };
+    c.border = box;
+  });
+  ws.getRow(3).height = 45;
+  // righe raggruppate per cliente (ordine di inserimento)
+  const groups = [];
+  rows.forEach((r) => {
+    let g = groups.find((x) => x.cliente === (r.cliente || ""));
+    if (!g) { g = { cliente: r.cliente || "", rows: [] }; groups.push(g); }
+    g.rows.push(r);
+  });
+  let rn = 4;
+  groups.forEach((g) => {
+    const start = rn;
+    g.rows.forEach((r) => {
+      ws.getCell(rn, 2).value = r.modello || "";
+      ws.getCell(rn, 3).value = r.colore || "";
+      MAN_STAGES.forEach((st, j) => {
+        const raw = String(r.q?.[st.k] ?? "").trim().replace(/^=/, "");
+        if (!raw || manSum(raw) === 0) return;
+        ws.getCell(rn, 4 + j).value = raw.includes("+") ? { formula: raw.replace(/\s+/g, ""), result: manSum(raw) } : manSum(raw);
+      });
+      for (let c = 1; c <= 17; c++) ws.getCell(rn, c).border = box;
+      rn++;
+    });
+    ws.getCell(start, 1).value = g.cliente;
+    ws.getCell(start, 1).font = { bold: true };
+    ws.getCell(start, 1).alignment = { vertical: "middle" };
+    if (rn - 1 > start) ws.mergeCells(start, 1, rn - 1, 1);
+  });
+  ws.getCell(rn, 1).value = "TOTALI";
+  for (let c = 1; c <= 17; c++) {
+    const cell = ws.getCell(rn, c);
+    cell.font = { bold: true };
+    cell.border = box;
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } };
+  }
+  MAN_STAGES.forEach((st, j) => {
+    const col = 4 + j;
+    const L = ws.getColumn(col).letter;
+    ws.getCell(rn, col).value = { formula: `SUM(${L}4:${L}${rn - 1})`, result: rows.reduce((s, r) => s + (manSum(r.q?.[st.k]) || 0), 0) };
+  });
+  [14, 18, 16, ...Array(14).fill(11)].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+  const buf = await wb.xlsx.writeBuffer();
+  const filename = `manovia_${day}.xlsx`;
+  const type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  const file = new File([buf], filename, { type, lastModified: Date.now() });
+  const shareData = { files: [file], title: `Manovia ${dd}` };
+  // Su telefono si apre il menu di condivisione (WhatsApp, mail…); su PC si scarica il file
+  if (window.isSecureContext && typeof navigator.share === "function" && typeof navigator.canShare === "function" && navigator.canShare(shareData)) {
+    try { await navigator.share(shareData); return; } catch (e) { if (e && e.name === "AbortError") return; }
+  }
+  const url = URL.createObjectURL(new Blob([buf], { type }));
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
 function ManoviaTab({ man, saveManDay }) {
   const [day, setDay] = useState(() => todayStr());
   const [draft, setDraft] = useState([]);
@@ -1867,6 +1954,7 @@ function ManoviaTab({ man, saveManDay }) {
   const [err, setErr] = useState("");
   const [saveState, setSaveState] = useState("idle");
   const formRef = useRef(null);
+  const [exporting, setExporting] = useState(false);
 
   const node = man[day];
   const exists = node !== undefined;
@@ -1955,6 +2043,13 @@ function ManoviaTab({ man, saveManDay }) {
     const t = Date.now();
     setDraft(base.map((r, i) => ({ id: uid(), ts: t + i, cliente: r.cliente || "", modello: r.modello || "", colore: r.colore || "", q: keepQty ? { ...(r.q || {}) } : {} })));
     setDirty(true); setSaveState("idle");
+  };
+
+  const doExport = async () => {
+    setExporting(true);
+    try { await exportManoviaXlsx(day, draft); }
+    catch (e) { console.error(e); setErr("Export non riuscito: " + e.message); }
+    finally { setExporting(false); }
   };
 
   const doSave = async () => {
@@ -2076,6 +2171,12 @@ function ManoviaTab({ man, saveManDay }) {
       </Btn>
       {dirty && <Btn color={BG} textColor={T2} style={{ marginTop: 8 }} onClick={discard}>Annulla modifiche</Btn>}
       {saveState === "err" && <div style={{ marginTop: 8, fontSize: 13, fontWeight: 700, color: RED }}>Non salvata: controlla la connessione e riprova.</div>}
+      {draft.length > 0 && (
+        <Btn color={GRN} style={{ marginTop: 8, padding: 15, fontSize: 15 }} onClick={() => { if (!exporting) doExport(); }}>
+          {exporting ? "Preparazione file…" : `📊 Esporta Excel · ${fmtD(day)}`}
+        </Btn>
+      )}
+      {err && !formHasText && <div style={{ marginTop: 8, fontSize: 13, fontWeight: 700, color: RED }}>{err}</div>}
 
       {savedDays.length > 0 && (
         <div style={{ marginTop: 24 }}>
