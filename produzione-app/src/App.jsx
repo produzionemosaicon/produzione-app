@@ -799,26 +799,22 @@ export default function App() {
             onAddSt={(brand, afterId) => { setAddModal({ brand, afterId }); setAddName(""); setAddPosition(afterId || ""); }}
           />
         )}
-        {["storico", "analisi", "taglio", "setting"].includes(tab) && (
-          <div style={wide ? { maxWidth: 900, margin: "0 auto" } : undefined}>
         {tab === "storico" && (
-          <StoricoTab reports={reports} stations={stations} onOpen={(d) => { setDate(d); setTab("foglio"); }} onDelete={deleteReportDay} />
+          <StoricoTab wide={wide} reports={reports} stations={stations} onOpen={(d) => { setDate(d); setTab("foglio"); }} onDelete={deleteReportDay} />
         )}
         {tab === "analisi" && (
           <AnalisiTab
-            stations={stations} anBrands={anBrands} toggleBrand={toggleBrand}
+            wide={wide} stations={stations} anBrands={anBrands} toggleBrand={toggleBrand}
             anSids={anSids} toggleStation={toggleStation}
             anFrom={anFrom} setAnFrom={setAnFrom} anTo={anTo} setAnTo={setAnTo}
             anRes={anRes} run={runAnalysis} onShare={shareAnalysisPdf}
           />
         )}
         {tab === "taglio" && (
-          <TaglioTab date={date} tg={tg} saveTg={saveTg} onOpen={(d) => setDate(d)} />
+          <TaglioTab wide={wide} date={date} tg={tg} saveTg={saveTg} onOpen={(d) => setDate(d)} />
         )}
         {tab === "setting" && (
-          <SettingsTab stations={stations} goals={goals} saveGoal={saveGoal} />
-        )}
-          </div>
+          <SettingsTab wide={wide} stations={stations} goals={goals} saveGoal={saveGoal} />
         )}
         <div style={{ display: tab === "giacenza" ? "block" : "none" }}>
           <GiacenzaTab giac={giac} saveGiacDay={saveGiacDay} wide={wide} />
@@ -1124,7 +1120,7 @@ function FoglioTab({ wide, stations, getV, getN, openCell, savedKeys, onEditSt, 
 }
 
 /* ═══ STORICO TAB ═══ */
-function StoricoTab({ reports, stations, onOpen, onDelete }) {
+function StoricoTab({ wide, reports, stations, onOpen, onDelete }) {
   const sorted = useMemo(
     () => Object.keys(reports).filter((k) => reports[k]._meta).sort((a, b) => b.localeCompare(a)),
     [reports]
@@ -1139,7 +1135,7 @@ function StoricoTab({ reports, stations, onOpen, onDelete }) {
     );
   }
   return (
-    <div style={{ fontFamily:FONT }}>
+    <div style={wide ? { fontFamily:FONT, display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(420px, 1fr))", gap:12, padding:14, alignItems:"start" } : { fontFamily:FONT }}>
       {sorted.map((d, idx) => {
         const rDay = reports[d];
         const mPack = (() => { const sid = getPackingStationId("MOSAICON", stations); return sid ? getNumericCell(rDay, "MOSAICON", sid, "17:00") : null; })();
@@ -1149,7 +1145,7 @@ function StoricoTab({ reports, stations, onOpen, onDelete }) {
         ).length;
         const dt = new Date(d + "T12:00:00");
         return (
-          <div key={d} style={{ display:"flex", alignItems:"center", gap:14, padding:"13px 16px", background: idx%2===0 ? S0 : S1, borderBottom:`1px solid ${BRD}`, width:"100%", textAlign:"left", fontFamily:FONT }}>
+          <div key={d} style={{ display:"flex", alignItems:"center", gap:14, padding:"13px 16px", background: idx%2===0 || wide ? S0 : S1, borderBottom:`1px solid ${BRD}`, width:"100%", textAlign:"left", fontFamily:FONT, ...(wide ? { border:`1px solid ${BRD}`, borderRadius:14, boxSizing:"border-box" } : null) }}>
             <div style={{ flexShrink:0, textAlign:"center", width:36 }}>
               <div style={{ fontFamily:MONO, fontSize:22, fontWeight:800, color:M, lineHeight:1 }}>{String(dt.getDate()).padStart(2,"0")}</div>
               <div style={{ fontSize:8, fontWeight:700, color:T3, letterSpacing:"0.06em", textTransform:"uppercase" }}>{dt.toLocaleDateString("it-IT",{month:"short"})}</div>
@@ -1175,11 +1171,11 @@ function StoricoTab({ reports, stations, onOpen, onDelete }) {
 }
 
 /* ═══ ANALISI TAB ═══ */
-function AnalisiTab({ stations, anBrands, toggleBrand, anSids, toggleStation, anFrom, setAnFrom, anTo, setAnTo, anRes, run, onShare }) {
+function AnalisiTab({ wide, stations, anBrands, toggleBrand, anSids, toggleStation, anFrom, setAnFrom, anTo, setAnTo, anRes, run, onShare }) {
   const activeBrands = Object.entries(anBrands).filter(([, ok]) => ok).map(([b]) => b);
   return (
-    <div style={{ fontFamily:FONT }}>
-      <div style={{ background:S0, borderBottom:`1px solid ${BRD}`, padding:"14px 14px 16px" }}>
+    <div style={wide ? { fontFamily:FONT, display:"grid", gridTemplateColumns:"minmax(380px, 480px) minmax(0, 1fr)", alignItems:"start", gap:0 } : { fontFamily:FONT }}>
+      <div style={{ background:S0, borderBottom:`1px solid ${BRD}`, padding:"14px 14px 16px", ...(wide ? { borderRight:`1px solid ${BRD}`, minHeight:"calc(100dvh - 110px)" } : null) }}>
         <div style={{ fontSize:10, fontWeight:700, color:T3, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:12 }}>Filtri analisi</div>
         <div style={{ marginBottom:12 }}>
           <div style={{ fontSize:9, fontWeight:700, color:T2, marginBottom:8, letterSpacing:"0.08em", textTransform:"uppercase" }}>Brand</div>
@@ -1228,6 +1224,13 @@ function AnalisiTab({ stations, anBrands, toggleBrand, anSids, toggleStation, an
           <button onClick={onShare} style={{ flex:1, padding:13, background:"#25D366", color:"#fff", border:"none", borderRadius:12, fontSize:14, fontWeight:800, cursor:"pointer", fontFamily:FONT }}>📤 PDF</button>
         </div>
       </div>
+      {wide && !anRes && (
+        <div style={{ padding:40, textAlign:"center", color:T3 }}>
+          <div style={{ fontSize:42, marginBottom:10 }}>📊</div>
+          <div style={{ fontSize:15, fontWeight:700, color:TXT }}>Scegli i filtri a sinistra</div>
+          <div style={{ fontSize:12, marginTop:6 }}>Poi premi «Analizza»: qui compaiono totali, andamento e dettaglio giornaliero.</div>
+        </div>
+      )}
       {anRes && (
         <div style={{ padding:14 }}>
           {anRes.empty ? (
@@ -1243,7 +1246,7 @@ function AnalisiTab({ stations, anBrands, toggleBrand, anSids, toggleStation, an
                 <div style={{ fontSize:16, fontWeight:800, color:TXT }}>Analisi aggregata</div>
                 <div style={{ fontSize:10, color:T2, marginTop:2, fontFamily:MONO }}>{fmtD(anRes.from)} → {fmtD(anRes.to)} · {anRes.days} gg</div>
               </div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
+              <div style={{ display:"grid", gridTemplateColumns: wide ? "repeat(4, minmax(0, 1fr))" : "1fr 1fr", gap:10, marginBottom:14 }}>
                 <KpiSmall label="Totale periodo" value={anRes.total} color={M} sub={`in ${anRes.days} giorni`} />
                 <KpiSmall label="Media giornaliera" value={anRes.avg} color={M} sub="paia/giorno" />
                 <KpiSmall label="Giorno migliore" value={anRes.max} color={GRN} sub={fmtD(anRes.maxDay?.date)} arrow="▲" />
@@ -1264,7 +1267,7 @@ function AnalisiTab({ stations, anBrands, toggleBrand, anSids, toggleStation, an
               </div>
               <div style={{ background:S0, border:`1px solid ${BRD}`, borderRadius:14, padding:"14px 6px 10px", marginBottom:14 }}>
                 <div style={{ fontSize:10, fontWeight:700, color:T2, paddingLeft:10, marginBottom:10 }}>Andamento totale aggregato</div>
-                <ResponsiveContainer width="100%" height={180}>
+                <ResponsiveContainer width="100%" height={wide ? 280 : 180}>
                   <LineChart data={anRes.totalPts} margin={{ top:4, right:14, left:0, bottom:0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={BRD} />
                     <XAxis dataKey="label" tick={{ fontSize:8, fill:T3, fontFamily:MONO }} interval="preserveStartEnd" />
@@ -1514,7 +1517,7 @@ function PrintAnalysisDoc({ anRes }) {
 }
 
 /* ═══ MODAL ═══ */
-function TaglioTab({ date, tg, saveTg, onOpen }) {
+function TaglioTab({ wide, date, tg, saveTg, onOpen }) {
   const cur = tg[date] || {};
   const [taglio, setTaglio] = useState("");
   const [giunteria, setGiunteria] = useState("");
@@ -1569,6 +1572,8 @@ function TaglioTab({ date, tg, saveTg, onOpen }) {
       <div style={{ fontSize:18, fontWeight:800, color:TXT }}>Taglio e giunteria</div>
       <div style={{ fontSize:12, color:T2, marginBottom:16 }}>Paia del giorno {fmtD(date)}. Cambia la data in alto per correggere un altro giorno.</div>
 
+      <div style={wide ? { display:"grid", gridTemplateColumns:"minmax(0, 520px) minmax(0, 1fr)", gap:32, alignItems:"start" } : undefined}>
+      <div>
       {field("Taglio · paia del giorno", taglio, setTaglio, M)}
       {field("Giunteria · paia del giorno", giunteria, setGiunteria, E)}
 
@@ -1587,7 +1592,9 @@ function TaglioTab({ date, tg, saveTg, onOpen }) {
       {state === "ok" && <div style={{ marginTop:8, fontSize:13, fontWeight:700, color:GRN }}>Salvato.</div>}
       {state === "err" && <div style={{ marginTop:8, fontSize:13, fontWeight:700, color:RED }}>Non salvato: riprova o avvisa Stefano.</div>}
 
-      <div style={{ marginTop:22, fontSize:10, fontWeight:700, color:T2, letterSpacing:"0.1em", textTransform:"uppercase" }}>Ultimi giorni (tocca per correggere)</div>
+      </div>
+      <div>
+      <div style={{ marginTop: wide ? 0 : 22, fontSize:10, fontWeight:700, color:T2, letterSpacing:"0.1em", textTransform:"uppercase" }}>Ultimi giorni (tocca per correggere)</div>
       <div style={{ background:S0, border:`1px solid ${BRD}`, borderRadius:12, marginTop:8 }}>
         {days.length === 0 && <div style={{ padding:14, fontSize:13, color:T3 }}>Nessun dato inserito.</div>}
         {days.map((d, i) => (
@@ -1603,6 +1610,8 @@ function TaglioTab({ date, tg, saveTg, onOpen }) {
       <button onClick={copyAll} style={{ marginTop:18, background:"none", border:`1px solid ${BRD2}`, borderRadius:10, padding:"10px 14px", fontFamily:FONT, fontSize:12, fontWeight:700, color:T2, cursor:"pointer" }}>
         {copied ? "Copiato" : "Copia tutti i dati"}
       </button>
+      </div>
+      </div>
     </div>
   );
 }
@@ -2251,7 +2260,7 @@ function ManoviaTab({ man, saveManDay, wide }) {
 }
 
 /* ═══ SETTINGS TAB (obiettivi giornalieri) ═══ */
-function SettingsTab({ stations, goals, saveGoal }) {
+function SettingsTab({ wide, stations, goals, saveGoal }) {
   const [localGoals, setLocalGoals] = useState({});
 
   useEffect(() => {
@@ -2265,6 +2274,7 @@ function SettingsTab({ stations, goals, saveGoal }) {
         <div style={{ fontSize: 12, color: T2 }}>Imposta il target di paia al giorno per ogni stazione. Apparirà nel PDF come x/obiettivo per ogni orario.</div>
       </div>
 
+      <div style={wide ? { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 20, alignItems: "start" } : undefined}>
       {["MOSAICON", "EMOS"].map((brand) => (
         <div key={brand} style={{ marginBottom: 20, background: S0, borderRadius: 16, border: `1px solid ${BRD}`, overflow: "hidden", boxShadow: "0 2px 10px rgba(13,27,42,0.05)" }}>
           <div style={{ padding: "12px 16px", background: bl(brand), borderBottom: `2px solid ${bc(brand)}`, borderLeft: `5px solid ${bc(brand)}` }}>
@@ -2300,6 +2310,7 @@ function SettingsTab({ stations, goals, saveGoal }) {
           })}
         </div>
       ))}
+      </div>
     </div>
   );
 }
