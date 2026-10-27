@@ -32,6 +32,18 @@ const TABS = [
   { id: "setting",  icon: "⚙️", label: "Setting" },
 ];
 
+/* Schermo largo (PC): l'app usa tutta la larghezza invece della colonna da telefono */
+const WIDE_MIN = 1100;
+function useWide() {
+  const [wide, setWide] = useState(() => typeof window !== "undefined" && window.innerWidth >= WIDE_MIN);
+  useEffect(() => {
+    const h = () => setWide(window.innerWidth >= WIDE_MIN);
+    window.addEventListener("resize", h);
+    return () => window.removeEventListener("resize", h);
+  }, []);
+  return wide;
+}
+
 const bc = (b) => (b === "MOSAICON" ? M : E);
 const bl = (b) => (b === "MOSAICON" ? ML : EL);
 
@@ -205,6 +217,7 @@ function pageSliceEnd(start, pageHeightPx, totalHeight, breaks) {
 
 /* ═══ APP ROOT ═══ */
 export default function App() {
+  const wide = useWide();
   const [tab, setTab] = useState("home");
   const [date, setDate] = useState(() => todayStr());
   const [stations, setStations] = useState(DEF_STATIONS);
@@ -718,7 +731,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ maxWidth:900, margin:"0 auto", minHeight:"100dvh", display:"flex", flexDirection:"column", background:BG, fontFamily:FONT }}>
+    <div style={{ maxWidth: wide ? 1560 : 900, margin:"0 auto", minHeight:"100dvh", display:"flex", flexDirection:"column", background:BG, fontFamily:FONT }}>
       <style>{`
         @keyframes cellFlash { 0%{background:rgba(0,184,122,0)} 30%{background:rgba(0,184,122,0.25)} 100%{background:rgba(0,184,122,0)} }
         .cell-flash { animation: cellFlash 1.5s ease-out forwards; }
@@ -759,7 +772,7 @@ export default function App() {
         </div>
       </div>
 
-      <div className="no-print" style={{ background:S0, borderBottom:`1px solid ${BRD}`, padding:"8px 10px", display:"grid", gridTemplateColumns:"repeat(4, minmax(0, 1fr))", gap:6, flexShrink:0, boxShadow:"0 2px 10px rgba(13,27,42,0.05)" }}>
+      <div className="no-print" style={{ background:S0, borderBottom:`1px solid ${BRD}`, padding:"8px 10px", display:"grid", gridTemplateColumns: wide ? `repeat(${TABS.length}, minmax(0, 1fr))` : "repeat(4, minmax(0, 1fr))", gap:6, flexShrink:0, boxShadow:"0 2px 10px rgba(13,27,42,0.05)" }}>
         {TABS.map(({ id, icon, label }) => {
           const on = tab === id;
           return (
@@ -777,15 +790,17 @@ export default function App() {
       </div>
       <div className="no-print" style={{ flex:1, overflowY:"auto" }}>
         {tab === "home" && (
-          <HomeTab date={date} reports={reports} stations={stations} onGoFoglio={() => setTab("foglio")} />
+          <HomeTab date={date} reports={reports} stations={stations} onGoFoglio={() => setTab("foglio")} wide={wide} />
         )}
         {tab === "foglio" && (
           <FoglioTab
-            stations={stations} getV={getV} getN={getN} openCell={openCell} savedKeys={savedKeys}
+            wide={wide} stations={stations} getV={getV} getN={getN} openCell={openCell} savedKeys={savedKeys}
             onEditSt={(brand, st) => { setStModal({ brand, st }); setStNewName(st.name); }}
             onAddSt={(brand, afterId) => { setAddModal({ brand, afterId }); setAddName(""); setAddPosition(afterId || ""); }}
           />
         )}
+        {["storico", "analisi", "taglio", "setting"].includes(tab) && (
+          <div style={wide ? { maxWidth: 900, margin: "0 auto" } : undefined}>
         {tab === "storico" && (
           <StoricoTab reports={reports} stations={stations} onOpen={(d) => { setDate(d); setTab("foglio"); }} onDelete={deleteReportDay} />
         )}
@@ -803,11 +818,13 @@ export default function App() {
         {tab === "setting" && (
           <SettingsTab stations={stations} goals={goals} saveGoal={saveGoal} />
         )}
+          </div>
+        )}
         <div style={{ display: tab === "giacenza" ? "block" : "none" }}>
-          <GiacenzaTab giac={giac} saveGiacDay={saveGiacDay} />
+          <GiacenzaTab giac={giac} saveGiacDay={saveGiacDay} wide={wide} />
         </div>
         <div style={{ display: tab === "manovia" ? "block" : "none" }}>
-          <ManoviaTab man={man} saveManDay={saveManDay} />
+          <ManoviaTab man={man} saveManDay={saveManDay} wide={wide} />
         </div>
       </div>
 
@@ -898,7 +915,7 @@ export default function App() {
 }
 
 /* ═══ HOME TAB ═══ */
-function HomeTab({ date, reports, stations, onGoFoglio }) {
+function HomeTab({ date, reports, stations, onGoFoglio, wide }) {
   const getPacking17 = (rDay, brand) => {
     const sid = getPackingStationId(brand, stations);
     return sid ? getNumericCell(rDay, brand, sid, "17:00") : null;
@@ -985,6 +1002,7 @@ function HomeTab({ date, reports, stations, onGoFoglio }) {
         </div>
       </div>
 
+      <div style={wide ? { display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.5fr)", gap: 14, alignItems: "stretch" } : undefined}>
       <div style={{ ...card, padding: "20px 20px 22px", marginBottom: 14 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: T2 }}>Paia inscatolate alle 17:00</div>
         <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginTop: 6, flexWrap: "wrap" }}>
@@ -1030,6 +1048,8 @@ function HomeTab({ date, reports, stations, onGoFoglio }) {
         </ResponsiveContainer>
       </div>
 
+      </div>
+
       <button
         onClick={onGoFoglio}
         style={{ width: "100%", background: ACC, color: "#fff", border: "none", borderRadius: 16, padding: "17px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", fontFamily: FONT, fontSize: 16, fontWeight: 800, boxShadow: "0 8px 20px rgba(255,82,0,0.28)" }}
@@ -1042,11 +1062,11 @@ function HomeTab({ date, reports, stations, onGoFoglio }) {
 }
 
 /* ═══ FOGLIO TAB ═══ */
-function FoglioTab({ stations, getV, getN, openCell, savedKeys, onEditSt, onAddSt }) {
+function FoglioTab({ wide, stations, getV, getN, openCell, savedKeys, onEditSt, onAddSt }) {
   return (
-    <div>
+    <div style={wide ? { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 20, alignItems: "start", padding: "0 14px" } : undefined}>
       {["MOSAICON", "EMOS"].map((brand) => (
-        <div key={brand} style={{ marginTop: brand === "EMOS" ? 16 : 0 }}>
+        <div key={brand} style={{ marginTop: brand === "EMOS" && !wide ? 16 : 0 }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 16px", background:bl(brand), borderBottom:`2px solid ${bc(brand)}`, borderLeft:`5px solid ${bc(brand)}`, position:"sticky", top:0, zIndex:10 }}>
             <span style={{ fontSize:17, fontWeight:900, color:bc(brand), letterSpacing:"0.12em" }}>{brand}</span>
             <span style={{ fontFamily:MONO, fontSize:13, fontWeight:800, background:`${bc(brand)}20`, color:bc(brand), padding:"4px 14px", borderRadius:20 }}>
@@ -1619,7 +1639,7 @@ function KpiSmall({ label, value, color, sub, arrow }) {
 }
 
 /* ═══ GIACENZA DEL VENERDÌ SERA ═══ */
-function GiacenzaTab({ giac, saveGiacDay }) {
+function GiacenzaTab({ giac, saveGiacDay, wide }) {
   const [day, setDay] = useState(() => lastFridayStr());
   const [draft, setDraft] = useState([]);
   const [dirty, setDirty] = useState(false);
@@ -1750,6 +1770,8 @@ function GiacenzaTab({ giac, saveGiacDay }) {
       <div style={{ fontSize: 18, fontWeight: 900, color: TXT, marginBottom: 4 }}>Giacenza del venerdì sera</div>
       <div style={{ fontSize: 12, color: T2, marginBottom: 14 }}>Aggiungi una riga per ogni articolo e ordine rimasto in giacenza, poi premi «Salva giacenza».</div>
 
+      <div style={wide ? { display: "grid", gridTemplateColumns: "minmax(0, 420px) minmax(0, 1fr)", gap: 24, alignItems: "start" } : undefined}>
+      <div>
       <div style={{ marginBottom: 14 }}>
         {label("Venerdì di riferimento")}
         <input type="date" value={day} onChange={(e) => e.target.value && changeDay(e.target.value)} style={{ ...inputStyle, fontFamily: MONO, fontWeight: 700 }} />
@@ -1779,6 +1801,8 @@ function GiacenzaTab({ giac, saveGiacDay }) {
         {(editId || formHasText) && <Btn color={BG} textColor={T2} style={{ marginTop: 8 }} onClick={resetForm}>{editId ? "Annulla modifica" : "Svuota i campi"}</Btn>}
       </div>
 
+      </div>
+      <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: T2, letterSpacing: "0.1em", textTransform: "uppercase" }}>Giacenza del {fmtD(day)}</div>
         <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: TXT }}>{draft.length} {draft.length === 1 ? "riga" : "righe"} · {totale} paia</div>
@@ -1825,6 +1849,8 @@ function GiacenzaTab({ giac, saveGiacDay }) {
           </div>
         </div>
       )}
+      </div>
+      </div>
     </div>
   );
 }
@@ -1975,7 +2001,7 @@ async function exportManoviaXlsx(day, draft) {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
-function ManoviaTab({ man, saveManDay }) {
+function ManoviaTab({ man, saveManDay, wide }) {
   const [day, setDay] = useState(() => todayStr());
   const [draft, setDraft] = useState({ art: [], cli: [] });
   const [dirty, setDirty] = useState(false);
@@ -2109,7 +2135,7 @@ function ManoviaTab({ man, saveManDay }) {
               <tr>
                 <th style={{ ...stickyBase, zIndex: 3, background: ML, minWidth: 150, textAlign: "left", padding: "8px 10px", fontSize: 11, color: T2, ...cellB }}>Cliente</th>
                 {MAN_COLS.map((c) => (
-                  <th key={c.k} style={{ background: c.calc ? S2 : ML, width: c.text ? 92 : 78, minWidth: c.text ? 92 : 78, padding: "8px 4px", fontSize: 10, lineHeight: 1.2, color: T2, textAlign: "center", ...cellB }}>{sec.variant && c.l2 ? c.l2 : c.l}</th>
+                  <th key={c.k} style={{ background: c.calc ? S2 : ML, width: c.text ? (wide ? 84 : 92) : (wide ? 62 : 78), minWidth: c.text ? (wide ? 84 : 92) : (wide ? 62 : 78), padding: "8px 4px", fontSize: 10, lineHeight: 1.2, color: T2, textAlign: "center", ...cellB }}>{sec.variant && c.l2 ? c.l2 : c.l}</th>
                 ))}
               </tr>
             </thead>
