@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { Fragment, useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -1955,6 +1955,8 @@ function ManoviaTab({ man, saveManDay }) {
   const [saveState, setSaveState] = useState("idle");
   const formRef = useRef(null);
   const [exporting, setExporting] = useState(false);
+  // Su schermi larghi (PC/tablet) si parte dalla tabella, su telefono dalle schede
+  const [view, setView] = useState(() => (typeof window !== "undefined" && window.innerWidth >= 700 ? "tabella" : "schede"));
 
   const node = man[day];
   const exists = node !== undefined;
@@ -2027,6 +2029,11 @@ function ManoviaTab({ man, saveManDay }) {
     setQ({ ...(r.q || {}) }); setErr("");
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 30);
   };
+  const setCell = (id, k, v) => {
+    setDraft((p) => p.map((r) => (r.id === id ? { ...r, q: { ...(r.q || {}), [k]: v } } : r)));
+    setDirty(true);
+    setSaveState("idle");
+  };
   const removeRow = (id) => {
     setDraft((p) => p.filter((r) => r.id !== id)); setDirty(true); setSaveState("idle");
     if (editId === id) resetForm();
@@ -2054,8 +2061,18 @@ function ManoviaTab({ man, saveManDay }) {
 
   const doSave = async () => {
     if (formHasText) return setErr("C'è una riga non ancora aggiunta: premi «Aggiungi riga» oppure svuota i campi.");
+    for (const r of draft) {
+      const st = MAN_STAGES.find((x) => Number.isNaN(manSum(r.q?.[x.k])));
+      if (st) return setErr(`${r.modello}${r.colore ? " " + r.colore : ""} · «${st.l}»: scrivi un numero o una somma, es. 17+11.`);
+    }
+    // tolgo le celle vuote o a zero prima di salvare
+    const clean = draft.map((r) => {
+      const q2 = {};
+      MAN_STAGES.forEach((x) => { const v = String(r.q?.[x.k] ?? "").trim().replace(/^=/, ""); if (v !== "" && manSum(v) !== 0) q2[x.k] = v.slice(0, 30); });
+      return { ...r, q: q2 };
+    });
     setErr(""); setSaveState("saving");
-    try { await saveManDay(day, draft); setDirty(false); setSaveState("ok"); }
+    try { await saveManDay(day, clean); setDirty(false); setSaveState("ok"); }
     catch (e) { console.error(e); setSaveState("err"); }
   };
 
@@ -2082,6 +2099,12 @@ function ManoviaTab({ man, saveManDay }) {
         <input type="date" value={day} onChange={(e) => e.target.value && changeDay(e.target.value)} style={{ ...inputStyle, fontFamily: MONO, fontWeight: 700 }} />
       </div>
 
+      <div style={{ display: "flex", gap: 6, background: S2, borderRadius: 12, padding: 4, marginBottom: 14 }}>
+        {[["tabella", "▦ Tabella"], ["schede", "☰ Schede"]].map(([v, t]) => (
+          <button key={v} onClick={() => setView(v)} style={{ flex: 1, border: "none", borderRadius: 9, padding: "10px 0", cursor: "pointer", fontFamily: FONT, fontSize: 14, fontWeight: 800, background: view === v ? S0 : "transparent", color: view === v ? ACC : T2, boxShadow: view === v ? "0 1px 4px rgba(13,27,42,0.12)" : "none" }}>{t}</button>
+        ))}
+      </div>
+
       {draft.length === 0 && prevDay && (
         <div style={{ background: ACL, borderRadius: 14, padding: 14, marginBottom: 14 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: TXT, marginBottom: 10 }}>Parti dal {fmtD(prevDay)} invece di ricominciare da zero.</div>
@@ -2090,6 +2113,86 @@ function ManoviaTab({ man, saveManDay }) {
         </div>
       )}
 
+      {view === "tabella" && (
+        <div>
+          <div style={{ background: S0, border: `1px solid ${BRD}`, borderRadius: 14, padding: 12, marginBottom: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: M, marginBottom: 8 }}>Nuova riga</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <input type="text" list="man-clienti" value={cliente} maxLength={40} onChange={(e) => setCliente(e.target.value)} placeholder="Cliente" style={{ ...inputStyle, flex: "1 1 120px", width: "auto", padding: "10px 12px" }} />
+              <input type="text" value={modello} maxLength={50} onChange={(e) => setModello(e.target.value)} placeholder="Modello" style={{ ...inputStyle, flex: "1 1 120px", width: "auto", padding: "10px 12px" }} />
+              <input type="text" value={colore} maxLength={40} onChange={(e) => setColore(e.target.value)} placeholder="Colore" style={{ ...inputStyle, flex: "1 1 100px", width: "auto", padding: "10px 12px" }} />
+              <button onClick={addOrUpdateRow} style={{ background: M, color: "#fff", border: "none", borderRadius: 12, padding: "0 18px", minHeight: 44, fontFamily: FONT, fontWeight: 800, fontSize: 14, cursor: "pointer" }}>+ Riga</button>
+            </div>
+            <datalist id="man-clienti">{clienti.map((c) => <option key={c} value={c} />)}</datalist>
+            {err && formHasText && <div style={{ fontSize: 12, fontWeight: 700, color: RED, marginTop: 8 }}>{err}</div>}
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: T2, letterSpacing: "0.1em", textTransform: "uppercase" }}>Situazione del {fmtD(day)}</div>
+            <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: TXT }}>{draft.length} {draft.length === 1 ? "riga" : "righe"} · {grand} paia</div>
+          </div>
+          {draft.length === 0 ? (
+            <div style={{ background: S0, border: `1px solid ${BRD}`, borderRadius: 12, padding: 14, fontSize: 13, color: T3 }}>Nessuna riga inserita per questo giorno.</div>
+          ) : (
+            <div style={{ overflowX: "auto", background: S0, border: `1px solid ${BRD}`, borderRadius: 12 }}>
+              <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 13, minWidth: "max-content" }}>
+                <thead>
+                  <tr>
+                    <th style={{ position: "sticky", left: 0, zIndex: 3, background: ML, minWidth: 150, textAlign: "left", padding: "8px 10px", fontSize: 11, color: T2, borderBottom: `1px solid ${BRD}`, borderRight: `1px solid ${BRD}` }}>Modello · Colore</th>
+                    {MAN_STAGES.map((st) => (
+                      <th key={st.k} style={{ background: ML, width: 78, minWidth: 78, padding: "8px 4px", fontSize: 10, lineHeight: 1.2, color: T2, textAlign: "center", borderBottom: `1px solid ${BRD}`, borderRight: `1px solid ${BRD}` }}>{st.l}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {groups.map((g) => (
+                    <Fragment key={g.cliente || "_"}>
+                      <tr>
+                        <td colSpan={MAN_STAGES.length + 1} style={{ background: S2, padding: 0, borderBottom: `1px solid ${BRD}` }}>
+                          <div style={{ position: "sticky", left: 0, width: "max-content", padding: "6px 10px", fontSize: 11, fontWeight: 800, color: T2, letterSpacing: "0.1em", textTransform: "uppercase" }}>{g.cliente || "Senza cliente"}</div>
+                        </td>
+                      </tr>
+                      {g.rows.map((r) => (
+                        <tr key={r.id}>
+                          <td style={{ position: "sticky", left: 0, zIndex: 1, background: S0, padding: "6px 8px 6px 10px", borderBottom: `1px solid ${BRD}`, borderRight: `1px solid ${BRD}` }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontWeight: 700, color: TXT, fontSize: 13 }}>{r.modello}</div>
+                                {r.colore && <div style={{ color: T2, fontSize: 12 }}>{r.colore}</div>}
+                              </div>
+                              <button onClick={() => removeRow(r.id)} aria-label="Elimina riga" style={{ background: "#FEE2E2", color: RED, border: "none", borderRadius: 6, width: 26, height: 26, cursor: "pointer", fontSize: 12, flexShrink: 0 }}>🗑</button>
+                            </div>
+                          </td>
+                          {MAN_STAGES.map((st) => {
+                            const v = r.q?.[st.k] ?? "";
+                            const bad = Number.isNaN(manSum(v));
+                            return (
+                              <td key={st.k} style={{ padding: 0, borderBottom: `1px solid ${BRD}`, borderRight: `1px solid ${BRD}`, background: bad ? "#FEE2E2" : "transparent" }}>
+                                <input type="text" inputMode="text" value={v} maxLength={30} onChange={(e) => setCell(r.id, st.k, e.target.value)} aria-label={`${r.modello} ${st.l}`}
+                                  style={{ width: "100%", boxSizing: "border-box", border: "none", background: "transparent", outline: "none", textAlign: "right", padding: "12px 8px", fontFamily: MONO, fontSize: 14, fontWeight: 700, color: bad ? RED : M }} />
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </Fragment>
+                  ))}
+                  <tr>
+                    <td style={{ position: "sticky", left: 0, zIndex: 1, background: ML, padding: "9px 10px", fontWeight: 800, fontSize: 12, color: TXT, borderRight: `1px solid ${BRD}` }}>TOTALI</td>
+                    {MAN_STAGES.map((st, i) => (
+                      <td key={st.k} style={{ background: ML, textAlign: "right", padding: "9px 8px", fontFamily: MONO, fontWeight: 800, fontSize: 14, color: totals[i] ? M : T3, borderRight: `1px solid ${BRD}` }}>{totals[i]}</td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+          {draft.length > 0 && <div style={{ fontSize: 11, color: T3, marginTop: 6 }}>Scrivi direttamente nelle celle; puoi usare somme come 17+11. Scorri di lato per vedere tutte le fasi.</div>}
+        </div>
+      )}
+
+      {view === "schede" && (
+        <>
       <div ref={formRef} style={{ background: S0, border: `1px solid ${BRD}`, borderRadius: 16, padding: 14, marginBottom: 16, boxShadow: "0 2px 10px rgba(13,27,42,0.05)" }}>
         <div style={{ fontSize: 12, fontWeight: 800, color: editId ? ACC : M, marginBottom: 12 }}>{editId ? "Modifica riga" : "Nuova riga"}</div>
         <div style={{ marginBottom: 12 }}>
@@ -2162,6 +2265,9 @@ function ManoviaTab({ man, saveManDay }) {
         </div>
       )}
 
+        </>
+      )}
+
       <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 8, background: status.bg, color: status.color, borderRadius: 10, padding: "9px 12px", fontSize: 13, fontWeight: 700 }}>
         <span style={{ width: 8, height: 8, borderRadius: "50%", background: status.color }} />
         {status.text}
@@ -2176,7 +2282,7 @@ function ManoviaTab({ man, saveManDay }) {
           {exporting ? "Preparazione file…" : `📊 Esporta Excel · ${fmtD(day)}`}
         </Btn>
       )}
-      {err && !formHasText && <div style={{ marginTop: 8, fontSize: 13, fontWeight: 700, color: RED }}>{err}</div>}
+      {err && view === "tabella" && !formHasText && <div style={{ marginTop: 8, fontSize: 13, fontWeight: 700, color: RED }}>{err}</div>}
 
       {savedDays.length > 0 && (
         <div style={{ marginTop: 24 }}>
