@@ -44,6 +44,18 @@ function useWide() {
   return wide;
 }
 
+/* Monitor grandi (27"): oltre ~1600 px tutto viene ingrandito, così testo e celle restano leggibili */
+const zoomFor = () => (typeof window === "undefined" ? 1 : Math.min(1.75, Math.max(1, window.innerWidth / 1500)));
+function useZoom() {
+  const [z, setZ] = useState(zoomFor);
+  useEffect(() => {
+    const h = () => setZ(zoomFor());
+    window.addEventListener("resize", h);
+    return () => window.removeEventListener("resize", h);
+  }, []);
+  return z;
+}
+
 const bc = (b) => (b === "MOSAICON" ? M : E);
 const bl = (b) => (b === "MOSAICON" ? ML : EL);
 
@@ -218,6 +230,8 @@ function pageSliceEnd(start, pageHeightPx, totalHeight, breaks) {
 /* ═══ APP ROOT ═══ */
 export default function App() {
   const wide = useWide();
+  const zoomRaw = useZoom();
+  const zoom = wide ? zoomRaw : 1;
   const [tab, setTab] = useState("home");
   const [date, setDate] = useState(() => todayStr());
   const [stations, setStations] = useState(DEF_STATIONS);
@@ -731,7 +745,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ maxWidth: wide ? 1560 : 900, margin:"0 auto", minHeight:"100dvh", display:"flex", flexDirection:"column", background:BG, fontFamily:FONT }}>
+    <div style={{ maxWidth: wide ? Math.floor(window.innerWidth / zoom) : 900, zoom: zoom > 1 ? zoom : undefined, margin:"0 auto", minHeight: zoom > 1 ? `${100 / zoom}dvh` : "100dvh", display:"flex", flexDirection:"column", background:BG, fontFamily:FONT }}>
       <style>{`
         @keyframes cellFlash { 0%{background:rgba(0,184,122,0)} 30%{background:rgba(0,184,122,0.25)} 100%{background:rgba(0,184,122,0)} }
         .cell-flash { animation: cellFlash 1.5s ease-out forwards; }
