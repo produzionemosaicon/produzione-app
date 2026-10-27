@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -28,6 +28,7 @@ const TABS = [
   { id: "analisi",  icon: "📊", label: "Analisi" },
   { id: "taglio",   icon: "✂️", label: "Taglio" },
   { id: "giacenza", icon: "📦", label: "Giacenza" },
+  { id: "manovia",  icon: "🔄", label: "Manovia" },
   { id: "setting",  icon: "⚙️", label: "Setting" },
 ];
 
@@ -242,6 +243,7 @@ export default function App() {
   const [goals, setGoals] = useState({});
   const [tg, setTg] = useState({});
   const [giac, setGiac] = useState({});
+  const [man, setMan] = useState({});
 
   useEffect(() => {
     return onValue(ref(db, "giacenze"), (snap) => {
@@ -262,6 +264,28 @@ export default function App() {
     });
     node._meta = { savedAt: Date.now() };
     await set(ref(db, `giacenze/${day}`), node);
+  }, []);
+
+  useEffect(() => {
+    return onValue(ref(db, "manovia"), (snap) => {
+      setMan(snap.exists() ? snap.val() : {});
+    });
+  }, []);
+
+  // Salva la situazione manovia di un giorno: sostituisce il nodo del giorno con le righe correnti
+  const saveManDay = useCallback(async (day, rows) => {
+    const node = {};
+    rows.forEach((r) => {
+      node[r.id] = {
+        cliente: (r.cliente || "").trim().slice(0, 40),
+        modello: (r.modello || "").trim().slice(0, 50),
+        colore: (r.colore || "").trim().slice(0, 40),
+        q: r.q || {},
+        ts: r.ts || Date.now(),
+      };
+    });
+    node._meta = { savedAt: Date.now() };
+    await set(ref(db, `manovia/${day}`), node);
   }, []);
 
   useEffect(() => {
@@ -779,6 +803,9 @@ export default function App() {
         )}
         <div style={{ display: tab === "giacenza" ? "block" : "none" }}>
           <GiacenzaTab giac={giac} saveGiacDay={saveGiacDay} />
+        </div>
+        <div style={{ display: tab === "manovia" ? "block" : "none" }}>
+          <ManoviaTab man={man} saveManDay={saveManDay} />
         </div>
       </div>
 
@@ -1786,6 +1813,277 @@ function GiacenzaTab({ giac, saveGiacDay }) {
             {savedDays.map((d, i) => {
               const rs = Object.entries(giac[d] || {}).filter(([k]) => k !== "_meta").map(([, r]) => r);
               const tot = rs.reduce((s, r) => s + (+r.paia || 0), 0);
+              return (
+                <button key={d} onClick={() => changeDay(d)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 44, padding: "0 14px", background: d === day ? ML : "none", border: "none", borderTop: i ? `1px solid ${BRD}` : "none", cursor: "pointer", fontFamily: FONT, fontSize: 14, color: TXT }}>
+                  <span>{fmtD(d)}</span>
+                  <span style={{ fontFamily: MONO, fontWeight: 700, color: M }}>{rs.length} {rs.length === 1 ? "riga" : "righe"} · {tot} paia</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══ MANOVIA – SITUAZIONE ORE 17:00 ═══ */
+// Fasi nell'ordine del modello Excel (colonne D→Q); le quantità si possono scrivere come somma: "17+11"
+const MAN_STAGES = [
+  { k: "insc", l: "Inscatolate" },
+  { k: "contr", l: "Controllate" },
+  { k: "ingu", l: "Inguarnite" },
+  { k: "scs", l: "Scorta sott." },
+  { k: "scn", l: "Scorta no sott." },
+  { k: "att", l: "Attesa" },
+  { k: "sfo", l: "Sformate non inchiodate" },
+  { k: "suo", l: "Suolate non inchiodate" },
+  { k: "sme", l: "Smerigliate non suolate" },
+  { k: "cal", l: "Calzerate non smerigliate" },
+  { k: "mon", l: "Montate non calzerate" },
+  { k: "car", l: "Caricate non montate" },
+  { k: "dac", l: "Da caricare" },
+  { k: "rip", l: "Rip. sala comitato" },
+];
+
+// "5 + 5", "=17+11", "12" → numero; vuoto → 0; testo non valido → NaN
+function manSum(v) {
+  const s = String(v ?? "").trim().replace(/^=/, "");
+  if (s === "") return 0;
+  if (!/^\d+(\s*\+\s*\d+)*$/.test(s)) return NaN;
+  return s.split("+").reduce((a, x) => a + parseInt(x, 10), 0);
+}
+const manRowTot = (r) => MAN_STAGES.reduce((s, st) => s + (manSum(r.q?.[st.k]) || 0), 0);
+
+function ManoviaTab({ man, saveManDay }) {
+  const [day, setDay] = useState(() => todayStr());
+  const [draft, setDraft] = useState([]);
+  const [dirty, setDirty] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [cliente, setCliente] = useState("");
+  const [modello, setModello] = useState("");
+  const [colore, setColore] = useState("");
+  const [q, setQ] = useState({});
+  const [err, setErr] = useState("");
+  const [saveState, setSaveState] = useState("idle");
+  const formRef = useRef(null);
+
+  const node = man[day];
+  const exists = node !== undefined;
+  const savedAt = node?._meta?.savedAt || null;
+  const toRows = (n) =>
+    Object.entries(n || {})
+      .filter(([k]) => k !== "_meta")
+      .map(([id, r]) => ({ id, ...r }))
+      .sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  const dbRows = useMemo(() => toRows(node), [node]);
+
+  useEffect(() => {
+    if (!dirty) setDraft(dbRows);
+  }, [dbRows, dirty]);
+
+  useEffect(() => {
+    if (!dirty) return undefined;
+    const h = (e) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", h);
+    return () => window.removeEventListener("beforeunload", h);
+  }, [dirty]);
+
+  const savedDays = Object.keys(man).sort().reverse();
+  const prevDay = savedDays.find((d) => d < day) || null;
+  const formHasText = cliente.trim() !== "" || modello.trim() !== "" || colore.trim() !== "" || Object.values(q).some((v) => String(v).trim() !== "");
+  const clienti = useMemo(() => {
+    const s = new Set();
+    draft.forEach((r) => r.cliente && s.add(r.cliente));
+    Object.values(man).forEach((n) => Object.entries(n || {}).forEach(([k, r]) => { if (k !== "_meta" && r.cliente) s.add(r.cliente); }));
+    return [...s].sort();
+  }, [draft, man]);
+
+  const totals = MAN_STAGES.map((st) => draft.reduce((s, r) => s + (manSum(r.q?.[st.k]) || 0), 0));
+  const grand = totals.reduce((a, b) => a + b, 0);
+
+  // Righe raggruppate per cliente, nell'ordine di inserimento
+  const groups = useMemo(() => {
+    const g = [];
+    draft.forEach((r) => {
+      let x = g.find((y) => y.cliente === (r.cliente || ""));
+      if (!x) { x = { cliente: r.cliente || "", rows: [] }; g.push(x); }
+      x.rows.push(r);
+    });
+    return g;
+  }, [draft]);
+
+  const resetForm = () => { setEditId(null); setCliente(""); setModello(""); setColore(""); setQ({}); setErr(""); };
+
+  const changeDay = (d) => {
+    if (d === day) return;
+    if ((dirty || formHasText) && !window.confirm("Ci sono modifiche non salvate. Cambiando giorno andranno perse. Continuare?")) return;
+    setDay(d); setDirty(false); setSaveState("idle"); resetForm();
+  };
+
+  const addOrUpdateRow = () => {
+    if (!modello.trim()) return setErr("Inserisci il modello.");
+    for (const st of MAN_STAGES) {
+      if (Number.isNaN(manSum(q[st.k]))) return setErr(`«${st.l}»: scrivi un numero o una somma, es. 17+11.`);
+    }
+    const clean = {};
+    MAN_STAGES.forEach((st) => { const v = String(q[st.k] ?? "").trim().replace(/^=/, ""); if (v !== "" && manSum(v) !== 0) clean[st.k] = v.slice(0, 30); });
+    const row = { cliente: cliente.trim(), modello: modello.trim(), colore: colore.trim(), q: clean };
+    if (editId) setDraft((p) => p.map((r) => (r.id === editId ? { ...r, ...row } : r)));
+    else setDraft((p) => [...p, { id: uid(), ts: Date.now(), ...row }]);
+    setDirty(true); setSaveState("idle"); resetForm();
+  };
+
+  const startEdit = (r) => {
+    setEditId(r.id); setCliente(r.cliente || ""); setModello(r.modello || ""); setColore(r.colore || "");
+    setQ({ ...(r.q || {}) }); setErr("");
+    setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 30);
+  };
+  const removeRow = (id) => {
+    setDraft((p) => p.filter((r) => r.id !== id)); setDirty(true); setSaveState("idle");
+    if (editId === id) resetForm();
+  };
+  const discard = () => {
+    if (!window.confirm("Annullare le modifiche non salvate e tornare all'ultima versione salvata?")) return;
+    setDirty(false); setDraft(dbRows); setSaveState("idle"); resetForm();
+  };
+
+  // Il modello si copia ogni giorno: parto dal giorno salvato precedente
+  const copyPrev = (keepQty) => {
+    if (!prevDay) return;
+    const base = toRows(man[prevDay]);
+    const t = Date.now();
+    setDraft(base.map((r, i) => ({ id: uid(), ts: t + i, cliente: r.cliente || "", modello: r.modello || "", colore: r.colore || "", q: keepQty ? { ...(r.q || {}) } : {} })));
+    setDirty(true); setSaveState("idle");
+  };
+
+  const doSave = async () => {
+    if (formHasText) return setErr("C'è una riga non ancora aggiunta: premi «Aggiungi riga» oppure svuota i campi.");
+    setErr(""); setSaveState("saving");
+    try { await saveManDay(day, draft); setDirty(false); setSaveState("ok"); }
+    catch (e) { console.error(e); setSaveState("err"); }
+  };
+
+  const label = (txt, color = T2) => (
+    <div style={{ fontSize: 10, fontWeight: 700, color, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>{txt}</div>
+  );
+  const inputStyle = { width: "100%", boxSizing: "border-box", background: S0, border: `1.5px solid ${BRD2}`, borderRadius: 12, padding: "12px 14px", fontFamily: FONT, fontSize: 15, color: TXT, outline: "none" };
+  const fmtSaved = (ts) => {
+    const d = new Date(ts);
+    return `${d.toLocaleDateString("it-IT", { day: "numeric", month: "long" })} alle ${d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}`;
+  };
+  let status = { text: "Non ancora salvata", color: T2, bg: S2 };
+  if (dirty) status = { text: "Modifiche non salvate", color: ACC, bg: ACL };
+  else if (exists) status = { text: savedAt ? `Salvata il ${fmtSaved(savedAt)}` : "Salvata", color: GRN, bg: "#DCFCE7" };
+  const canSave = dirty || !exists;
+
+  return (
+    <div style={{ fontFamily: FONT, padding: "14px 14px", paddingBottom: 32 }}>
+      <div style={{ fontSize: 18, fontWeight: 900, color: TXT, marginBottom: 4 }}>Manovia · situazione ore 17:00</div>
+      <div style={{ fontSize: 12, color: T2, marginBottom: 14 }}>Dove si trovano le scarpe lungo la manovia. Una riga per modello e colore; nelle fasi puoi scrivere somme come 17+11. Poi premi «Salva».</div>
+
+      <div style={{ marginBottom: 14 }}>
+        {label("Giorno")}
+        <input type="date" value={day} onChange={(e) => e.target.value && changeDay(e.target.value)} style={{ ...inputStyle, fontFamily: MONO, fontWeight: 700 }} />
+      </div>
+
+      {draft.length === 0 && prevDay && (
+        <div style={{ background: ACL, borderRadius: 14, padding: 14, marginBottom: 14 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: TXT, marginBottom: 10 }}>Parti dal {fmtD(prevDay)} invece di ricominciare da zero.</div>
+          <Btn color={ACC} onClick={() => copyPrev(true)}>Copia righe e quantità</Btn>
+          <Btn color={BG} textColor={T2} style={{ marginTop: 8 }} onClick={() => copyPrev(false)}>Copia solo le righe (quantità vuote)</Btn>
+        </div>
+      )}
+
+      <div ref={formRef} style={{ background: S0, border: `1px solid ${BRD}`, borderRadius: 16, padding: 14, marginBottom: 16, boxShadow: "0 2px 10px rgba(13,27,42,0.05)" }}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: editId ? ACC : M, marginBottom: 12 }}>{editId ? "Modifica riga" : "Nuova riga"}</div>
+        <div style={{ marginBottom: 12 }}>
+          {label("Cliente")}
+          <input type="text" list="man-clienti" value={cliente} maxLength={40} onChange={(e) => setCliente(e.target.value)} placeholder="Hermes, Chanel…" style={inputStyle} />
+          <datalist id="man-clienti">{clienti.map((c) => <option key={c} value={c} />)}</datalist>
+        </div>
+        <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+          <div style={{ flex: 1 }}>{label("Modello")}<input type="text" value={modello} maxLength={50} onChange={(e) => setModello(e.target.value)} placeholder="Oasis" style={inputStyle} /></div>
+          <div style={{ flex: 1 }}>{label("Colore")}<input type="text" value={colore} maxLength={40} onChange={(e) => setColore(e.target.value)} placeholder="Nero" style={inputStyle} /></div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10, marginBottom: 12 }}>
+          {MAN_STAGES.map((st) => {
+            const bad = Number.isNaN(manSum(q[st.k]));
+            return (
+              <div key={st.k} style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+                {label(st.l, bad ? RED : T2)}
+                <input type="text" inputMode="text" value={q[st.k] ?? ""} maxLength={30} onChange={(e) => setQ((p) => ({ ...p, [st.k]: e.target.value }))} placeholder="0"
+                  style={{ ...inputStyle, padding: "10px 12px", fontFamily: MONO, fontWeight: 700, color: bad ? RED : M, borderColor: bad ? RED : BRD2 }} />
+              </div>
+            );
+          })}
+        </div>
+        {err && <div style={{ fontSize: 12, fontWeight: 700, color: RED, marginBottom: 10 }}>{err}</div>}
+        <Btn color={editId ? ACC : M} onClick={addOrUpdateRow}>{editId ? "✓ AGGIORNA RIGA" : "+ AGGIUNGI RIGA"}</Btn>
+        {(editId || formHasText) && <Btn color={BG} textColor={T2} style={{ marginTop: 8 }} onClick={resetForm}>{editId ? "Annulla modifica" : "Svuota i campi"}</Btn>}
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: T2, letterSpacing: "0.1em", textTransform: "uppercase" }}>Situazione del {fmtD(day)}</div>
+        <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: TXT }}>{draft.length} {draft.length === 1 ? "riga" : "righe"} · {grand} paia</div>
+      </div>
+      <div style={{ background: S0, border: `1px solid ${BRD}`, borderRadius: 12, overflow: "hidden" }}>
+        {draft.length === 0 && <div style={{ padding: 14, fontSize: 13, color: T3 }}>Nessuna riga inserita per questo giorno.</div>}
+        {groups.map((g) => (
+          <div key={g.cliente || "_"}>
+            <div style={{ background: S2, padding: "7px 14px", fontSize: 11, fontWeight: 800, color: T2, letterSpacing: "0.1em", textTransform: "uppercase" }}>{g.cliente || "Senza cliente"}</div>
+            {g.rows.map((r) => (
+              <div key={r.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 14px", borderTop: `1px solid ${BRD}`, background: editId === r.id ? ACL : "transparent" }}>
+                <button onClick={() => startEdit(r)} style={{ flex: 1, minWidth: 0, textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: FONT }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: TXT }}>{r.modello}{r.colore ? <span style={{ fontWeight: 500, color: T2 }}> · {r.colore}</span> : null}</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 6 }}>
+                    {MAN_STAGES.filter((st) => manSum(r.q?.[st.k]) > 0).map((st) => (
+                      <span key={st.k} style={{ background: ML, color: TXT, borderRadius: 8, padding: "3px 8px", fontSize: 11, fontWeight: 600 }}>
+                        {st.l} <b style={{ fontFamily: MONO, color: M }}>{manSum(r.q[st.k])}</b>
+                      </span>
+                    ))}
+                    {manRowTot(r) === 0 && <span style={{ fontSize: 12, color: T3 }}>nessuna quantità</span>}
+                  </div>
+                </button>
+                <button onClick={() => removeRow(r.id)} aria-label="Elimina riga" style={{ background: "#FEE2E2", color: RED, border: "none", borderRadius: 8, width: 34, height: 34, cursor: "pointer", fontSize: 14, flexShrink: 0 }}>🗑</button>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+      {draft.length > 0 && <div style={{ fontSize: 11, color: T3, marginTop: 6 }}>Tocca una riga per modificarla.</div>}
+
+      {draft.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: T2, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>Totali per fase</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+            {MAN_STAGES.map((st, i) => (
+              <div key={st.k} style={{ background: S0, border: `1px solid ${BRD}`, borderRadius: 10, padding: "8px 12px", display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
+                <span style={{ fontSize: 12, color: T2 }}>{st.l}</span>
+                <span style={{ fontFamily: MONO, fontWeight: 700, fontSize: 15, color: totals[i] ? M : T3 }}>{totals[i]}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 8, background: status.bg, color: status.color, borderRadius: 10, padding: "9px 12px", fontSize: 13, fontWeight: 700 }}>
+        <span style={{ width: 8, height: 8, borderRadius: "50%", background: status.color }} />
+        {status.text}
+      </div>
+      <Btn color={canSave ? ACC : BRD} textColor={canSave ? "#fff" : T3} style={{ marginTop: 10, padding: 16, fontSize: 15, cursor: canSave ? "pointer" : "default" }} onClick={() => { if (canSave && saveState !== "saving") doSave(); }}>
+        {saveState === "saving" ? "Salvataggio…" : canSave ? "Salva situazione" : "Situazione salvata"}
+      </Btn>
+      {dirty && <Btn color={BG} textColor={T2} style={{ marginTop: 8 }} onClick={discard}>Annulla modifiche</Btn>}
+      {saveState === "err" && <div style={{ marginTop: 8, fontSize: 13, fontWeight: 700, color: RED }}>Non salvata: controlla la connessione e riprova.</div>}
+
+      {savedDays.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: T2, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>Giorni già salvati</div>
+          <div style={{ background: S0, border: `1px solid ${BRD}`, borderRadius: 12 }}>
+            {savedDays.slice(0, 10).map((d, i) => {
+              const rs = toRows(man[d]);
+              const tot = rs.reduce((s, r) => s + manRowTot(r), 0);
               return (
                 <button key={d} onClick={() => changeDay(d)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 44, padding: "0 14px", background: d === day ? ML : "none", border: "none", borderTop: i ? `1px solid ${BRD}` : "none", cursor: "pointer", fontFamily: FONT, fontSize: 14, color: TXT }}>
                   <span>{fmtD(d)}</span>
