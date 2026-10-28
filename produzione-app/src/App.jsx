@@ -1917,8 +1917,8 @@ const MAN_TEMPLATE = {
 
 // "5 + 5", "=17+11", "12" → numero; vuoto → 0; testo non valido → NaN
 function manSum(v) {
-  const s = String(v ?? "").trim().replace(/^=/, "");
-  if (s === "") return 0;
+  const s = String(v ?? "").trim().replace(/^[=+\s]+/, "").replace(/[+\s]+$/, "");
+  if (s === "") return String(v ?? "").trim().replace(/[=+\s]/g, "") === "" ? 0 : NaN;
   if (!/^\d+(\s*\+\s*\d+)*$/.test(s)) return NaN;
   return s.split("+").reduce((a, x) => a + parseInt(x, 10), 0);
 }
@@ -2190,6 +2190,8 @@ function ManoviaTab({ man, saveManDay, wide }) {
                     return (
                       <td key={c.k} style={{ padding: 0, background: bad ? "#FEE2E2" : "transparent", ...cellB }}>
                         <input type="text" inputMode="text" value={v} maxLength={30} aria-label={`${r.nome} ${sec.variant && c.l2 ? c.l2 : c.l}`} onChange={(e) => setQ(sec.id, r.id, c.k, e.target.value)}
+                          onBlur={() => { const n = manSum(v); if (!Number.isNaN(n) && /[+=]/.test(String(v))) setQ(sec.id, r.id, c.k, n === 0 ? "" : String(n)); }}
+                          onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
                           style={{ width: "100%", boxSizing: "border-box", border: "none", background: "transparent", outline: "none", textAlign: "right", padding: "12px 8px", fontFamily: MONO, fontSize: 14, fontWeight: 700, color: bad ? RED : M }} />
                       </td>
                     );
