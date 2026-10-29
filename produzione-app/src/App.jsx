@@ -2414,11 +2414,12 @@ const rieSizes = (o) => {
 };
 const rieRows = (o) => Object.entries(o.rows || {}).map(([id, r]) => ({ id, ...r })).sort((a, b) => (a.o || 0) - (b.o || 0));
 const rieOrd = (o, s) => +(o.ord?.[rieKey(s)]) || 0;
-const rieDel = (o, s) => rieRows(o).reduce((t, r) => t + (+(r.q?.[rieKey(s)]) || 0), 0);
+// consegnate nette: rientri registrati meno le paia rimandate al laboratorio (i rientri dei resi rientrano come righe DDT)
+const rieDel = (o, s) => rieRows(o).reduce((t, r) => t + (+(r.q?.[rieKey(s)]) || 0), 0) - rieResi(o).reduce((t, r) => t + (+(r.q?.[rieKey(s)]) || 0), 0);
 // xt = paia del rientro registrate solo come totale, senza dettaglio per taglia
 const rieRowTot = (o, r) => rieSizes(o).reduce((t, s) => t + (+(r.q?.[rieKey(s)]) || 0), 0) + (+r.xt || 0);
 const rieOrdTot = (o) => rieSizes(o).reduce((t, s) => t + rieOrd(o, s), 0);
-const rieDelTot = (o) => rieSizes(o).reduce((t, s) => t + rieDel(o, s), 0) + rieRows(o).reduce((t, r) => t + (+r.xt || 0), 0);
+const rieDelTot = (o) => rieSizes(o).reduce((t, s) => t + rieDel(o, s), 0) + rieRows(o).reduce((t, r) => t + (+r.xt || 0), 0) - rieResi(o).reduce((t, r) => t + (+r.xt || 0), 0);
 const rieCmp = (a, b) => [a.lab, a.brand, a.linea, a.art, a.col].join("\u0001").localeCompare([b.lab, b.brand, b.linea, b.art, b.col].join("\u0001"), "it", { numeric: true, sensitivity: "base" });
 const rieFarDate = () => { const d = new Date(); d.setDate(d.getDate() + 60); return d.toISOString().slice(0, 10); };
 const rieSet = (path, v) => set(ref(db, `rientri/${path}`), v === undefined || v === "" ? null : v);
@@ -2584,6 +2585,15 @@ function RieBlock({ oid, o, edit, onEdit, onAddDdt, onAddReso, onRientra, allEnt
                 </tr>
               );
             })}
+            {resi.length > 0 && (
+              <tr style={{ background: "#FFF8E6" }}>
+                <td style={{ ...td, padding: "8px 8px", fontWeight: 900, fontSize: 12, color: "#B45309" }}>− RESI AL LAB.</td>
+                <td style={td}></td>
+                {sizes.map((s) => { const x = resi.reduce((t, r) => t + (+(r.q?.[rieKey(s)]) || 0), 0); return <td key={s} style={{ ...td, padding: "8px 6px", textAlign: "right", fontFamily: MONO, fontWeight: 800, color: x ? "#B45309" : T3 }}>{x ? -x : ""}</td>; })}
+                <td style={{ ...td, padding: "8px 6px", textAlign: "right", fontFamily: MONO, fontWeight: 900, color: "#B45309" }}>{-resi.reduce((t, r) => t + rieResoTot(o, r), 0)}</td>
+                <td style={td} colSpan={4}></td>
+              </tr>
+            )}
             <tr style={{ background: res < 0 ? "#FDECEC" : EL }}>
               <td style={{ ...td, padding: "8px 8px", fontWeight: 900, fontSize: 12, color: res < 0 ? RED : E }}>DA CONSEGNARE</td>
               <td style={td}></td>
@@ -2624,8 +2634,8 @@ function RieBlock({ oid, o, edit, onEdit, onAddDdt, onAddReso, onRientra, allEnt
                       <td key={sz} style={td}><RCell g={`${ri}:${i}`} value={r.q?.[rieKey(sz)]} onCommit={(v) => rieSet(`${oid}/resi/${r.id}/q/${rieKey(sz)}`, v)} /></td>
                     ))}
                     <td title={r.xt ? `di cui ${r.xt} paia senza dettaglio per taglia` : undefined} style={{ ...td, padding: "8px 6px", textAlign: "right", fontFamily: MONO, fontWeight: 900, color: TXT }}>{t}{r.xt ? "*" : ""}</td>
-                    <td style={td}><RCell kind="text" g={`${ri}:${sizes.length}`} value={r.rdd} onCommit={(v) => rieSet(`${oid}/resi/${r.id}/rdd`, v)} bold /></td>
-                    <td style={td}><RCell kind="date" g={`${ri}:${sizes.length + 1}`} value={r.rdata} onCommit={(v) => rieSet(`${oid}/resi/${r.id}/rdata`, v)} /></td>
+                    <td style={{ ...td, padding: "8px 8px", fontWeight: 800, fontSize: 13 }}>{r.rdd || ""}</td>
+                    <td style={{ ...td, padding: "8px 8px", fontFamily: MONO, fontSize: 13 }}>{r.rdata ? fmtD(r.rdata) : ""}</td>
                     <td style={{ ...td, textAlign: "center", whiteSpace: "nowrap" }}>
                       {back
                         ? <span style={{ fontSize: 11, fontWeight: 800, color: GRN, background: "#E3F8EF", borderRadius: 20, padding: "3px 9px" }}>rientrato</span>
@@ -2799,14 +2809,16 @@ function RieResoModal({ entries, startId, onClose }) {
     const row = { ddt: ddt.trim().slice(0, 24), data, q, o: Date.now() };
     if (rdd.trim()) row.rdd = rdd.trim().slice(0, 24);
     if (rdata) row.rdata = rdata;
-    rieSet(`${oid}/resi/${uid()}${uid()}`, row);
+    const rid = uid() + uid();
+    if (row.rdd) { row.qr = q; rieSet(`${oid}/rows/${uid()}${uid()}`, { ddt: row.rdd, data: row.rdata || row.data, q, o: Date.now() + 1, fromReso: rid }); }
+    rieSet(`${oid}/resi/${rid}`, row);
     onClose();
   };
   return (
     <Modal onClose={onClose}>
       <div style={{ fontFamily: FONT, maxHeight: "78vh", overflowY: "auto" }}>
         <div style={{ fontSize: 18, fontWeight: 900, color: TXT }}>Nuovo reso al laboratorio</div>
-        <div style={{ fontSize: 12, color: T2 }}>Paia che Mosaicon rimanda al laboratorio (da rifare o riparare). Quando tornano, scrivi il DDT di rientro del laboratorio.</div>
+        <div style={{ fontSize: 12, color: T2 }}>Paia che Mosaicon rimanda al laboratorio (da rifare o riparare): vengono tolte dalle consegnate dell'articolo. Quando tornano, premi «Rientra» e rientrano da sole nella tabella con il DDT del laboratorio.</div>
         {rieLbl("Articolo")}
         <select value={oid} onChange={(e) => { setOid(e.target.value); setVals({}); }} style={RIE_INP}>
           {entries.map(([id, x]) => <option key={id} value={id}>{x.lab} · {x.brand} · {x.linea} · {x.art} {x.col}</option>)}
@@ -2851,6 +2863,7 @@ function RieRientraModal({ oid, o, rid, onClose }) {
     const prev = {}; sizes.forEach((s) => { const k = rieKey(s); prev[k] = had ? (r.qr ? (+(r.qr[k]) || 0) : (+(r.q?.[k]) || 0)) : 0; });
     const qr = {}; sizes.forEach((s) => { const k = rieKey(s); const n = prev[k] + (add[k] || 0); if (n) qr[k] = n; });
     const nd = rdd.trim().slice(0, 24);
+    rieSet(`${oid}/rows/${uid()}${uid()}`, { ddt: nd, data: rdata || todayStr(), q: add, o: Date.now(), fromReso: rid });
     rieSet(`${oid}/resi/${rid}/qr`, qr);
     rieSet(`${oid}/resi/${rid}/rdd`, had && !had.split(",").map((x) => x.trim()).includes(nd) ? `${had}, ${nd}` : had || nd);
     if (rdata) rieSet(`${oid}/resi/${rid}/rdata`, rdata);
@@ -2994,8 +3007,8 @@ async function exportRientriXlsx(entries, title) {
       });
       const last = ordRow + rows.length, resRow = last + 1;
       ws.getCell(resRow, 3).value = "DA CONSEGNARE";
-      sizes.forEach((s, j) => { const L = colL(5 + j); ws.getCell(resRow, 5 + j).value = { formula: `${L}${ordRow}-SUM(${L}${ordRow + 1}:${L}${Math.max(last, ordRow + 1)})`, result: rieOrd(o, s) - rieDel(o, s) }; });
-      ws.getCell(resRow, cOrd).value = { formula: `${colL(cOrd)}${ordRow}-SUM(${colL(cCons)}${ordRow + 1}:${colL(cCons)}${Math.max(last, ordRow + 1)})`, result: rieOrdTot(o) - rieDelTot(o) };
+      sizes.forEach((s, j) => { const L = colL(5 + j); const rs = rieResi(o).reduce((t, x) => t + (+(x.q?.[rieKey(s)]) || 0), 0); ws.getCell(resRow, 5 + j).value = { formula: `${L}${ordRow}-SUM(${L}${ordRow + 1}:${L}${Math.max(last, ordRow + 1)})${rs ? `+${rs}` : ""}`, result: rieOrd(o, s) - rieDel(o, s) }; });
+      { const rt = rieResi(o).reduce((t, x) => t + rieResoTot(o, x), 0); ws.getCell(resRow, cOrd).value = { formula: `${colL(cOrd)}${ordRow}-SUM(${colL(cCons)}${ordRow + 1}:${colL(cCons)}${Math.max(last, ordRow + 1)})${rt ? `+${rt}` : ""}`, result: rieOrdTot(o) - rieDelTot(o) }; }
       ws.getRow(resRow).font = { bold: true, color: { argb: "FF00796B" } };
       for (let rr = ordRow; rr <= resRow; rr++) for (let c = 1; c <= cFt + 2; c++) ws.getCell(rr, c).border = { top: thin, bottom: thin, left: thin, right: thin };
       r = resRow + 2;
