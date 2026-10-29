@@ -1882,6 +1882,7 @@ function GiacenzaTab({ giac, saveGiacDay, wide }) {
 // Colonne come nel modello Excel (foglio giornaliero). Le colonne "calc" si calcolano da sole.
 // Le quantità si possono scrivere come somma: "17+11".
 const MAN_COLS = [
+  { k: "brand", l: "Brand", text: true, brand: true },
   { k: "cons", l: "Data di consegna", text: true },
   { k: "obi", l: "Obiettivo" },
   { k: "sped", l: "Spedito" },
@@ -1911,9 +1912,24 @@ const MAN_SECS = [
 ];
 // Elenco di partenza (dal foglio del 26/10): da qui in poi si parte dal giorno precedente
 const MAN_TEMPLATE = {
-  art: ["OMBRE", "ELBE", "OCEANE NERE", "OCEANE MARRONI", "VOLVER", "OMELA", "NEREE", "NINON", "OASIS", "JANE", "NOA", "CHROME HEARTS", "MOMONI'", "WS271-1709", "WS271-766", "WS271-93", "WS271-89", "WS271-1024", "WS271-1703", "PIERRE HARDY", "PH SUMMER", "PROENZA", "PLANC", "LORENA"],
-  cli: ["HERMES OASIS", "DRIES VAN NOTEN", "PH", "CHROME HEARTS", "Momonì", "PLAN C", "CHANEL COCO", "CHANEL DREAMY TAB"],
+  art: [
+    ...["OMBRE", "ELBE", "OCEANE NERE", "OCEANE MARRONI", "VOLVER", "OMELA", "NEREE", "NINON", "OASIS", "JANE", "NOA"].map((n) => [n, "HERMÈS"]),
+    ["CHROME HEARTS", "CHROME HEARTS"], ["MOMONI'", "MOMONÌ"],
+    ...["WS271-1709", "WS271-766", "WS271-93", "WS271-89", "WS271-1024", "WS271-1703"].map((n) => [n, "DRIES VAN NOTEN"]),
+    ["PIERRE HARDY", "PIERRE HARDY"], ["PH SUMMER", "PIERRE HARDY"], ["PROENZA", "PROENZA SCHOULER"], ["PLANC", "PLAN C"], ["LORENA", "LORENA"],
+  ],
+  cli: [
+    ["HERMES OASIS", "HERMÈS"], ["DRIES VAN NOTEN", "DRIES VAN NOTEN"], ["PH", "PIERRE HARDY"], ["CHROME HEARTS", "CHROME HEARTS"],
+    ["Momonì", "MOMONÌ"], ["PLAN C", "PLAN C"], ["CHANEL COCO", "CHANEL"], ["CHANEL DREAMY TAB", "CHANEL"],
+  ],
 };
+// brand di una riga: quello scritto, altrimenti quello del modello (per giorni salvati prima della colonna Brand)
+const manBrand = (secId, r) => {
+  if (r.brand !== undefined && r.brand !== null) return r.brand;
+  const t = MAN_TEMPLATE[secId].find(([n]) => n.toLowerCase() === String(r.nome || "").toLowerCase());
+  return t ? t[1] : "";
+};
+const manBrandKey = (secId, r) => manBrand(secId, r).trim().toUpperCase();
 
 // "5 + 5", "=17+11", "12" → numero; vuoto → 0; testo non valido → NaN
 function manSum(v) {
@@ -1972,13 +1988,13 @@ async function exportManoviaXlsx(day, draft) {
     }
     ws.getRow(rn).height = 45;
     const first = rn + 1;
-    rows.forEach((r) => {
+    rows.forEach((r, ri) => {
       rn++;
       ws.getCell(rn, 1).value = r.nome || "";
       ws.getCell(rn, 1).font = { bold: true };
       MAN_COLS.forEach((c, i) => {
         const cell = ws.getCell(rn, i + 2);
-        if (c.text) { if (r.cons) cell.value = String(r.cons); return; }
+        if (c.text) { const tv = c.brand ? manBrand(sec.id, r) : r.cons; if (tv) cell.value = String(tv); return; }
         if (c.calc) {
           const v = manVal(r, c.k);
           if (c.k === "saldo" && v !== null) cell.value = { formula: `${colL("obi")}${rn}-${colL("sped")}${rn}`, result: v };
@@ -1991,6 +2007,14 @@ async function exportManoviaXlsx(day, draft) {
         cell.value = raw.includes("+") ? { formula: raw.replace(/\s+/g, ""), result: manSum(raw) } : manSum(raw);
       });
       for (let c = 1; c <= NC; c++) ws.getCell(rn, c).border = box;
+      // doppia riga rossa tra un brand e il successivo
+      if (ri > 0 && manBrandKey(sec.id, rows[ri - 1]) !== manBrandKey(sec.id, r)) {
+        const red = { style: "double", color: { argb: "FFFF0000" } };
+        for (let c = 1; c <= NC; c++) {
+          ws.getCell(rn, c).border = { ...box, top: red };
+          ws.getCell(rn - 1, c).border = { ...ws.getCell(rn - 1, c).border, bottom: red };
+        }
+      }
     });
     rn++;
     ws.getCell(rn, 1).value = "TOTALI";
@@ -2007,7 +2031,7 @@ async function exportManoviaXlsx(day, draft) {
     });
   });
   ws.getColumn(1).width = 24;
-  MAN_COLS.forEach((c, i) => { ws.getColumn(i + 2).width = c.text ? 14 : 11; });
+  MAN_COLS.forEach((c, i) => { ws.getColumn(i + 2).width = c.brand ? 20 : c.text ? 14 : 11; });
   const buf = await wb.xlsx.writeBuffer();
   const filename = `manovia_${day}.xlsx`;
   const type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -2051,11 +2075,11 @@ function ManoviaTab({ man, saveManDay, wide }) {
     MAN_SECS.forEach((sec) => {
       if (prevNode) {
         out[sec.id] = toRows(prevNode[sec.id]).map((r, i) => ({
-          id: uid(), nome: r.nome, cons: r.cons || "", o: i,
+          id: uid(), nome: r.nome, brand: manBrand(sec.id, r), cons: r.cons || "", o: i,
           q: keepQty ? { ...(r.q || {}) } : r.q?.obi ? { obi: r.q.obi } : {},
         }));
       } else {
-        out[sec.id] = MAN_TEMPLATE[sec.id].map((nome, i) => ({ id: uid(), nome, cons: "", o: i, q: {} }));
+        out[sec.id] = MAN_TEMPLATE[sec.id].map(([nome, brand], i) => ({ id: uid(), nome, brand, cons: "", o: i, q: {} }));
       }
     });
     return out;
@@ -2084,7 +2108,7 @@ function ManoviaTab({ man, saveManDay, wide }) {
   const addRow = (sec) => {
     const nome = newName[sec].trim();
     if (!nome) return setErr("Scrivi il nome della nuova riga.");
-    setDraft((p) => ({ ...p, [sec]: [...p[sec], { id: uid(), nome, cons: "", o: p[sec].length, q: {} }] }));
+    setDraft((p) => ({ ...p, [sec]: [...p[sec], { id: uid(), nome, brand: "", cons: "", o: p[sec].length, q: {} }] }));
     setNewName((p) => ({ ...p, [sec]: "" }));
     touch();
   };
@@ -2123,7 +2147,7 @@ function ManoviaTab({ man, saveManDay, wide }) {
       clean[sec.id] = draft[sec.id].map((r, i) => {
         const q2 = {};
         MAN_INPUTS.forEach((c) => { const v = String(r.q?.[c.k] ?? "").trim().replace(/^=/, ""); if (v !== "") q2[c.k] = v.slice(0, 30); });
-        return { ...r, o: i, q: q2 };
+        return { ...r, brand: manBrand(sec.id, r).trim(), o: i, q: q2 };
       });
     });
     setErr(""); setSaveState("saving");
@@ -2146,6 +2170,7 @@ function ManoviaTab({ man, saveManDay, wide }) {
   const totalPairs = MAN_SECS[0] && draft.art.reduce((s, r) => s + manRowPairs(r), 0);
   const stickyBase = { position: "sticky", left: 0, zIndex: 1 };
   const cellB = { borderBottom: `1px solid ${BRD}`, borderRight: `1px solid ${BRD}` };
+  const cellRed = { ...cellB, borderTop: `2px solid ${RED}` };
 
   const section = (sec) => {
     const rows = draft[sec.id] || [];
@@ -2158,14 +2183,16 @@ function ManoviaTab({ man, saveManDay, wide }) {
               <tr>
                 <th style={{ ...stickyBase, zIndex: 3, background: ML, minWidth: 150, textAlign: "left", padding: "8px 10px", fontSize: 11, color: T2, ...cellB }}>Cliente</th>
                 {MAN_COLS.map((c) => (
-                  <th key={c.k} style={{ background: c.calc ? S2 : ML, width: c.text ? (wide ? 84 : 92) : (wide ? 62 : 78), minWidth: c.text ? (wide ? 84 : 92) : (wide ? 62 : 78), padding: "8px 4px", fontSize: 10, lineHeight: 1.2, color: T2, textAlign: "center", ...cellB }}>{sec.variant && c.l2 ? c.l2 : c.l}</th>
+                  <th key={c.k} style={{ background: c.calc ? S2 : ML, width: c.brand ? 132 : c.text ? (wide ? 84 : 92) : (wide ? 62 : 78), minWidth: c.brand ? 132 : c.text ? (wide ? 84 : 92) : (wide ? 62 : 78), padding: "8px 4px", fontSize: 10, lineHeight: 1.2, color: T2, textAlign: "center", ...cellB }}>{sec.variant && c.l2 ? c.l2 : c.l}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {rows.map((r, ri) => {
+              const cb = ri > 0 && manBrandKey(sec.id, rows[ri - 1]) !== manBrandKey(sec.id, r) ? cellRed : cellB;
+              return (
                 <tr key={r.id}>
-                  <td style={{ ...stickyBase, background: S0, padding: "2px 6px 2px 4px", ...cellB }}>
+                  <td style={{ ...stickyBase, background: S0, padding: "2px 6px 2px 4px", ...cb }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                       <input type="text" value={r.nome} maxLength={40} aria-label="Nome riga" onChange={(e) => setField(sec.id, r.id, "nome", e.target.value)}
                         style={{ flex: 1, minWidth: 0, width: 110, border: "none", background: "transparent", outline: "none", fontFamily: FONT, fontSize: 13, fontWeight: 700, color: TXT, padding: "11px 4px" }} />
@@ -2175,20 +2202,21 @@ function ManoviaTab({ man, saveManDay, wide }) {
                   {MAN_COLS.map((c) => {
                     if (c.calc) {
                       const v = manVal(r, c.k);
-                      return <td key={c.k} style={{ background: S2, textAlign: "right", padding: "0 10px", fontFamily: MONO, fontSize: 14, fontWeight: 700, color: v ? TXT : T3, ...cellB }}>{v === null ? "" : v}</td>;
+                      return <td key={c.k} style={{ background: S2, textAlign: "right", padding: "0 10px", fontFamily: MONO, fontSize: 14, fontWeight: 700, color: v ? TXT : T3, ...cb }}>{v === null ? "" : v}</td>;
                     }
                     if (c.text) {
+                      const fld = c.brand ? "brand" : "cons";
                       return (
-                        <td key={c.k} style={{ padding: 0, ...cellB }}>
-                          <input type="text" value={r.cons || ""} maxLength={14} aria-label={`${r.nome} ${c.l}`} onChange={(e) => setField(sec.id, r.id, "cons", e.target.value)} placeholder="gg/mm"
-                            style={{ width: "100%", boxSizing: "border-box", border: "none", background: "transparent", outline: "none", textAlign: "center", padding: "12px 4px", fontFamily: MONO, fontSize: 13, color: TXT }} />
+                        <td key={c.k} style={{ padding: 0, ...cb }}>
+                          <input type="text" value={c.brand ? manBrand(sec.id, r) : r.cons || ""} maxLength={c.brand ? 24 : 14} aria-label={`${r.nome} ${c.l}`} onChange={(e) => setField(sec.id, r.id, fld, e.target.value)} placeholder={c.brand ? "brand" : "gg/mm"}
+                            style={{ width: "100%", boxSizing: "border-box", border: "none", background: "transparent", outline: "none", textAlign: "center", padding: "12px 4px", fontFamily: c.brand ? FONT : MONO, fontWeight: c.brand ? 700 : 400, fontSize: 13, color: TXT }} />
                         </td>
                       );
                     }
                     const v = r.q?.[c.k] ?? "";
                     const bad = Number.isNaN(manSum(v));
                     return (
-                      <td key={c.k} style={{ padding: 0, background: bad ? "#FEE2E2" : "transparent", ...cellB }}>
+                      <td key={c.k} style={{ padding: 0, background: bad ? "#FEE2E2" : "transparent", ...cb }}>
                         <input type="text" inputMode="text" value={v} maxLength={30} aria-label={`${r.nome} ${sec.variant && c.l2 ? c.l2 : c.l}`} onChange={(e) => setQ(sec.id, r.id, c.k, e.target.value)}
                           onBlur={() => { const n = manSum(v); if (!Number.isNaN(n) && /[+=]/.test(String(v))) setQ(sec.id, r.id, c.k, n === 0 ? "" : String(n)); }}
                           onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
@@ -2197,7 +2225,8 @@ function ManoviaTab({ man, saveManDay, wide }) {
                     );
                   })}
                 </tr>
-              ))}
+              );
+              })}
               <tr>
                 <td style={{ ...stickyBase, background: ML, padding: "9px 10px", fontWeight: 800, fontSize: 12, color: TXT, borderRight: `1px solid ${BRD}` }}>TOTALI</td>
                 {MAN_COLS.map((c) => {
