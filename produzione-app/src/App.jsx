@@ -1969,40 +1969,55 @@ async function exportManoviaXlsx(day, draft) {
   t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
   const week = Math.ceil(((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / 864e5 + 1) / 7);
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet(day.split("-").reverse().join("."), { views: [{ state: "frozen", xSplit: 1 }], pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
+  const ws = wb.addWorksheet(day.split("-").reverse().join("."), { views: [{ state: "frozen", xSplit: 1, zoomScale: 85 }], pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
   const line = { style: "thin", color: { argb: "FF999999" } };
   const box = { top: line, left: line, bottom: line, right: line };
   const NC = MAN_COLS.length + 1;
   ws.mergeCells(1, 1, 1, NC);
   ws.getCell("A1").value = `${giorno.charAt(0).toUpperCase() + giorno.slice(1)} ${dd} (SITUAZIONE H. 17:30)`;
   ws.getCell("A1").font = { bold: true, size: 14 };
-  ws.getCell("A1").alignment = { horizontal: "center" };
+  ws.getCell("A1").alignment = { horizontal: "center", vertical: "middle" };
   ws.mergeCells(2, 1, 2, NC);
   ws.getCell("A2").value = `W ${String(week).padStart(2, "0")}`;
-  ws.getCell("A2").font = { bold: true };
-  ws.getCell("A2").alignment = { horizontal: "center" };
+  ws.getCell("A2").font = { bold: true, size: 12 };
+  ws.getCell("A2").alignment = { horizontal: "center", vertical: "middle" };
+  // stile come nel foglio di riferimento: titolo azzurro, bordi esterni medi, grigio sulle colonne calcolate
+  const solid = (argb) => ({ type: "pattern", pattern: "solid", fgColor: { argb } });
+  const med = { style: "medium", color: { argb: "FF000000" } };
+  const setB = (r, c, side, b) => { const cell = ws.getCell(r, c); cell.border = { ...(cell.border || {}), [side]: b }; };
+  const outer = (r1, r2) => { for (let c = 1; c <= NC; c++) { setB(r1, c, "top", med); setB(r2, c, "bottom", med); } for (let r = r1; r <= r2; r++) { setB(r, 1, "left", med); setB(r, NC, "right", med); } };
+  for (let c = 1; c <= NC; c++) { ws.getCell(1, c).fill = solid("FF8DB4E2"); ws.getCell(2, c).fill = solid("FF8DB4E2"); }
+  ws.getRow(1).height = 18.75; ws.getRow(2).height = 22.5;
+  outer(1, 2);
   const colL = (k) => ws.getColumn(MAN_COLS.findIndex((c) => c.k === k) + 2).letter;
   let rn = 3;
   MAN_SECS.forEach((sec, si) => {
     const rows = draft[sec.id] || [];
-    if (si > 0) rn += 1;
+    if (si > 0) { rn += 1; ws.getRow(rn).height = 15.75; }
+    const hdr = rn;
     ws.getCell(rn, 1).value = "Cliente";
     MAN_COLS.forEach((c, i) => { ws.getCell(rn, i + 2).value = sec.variant && c.l2 ? c.l2 : c.l; });
     for (let c = 1; c <= NC; c++) {
       const cell = ws.getCell(rn, c);
-      cell.font = { bold: true };
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDDE3F5" } };
+      const ci = c - 2;
+      const small = ci >= 0 && ["cons", "obi", "saldo", "dins"].includes(MAN_COLS[ci].k);
+      cell.font = { bold: true, size: small ? 8 : 11 };
+      cell.fill = solid("FFDDE3F5");
       cell.alignment = { wrapText: true, horizontal: "center", vertical: "middle" };
       cell.border = box;
     }
-    ws.getRow(rn).height = 45;
+    ws.getRow(rn).height = 48;
     const first = rn + 1;
     rows.forEach((r, ri) => {
       rn++;
+      ws.getRow(rn).height = 36.75;
       ws.getCell(rn, 1).value = r.nome || "";
       ws.getCell(rn, 1).font = { bold: true };
+      ws.getCell(rn, 1).alignment = { vertical: "middle", wrapText: true };
       MAN_COLS.forEach((c, i) => {
         const cell = ws.getCell(rn, i + 2);
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+        if (c.calc) cell.fill = solid("FFD9D9D9");
         if (c.text) { const tv = c.brand ? manBrand(sec.id, r) : r.cons; if (tv) cell.value = String(tv); return; }
         if (c.calc) {
           const v = manVal(r, c.k);
@@ -2026,21 +2041,27 @@ async function exportManoviaXlsx(day, draft) {
       }
     });
     rn++;
+    ws.getRow(rn).height = 15.75;
     ws.getCell(rn, 1).value = "TOTALI";
     for (let c = 1; c <= NC; c++) {
       const cell = ws.getCell(rn, c);
       cell.font = { bold: true };
       cell.border = box;
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } };
+      cell.fill = solid("FFF2F2F2");
+      if (c > 1) cell.alignment = { horizontal: "center" };
     }
     MAN_COLS.forEach((c, i) => {
       if (c.text || rows.length === 0) return;
       const L = ws.getColumn(i + 2).letter;
       ws.getCell(rn, i + 2).value = { formula: `SUM(${L}${first}:${L}${rn - 1})`, result: manColTot(rows, c.k) };
     });
+    outer(hdr, rn);
+    for (let c = 1; c <= NC; c++) { setB(hdr, c, "bottom", med); setB(first, c, "top", med); }
   });
-  ws.getColumn(1).width = 24;
-  MAN_COLS.forEach((c, i) => { ws.getColumn(i + 2).width = c.brand ? 20 : c.text ? 14 : 11; });
+  // larghezze prese dal foglio di riferimento (la colonna Brand in più è larga 16)
+  const W = { brand: 16, cons: 9.3, obi: 9.1, sped: 8, saldo: 7.3, insc: 11, dins: 11.3, contr: 17.3, ingu: 17.3, scs: 19.1, scn: 19.3, scf: 11.7, fin: 11, dain: 11, dinc: 11, sfo: 15.6, suo: 11, sme: 13, cal: 12.6, mon: 12, car: 12.6, dac: 11 };
+  ws.getColumn(1).width = 17.4;
+  MAN_COLS.forEach((c, i) => { ws.getColumn(i + 2).width = W[c.k] || 11; });
   const buf = await wb.xlsx.writeBuffer();
   const filename = `manovia_${day}.xlsx`;
   const type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -2114,11 +2135,33 @@ function ManoviaTab({ man, saveManDay, wide }) {
   const setQ = (sec, id, k, v) => upd(sec, id, (r) => ({ ...r, q: { ...(r.q || {}), [k]: v } }));
   const setField = (sec, id, f, v) => upd(sec, id, (r) => ({ ...r, [f]: v }));
   const removeRow = (sec, id) => { setDraft((p) => ({ ...p, [sec]: p[sec].filter((r) => r.id !== id) })); touch(); };
+  const moveRow = (sec, id, dir) => {
+    setDraft((p) => {
+      const a = [...p[sec]];
+      const i = a.findIndex((r) => r.id === id), j = i + dir;
+      if (i < 0 || j < 0 || j >= a.length) return p;
+      [a[i], a[j]] = [a[j], a[i]];
+      return { ...p, [sec]: a };
+    });
+    touch();
+  };
+  // dove inserire la nuova riga: "end" (in fondo), "start" (in cima) oppure l'id della riga dopo cui metterla
+  const [newPos, setNewPos] = useState({ art: "end", cli: "end" });
   const addRow = (sec) => {
     const nome = newName[sec].trim();
     if (!nome) return setErr("Scrivi il nome della nuova riga.");
-    setDraft((p) => ({ ...p, [sec]: [...p[sec], { id: uid(), nome, brand: "", cons: "", o: p[sec].length, q: {} }] }));
+    setDraft((p) => {
+      const a = [...p[sec]];
+      const row = { id: uid(), nome, brand: "", cons: "", o: 0, q: {} };
+      const pos = newPos[sec];
+      let at = a.length;
+      if (pos === "start") at = 0;
+      else if (pos !== "end") { const i = a.findIndex((r) => r.id === pos); if (i >= 0) { at = i + 1; row.brand = manBrand(sec, a[i]); } }
+      a.splice(at, 0, row);
+      return { ...p, [sec]: a };
+    });
     setNewName((p) => ({ ...p, [sec]: "" }));
+    setNewPos((p) => ({ ...p, [sec]: "end" }));
     touch();
   };
 
@@ -2235,6 +2278,10 @@ function ManoviaTab({ man, saveManDay, wide }) {
                     <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                       <input type="text" data-man={`${sec.id}:${ri}:-1`} value={r.nome} maxLength={40} aria-label="Nome riga" onChange={(e) => setField(sec.id, r.id, "nome", e.target.value)}
                         style={{ flex: 1, minWidth: 0, width: 110, border: "none", background: "transparent", outline: "none", fontFamily: FONT, fontSize: 13, fontWeight: 700, color: TXT, padding: "11px 4px" }} />
+                      <div style={{ display: "flex", flexDirection: "column", gap: 1, flexShrink: 0 }}>
+                        <button onClick={() => moveRow(sec.id, r.id, -1)} disabled={ri === 0} aria-label={`Sposta su ${r.nome}`} style={{ background: S2, color: T2, border: "none", borderRadius: 4, width: 22, height: 15, cursor: ri === 0 ? "default" : "pointer", fontSize: 9, lineHeight: 1, padding: 0, opacity: ri === 0 ? 0.35 : 1 }}>▲</button>
+                        <button onClick={() => moveRow(sec.id, r.id, 1)} disabled={ri === rows.length - 1} aria-label={`Sposta giù ${r.nome}`} style={{ background: S2, color: T2, border: "none", borderRadius: 4, width: 22, height: 15, cursor: ri === rows.length - 1 ? "default" : "pointer", fontSize: 9, lineHeight: 1, padding: 0, opacity: ri === rows.length - 1 ? 0.35 : 1 }}>▼</button>
+                      </div>
                       <button onClick={() => removeRow(sec.id, r.id)} aria-label={`Elimina ${r.nome}`} style={{ background: "#FEE2E2", color: RED, border: "none", borderRadius: 6, width: 24, height: 24, cursor: "pointer", fontSize: 11, flexShrink: 0 }}>🗑</button>
                     </div>
                   </td>
@@ -2275,9 +2322,14 @@ function ManoviaTab({ man, saveManDay, wide }) {
             </tbody>
           </table>
         </div>
-        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+        <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
           <input type="text" value={newName[sec.id]} maxLength={40} onChange={(e) => setNewName((p) => ({ ...p, [sec.id]: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") addRow(sec.id); }}
-            placeholder={sec.addLabel} style={{ ...inputStyle, flex: 1, width: "auto", padding: "10px 12px" }} />
+            placeholder={sec.addLabel} style={{ ...inputStyle, flex: "1 1 160px", width: "auto", padding: "10px 12px" }} />
+          <select value={newPos[sec.id]} onChange={(e) => setNewPos((p) => ({ ...p, [sec.id]: e.target.value }))} aria-label="Posizione nuova riga" style={{ ...inputStyle, flex: "1 1 150px", width: "auto", padding: "10px 8px", fontSize: 13 }}>
+            <option value="end">In fondo</option>
+            <option value="start">In cima</option>
+            {rows.map((r) => <option key={r.id} value={r.id}>Dopo {r.nome}</option>)}
+          </select>
           <button onClick={() => addRow(sec.id)} style={{ background: M, color: "#fff", border: "none", borderRadius: 12, padding: "0 18px", minHeight: 44, fontFamily: FONT, fontWeight: 800, fontSize: 14, cursor: "pointer" }}>+ Riga</button>
         </div>
       </div>
