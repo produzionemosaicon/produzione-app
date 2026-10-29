@@ -29,6 +29,7 @@ const TABS = [
   { id: "taglio",   icon: "✂️", label: "Taglio" },
   { id: "giacenza", icon: "📦", label: "Giacenza" },
   { id: "manovia",  icon: "🔄", label: "Manovia" },
+  { id: "rientri",  icon: "↩️", label: "Rientri" },
   { id: "setting",  icon: "⚙️", label: "Setting" },
 ];
 
@@ -271,6 +272,7 @@ export default function App() {
   const [tg, setTg] = useState({});
   const [giac, setGiac] = useState({});
   const [man, setMan] = useState({});
+  const [rie, setRie] = useState({});
 
   useEffect(() => {
     return onValue(ref(db, "giacenze"), (snap) => {
@@ -315,6 +317,12 @@ export default function App() {
     });
     node._meta = { savedAt: Date.now() };
     await set(ref(db, `manoviaSituazione/${day}`), node);
+  }, []);
+
+  useEffect(() => {
+    return onValue(ref(db, "rientri"), (snap) => {
+      setRie(snap.exists() ? snap.val() : {});
+    });
   }, []);
 
   useEffect(() => {
@@ -836,6 +844,7 @@ export default function App() {
         <div style={{ display: tab === "manovia" ? "block" : "none" }}>
           <ManoviaTab man={man} saveManDay={saveManDay} wide={wide} />
         </div>
+        {tab === "rientri" && <RientriTab rie={rie} wide={wide} />}
       </div>
 
       <div id="print-doc" style={{ display:"none", padding:"30px", background:"#fff" }}>
@@ -2385,6 +2394,540 @@ function SettingsTab({ wide, stations, goals, saveGoal }) {
         </div>
       ))}
       </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RIENTRI — produzione affidata ad altri calzaturifici
+   Database: rientri/{ordineId} = { lab, brand, linea, art, col, smin, smax,
+     ord:{s39:44,…}, rows:{ rid:{ ddt, data, q:{s39:17,…}, ft, ftd, ftp, o } }, ts }
+   Un "ordine" è un articolo + colore di un laboratorio, con la sua curva taglie.
+   ═══════════════════════════════════════════════════════════════ */
+const rieKey = (s) => `s${s}`;
+const rieSizes = (o) => { const a = []; for (let s = +o.smin; s <= +o.smax; s++) a.push(s); return a; };
+const rieRows = (o) => Object.entries(o.rows || {}).map(([id, r]) => ({ id, ...r })).sort((a, b) => (a.o || 0) - (b.o || 0));
+const rieOrd = (o, s) => +(o.ord?.[rieKey(s)]) || 0;
+const rieDel = (o, s) => rieRows(o).reduce((t, r) => t + (+(r.q?.[rieKey(s)]) || 0), 0);
+const rieRowTot = (o, r) => rieSizes(o).reduce((t, s) => t + (+(r.q?.[rieKey(s)]) || 0), 0);
+const rieOrdTot = (o) => rieSizes(o).reduce((t, s) => t + rieOrd(o, s), 0);
+const rieDelTot = (o) => rieSizes(o).reduce((t, s) => t + rieDel(o, s), 0);
+const rieCmp = (a, b) => [a.lab, a.brand, a.linea, a.art, a.col].join("\u0001").localeCompare([b.lab, b.brand, b.linea, b.art, b.col].join("\u0001"), "it", { numeric: true, sensitivity: "base" });
+const rieFarDate = () => { const d = new Date(); d.setDate(d.getDate() + 60); return d.toISOString().slice(0, 10); };
+const rieSet = (path, v) => set(ref(db, `rientri/${path}`), v === undefined || v === "" ? null : v);
+
+// Casella: accetta somme (+5+5, =17+11) come nella Manovia; Invio/frecce per spostarsi
+function RCell({ value, onCommit, kind = "num", g, bold, warn, width, align }) {
+  const [v, setV] = useState(null);
+  const base = value === undefined || value === null ? "" : String(value);
+  const shown = v === null ? base : v;
+  const commit = () => {
+    if (v === null) return;
+    const raw = v; setV(null);
+    if (kind === "num") {
+      const n = manSum(raw);
+      if (Number.isNaN(n)) return;
+      const nv = n === 0 ? null : n;
+      if (nv === (base === "" ? null : +base)) return;
+      onCommit(nv);
+    } else {
+      const t = raw.trim();
+      if (t === base) return;
+      onCommit(t === "" ? null : t);
+    }
+  };
+  return (
+    <input
+      type={kind === "date" ? "date" : "text"} inputMode={kind === "num" ? "text" : undefined}
+      value={shown} data-g={g}
+      onFocus={(e) => { if (v === null) setV(base); if (kind !== "date") e.target.select(); }}
+      onChange={(e) => setV(e.target.value)} onBlur={commit}
+      style={{ width: width || "100%", boxSizing: "border-box", border: "none", background: warn ? ACL : "transparent", outline: "none", fontFamily: kind === "num" ? MONO : FONT, fontSize: 13, fontWeight: bold ? 800 : 600, color: warn ? ACC : kind === "num" ? M : TXT, textAlign: align || (kind === "num" ? "right" : "left"), padding: "8px 6px", minWidth: 0 }}
+    />
+  );
+}
+
+function rieNav(e) {
+  const t = e.target, m = t.dataset && t.dataset.g;
+  if (!m || e.altKey || e.ctrlKey || e.metaKey) return;
+  const k = e.key;
+  if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter"].includes(k)) return;
+  if (t.type === "date" && (k === "ArrowUp" || k === "ArrowDown")) return;
+  if (k === "ArrowLeft" && t.type !== "date" && !(t.selectionStart === 0 && t.selectionEnd === 0)) return;
+  if (k === "ArrowRight" && t.type !== "date" && !(t.selectionStart === t.value.length && t.selectionEnd === t.value.length)) return;
+  const [r, c] = m.split(":").map(Number);
+  const all = Array.from(e.currentTarget.querySelectorAll("input[data-g]")).map((el) => { const [a, b] = el.dataset.g.split(":").map(Number); return { el, r: a, c: b }; });
+  let next = null;
+  if (k === "ArrowLeft" || k === "ArrowRight") {
+    const row = all.filter((x) => x.r === r).sort((a, b) => a.c - b.c);
+    const i = row.findIndex((x) => x.c === c);
+    next = row[k === "ArrowLeft" ? i - 1 : i + 1] || null;
+  } else {
+    const row = all.filter((x) => x.r === (k === "ArrowUp" ? r - 1 : r + 1));
+    if (row.length) next = row.reduce((a, b) => (Math.abs(b.c - c) < Math.abs(a.c - c) ? b : a));
+  }
+  e.preventDefault();
+  if (k === "Enter" || (!next && (k === "ArrowUp" || k === "ArrowDown"))) t.blur();
+  if (next) { next.el.focus(); if (next.el.type !== "date") next.el.select(); }
+}
+
+function RieBlock({ oid, o, edit, onEdit, onAddDdt }) {
+  const sizes = rieSizes(o);
+  const rows = rieRows(o);
+  const ordT = rieOrdTot(o), delT = rieDelTot(o), res = ordT - delT;
+  const far = rieFarDate();
+  const th = { padding: "7px 6px", fontSize: 10, fontWeight: 700, color: T2, letterSpacing: "0.04em", textAlign: "center", borderBottom: `1px solid ${BRD}`, borderRight: `1px solid ${BRD}`, background: S1, whiteSpace: "nowrap" };
+  const td = { borderBottom: `1px solid ${BRD}`, borderRight: `1px solid ${BRD}`, padding: 0 };
+  const tag = res === 0 ? { t: "completo", c: GRN, b: "#E3F8EF" } : res < 0 ? { t: `in eccesso ${-res} paia`, c: RED, b: "#FDECEC" } : { t: `residuo ${res} paia`, c: ACC, b: ACL };
+  const delRow = (r) => {
+    if (!window.confirm(`Eliminare il rientro ${r.ddt || ""}?`)) return;
+    rieSet(`${oid}/rows/${r.id}`, null);
+  };
+  const delOrder = () => {
+    if (rows.length) { window.alert("Ci sono già dei rientri registrati: eliminali prima di eliminare l'ordine."); return; }
+    if (!window.confirm(`Eliminare l'ordine ${o.art} ${o.col}?`)) return;
+    rieSet(oid, null);
+  };
+  return (
+    <div style={{ background: S0, border: `1px solid ${BRD}`, borderRadius: 14, marginBottom: 14, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "10px 14px", background: ML, borderBottom: `2px solid ${M}` }}>
+        <span style={{ fontSize: 17, fontWeight: 900, color: TXT }}>{o.art}</span>
+        <span style={{ fontSize: 14, fontWeight: 700, color: T2 }}>{o.col}</span>
+        <span style={{ fontSize: 11, fontWeight: 800, color: tag.c, background: tag.b, borderRadius: 20, padding: "3px 10px" }}>{tag.t}</span>
+        <span style={{ flex: 1 }} />
+        <button onClick={() => onAddDdt(oid)} style={{ background: M, color: "#fff", border: "none", borderRadius: 10, padding: "7px 12px", fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>+ Rientro</button>
+        <button onClick={() => onEdit(edit ? null : oid)} style={{ background: edit ? ACL : S0, color: edit ? ACC : T2, border: `1px solid ${edit ? ACC : BRD2}`, borderRadius: 10, padding: "7px 12px", fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>{edit ? "Fine modifica" : "✎ Ordine"}</button>
+      </div>
+      <div onKeyDown={rieNav} style={{ overflowX: "auto" }}>
+        <table style={{ borderCollapse: "separate", borderSpacing: 0, minWidth: "100%", fontSize: 13 }}>
+          <thead>
+            <tr>
+              <th style={{ ...th, textAlign: "left", minWidth: 90 }}>DDT / riga</th>
+              <th style={{ ...th, minWidth: 118 }}>DATA</th>
+              {sizes.map((s) => <th key={s} style={{ ...th, minWidth: 54 }}>{s}</th>)}
+              <th style={{ ...th, minWidth: 62 }}>TOT</th>
+              <th style={{ ...th, minWidth: 84 }}>FT LAV</th>
+              <th style={{ ...th, minWidth: 118 }}>DATA FT</th>
+              <th style={{ ...th, minWidth: 66 }}>PAIA FT</th>
+              <th style={{ ...th, minWidth: 34 }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style={{ background: S1 }}>
+              <td style={{ ...td, padding: "8px 8px", fontWeight: 900, fontSize: 12, color: TXT }}>ORDINE</td>
+              <td style={td}></td>
+              {sizes.map((s, i) => (
+                <td key={s} style={td}>
+                  {edit ? <RCell g={`0:${i}`} value={rieOrd(o, s) || ""} onCommit={(v) => rieSet(`${oid}/ord/${rieKey(s)}`, v)} bold />
+                    : <div style={{ padding: "8px 6px", textAlign: "right", fontFamily: MONO, fontWeight: 800, color: T2 }}>{rieOrd(o, s) || ""}</div>}
+                </td>
+              ))}
+              <td style={{ ...td, padding: "8px 6px", textAlign: "right", fontFamily: MONO, fontWeight: 900, color: TXT }}>{ordT}</td>
+              <td style={td} colSpan={4}>{edit && <button onClick={delOrder} style={{ background: "none", border: "none", color: RED, fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer", padding: "8px 10px" }}>Elimina ordine</button>}</td>
+            </tr>
+            {rows.map((r, ri) => {
+              const tot = rieRowTot(o, r);
+              const ftp = r.ftp ? +r.ftp : null;
+              return (
+                <tr key={r.id}>
+                  <td style={td}><RCell kind="text" g={`${ri + 1}:-2`} value={r.ddt} onCommit={(v) => rieSet(`${oid}/rows/${r.id}/ddt`, v)} bold /></td>
+                  <td style={td}><RCell kind="date" g={`${ri + 1}:-1`} value={r.data} warn={r.data > far} onCommit={(v) => rieSet(`${oid}/rows/${r.id}/data`, v)} /></td>
+                  {sizes.map((s, i) => (
+                    <td key={s} style={td}><RCell g={`${ri + 1}:${i}`} value={r.q?.[rieKey(s)]} onCommit={(v) => rieSet(`${oid}/rows/${r.id}/q/${rieKey(s)}`, v)} warn={rieDel(o, s) > rieOrd(o, s)} /></td>
+                  ))}
+                  <td style={{ ...td, padding: "8px 6px", textAlign: "right", fontFamily: MONO, fontWeight: 900, color: TXT }}>{tot}</td>
+                  <td style={td}><RCell kind="text" g={`${ri + 1}:${sizes.length}`} value={r.ft} onCommit={(v) => rieSet(`${oid}/rows/${r.id}/ft`, v)} /></td>
+                  <td style={td}><RCell kind="date" g={`${ri + 1}:${sizes.length + 1}`} value={r.ftd} warn={r.ftd > far} onCommit={(v) => rieSet(`${oid}/rows/${r.id}/ftd`, v)} /></td>
+                  <td style={td}><RCell g={`${ri + 1}:${sizes.length + 2}`} value={r.ftp} warn={ftp !== null && ftp !== tot} onCommit={(v) => rieSet(`${oid}/rows/${r.id}/ftp`, v)} /></td>
+                  <td style={{ ...td, textAlign: "center" }}><button title="Elimina rientro" onClick={() => delRow(r)} style={{ background: "none", border: "none", color: T3, fontSize: 16, cursor: "pointer", padding: "6px 8px" }}>×</button></td>
+                </tr>
+              );
+            })}
+            <tr style={{ background: res < 0 ? "#FDECEC" : EL }}>
+              <td style={{ ...td, padding: "8px 8px", fontWeight: 900, fontSize: 12, color: res < 0 ? RED : E }}>DA CONSEGNARE</td>
+              <td style={td}></td>
+              {sizes.map((s) => { const x = rieOrd(o, s) - rieDel(o, s); return <td key={s} style={{ ...td, padding: "8px 6px", textAlign: "right", fontFamily: MONO, fontWeight: 800, color: x < 0 ? RED : x > 0 ? TXT : T3 }}>{x}</td>; })}
+              <td style={{ ...td, padding: "8px 6px", textAlign: "right", fontFamily: MONO, fontWeight: 900, color: res < 0 ? RED : TXT }}>{res}</td>
+              <td style={td} colSpan={4}></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+const RIE_INP = { width: "100%", boxSizing: "border-box", background: S0, border: `1.5px solid ${BRD2}`, borderRadius: 12, padding: "11px 12px", fontFamily: FONT, fontSize: 15, color: TXT, outline: "none" };
+const rieLbl = (t) => <div style={{ fontSize: 10, fontWeight: 700, color: T2, letterSpacing: "0.1em", textTransform: "uppercase", margin: "10px 0 4px" }}>{t}</div>;
+
+// griglia di quantità per taglia (accetta somme)
+function RieQtyGrid({ sizes, vals, setVals, limit }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(64px, 1fr))", gap: 8 }}>
+      {sizes.map((s) => {
+        const n = manSum(vals[s]);
+        const bad = Number.isNaN(n);
+        const over = !bad && limit && n > (limit[s] ?? Infinity);
+        return (
+          <div key={s}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: T2, textAlign: "center", marginBottom: 2 }}>{s}</div>
+            <input type="text" inputMode="text" value={vals[s] ?? ""} onChange={(e) => setVals((p) => ({ ...p, [s]: e.target.value }))}
+              onBlur={() => { const x = manSum(vals[s]); if (!Number.isNaN(x)) setVals((p) => ({ ...p, [s]: x ? String(x) : "" })); }}
+              style={{ ...RIE_INP, padding: "9px 4px", textAlign: "center", fontFamily: MONO, fontWeight: 700, borderColor: bad ? RED : over ? ACC : BRD2, background: over ? ACL : S0 }} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+const rieVals = (vals, sizes) => { const q = {}; for (const s of sizes) { const n = manSum(vals[s]); if (!Number.isNaN(n) && n > 0) q[rieKey(s)] = n; } return q; };
+const rieBad = (vals, sizes) => sizes.some((s) => Number.isNaN(manSum(vals[s])));
+
+function RieOrdModal({ list, defaults, onClose }) {
+  const [f, setF] = useState({ lab: defaults.lab || "", brand: defaults.brand || "", linea: defaults.linea || "", art: "", col: "", smin: "39", smax: "46" });
+  const [vals, setVals] = useState({});
+  const [err, setErr] = useState("");
+  const [done, setDone] = useState("");
+  const smin = parseInt(f.smin, 10), smax = parseInt(f.smax, 10);
+  const okRange = Number.isInteger(smin) && Number.isInteger(smax) && smin >= 20 && smax <= 60 && smin <= smax && smax - smin <= 20;
+  const sizes = okRange ? Array.from({ length: smax - smin + 1 }, (_, i) => smin + i) : [];
+  const opts = (k) => Array.from(new Set(list.map((o) => o[k]))).sort();
+  const norm = (s) => s.trim().replace(/\s+/g, " ");
+  const save = (again) => {
+    const lab = norm(f.lab).toUpperCase(), brand = norm(f.brand).toUpperCase(), linea = norm(f.linea).toUpperCase(), art = norm(f.art).toUpperCase(), col = norm(f.col).toUpperCase();
+    if (!lab || !brand || !linea || !art || !col) { setErr("Compila laboratorio, brand, linea, articolo e colore."); return; }
+    if (!okRange) { setErr("Curva taglie non valida (es. da 39 a 46)."); return; }
+    if (rieBad(vals, sizes)) { setErr("Una quantità non è valida: usa numeri o somme come 17+11."); return; }
+    const ord = rieVals(vals, sizes);
+    if (!Object.keys(ord).length) { setErr("Inserisci almeno una quantità ordinata."); return; }
+    if (list.some((o) => o.lab === lab && o.brand === brand && o.linea === linea && o.art === art && o.col === col)) { setErr("Questo articolo e colore esistono già in questa linea."); return; }
+    set(ref(db, `rientri/${uid()}${uid()}`), { lab, brand, linea, art, col, smin, smax, ord, ts: Date.now() });
+    if (again) { setDone(`${art} ${col} salvato. Inserisci il colore successivo.`); setF((p) => ({ ...p, lab, brand, linea, art, col: "" })); setVals({}); setErr(""); }
+    else onClose();
+  };
+  const field = (k, label, listId) => (<div style={{ flex: 1, minWidth: 150 }}>{rieLbl(label)}<input list={listId} value={f[k]} maxLength={40} onChange={(e) => setF((p) => ({ ...p, [k]: e.target.value }))} style={RIE_INP} /></div>);
+  return (
+    <Modal onClose={onClose}>
+      <div style={{ fontFamily: FONT, maxHeight: "78vh", overflowY: "auto" }}>
+        <div style={{ fontSize: 18, fontWeight: 900, color: TXT }}>Nuovo ordine</div>
+        <div style={{ fontSize: 12, color: T2 }}>Un articolo e un colore affidati a un laboratorio. I laboratori, brand e linee nuovi si creano scrivendoli.</div>
+        <datalist id="rie-lab">{opts("lab").map((x) => <option key={x} value={x} />)}</datalist>
+        <datalist id="rie-brand">{opts("brand").map((x) => <option key={x} value={x} />)}</datalist>
+        <datalist id="rie-linea">{opts("linea").map((x) => <option key={x} value={x} />)}</datalist>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>{field("lab", "Laboratorio", "rie-lab")}{field("brand", "Brand", "rie-brand")}{field("linea", "Stagione / linea", "rie-linea")}</div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>{field("art", "Articolo")}{field("col", "Colore")}
+          <div style={{ width: 80 }}>{rieLbl("Da taglia")}<input value={f.smin} inputMode="numeric" onChange={(e) => setF((p) => ({ ...p, smin: e.target.value }))} style={{ ...RIE_INP, textAlign: "center", fontFamily: MONO }} /></div>
+          <div style={{ width: 80 }}>{rieLbl("A taglia")}<input value={f.smax} inputMode="numeric" onChange={(e) => setF((p) => ({ ...p, smax: e.target.value }))} style={{ ...RIE_INP, textAlign: "center", fontFamily: MONO }} /></div>
+        </div>
+        {rieLbl("Paia ordinate per taglia")}
+        <RieQtyGrid sizes={sizes} vals={vals} setVals={setVals} />
+        <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 800, color: TXT, marginTop: 8 }}>Totale: {sizes.reduce((t, s) => t + (manSum(vals[s]) || 0), 0)}</div>
+        {done && <div style={{ fontSize: 13, fontWeight: 700, color: GRN, marginTop: 8 }}>{done}</div>}
+        {err && <div style={{ fontSize: 13, fontWeight: 700, color: RED, marginTop: 8 }}>{err}</div>}
+        <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+          <Btn style={{ flex: 1, minWidth: 130 }} onClick={() => save(false)}>Salva ordine</Btn>
+          <Btn color={BG} textColor={M} style={{ flex: 1, minWidth: 190 }} onClick={() => save(true)}>Salva e aggiungi altro colore</Btn>
+          <Btn color={BG} textColor={T2} style={{ width: "auto", padding: "13px 18px" }} onClick={onClose}>Chiudi</Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function RieDdtModal({ entries, startId, onClose }) {
+  const [oid, setOid] = useState(startId || entries[0]?.[0] || "");
+  const [ddt, setDdt] = useState("");
+  const [data, setData] = useState(todayStr());
+  const [ft, setFt] = useState(""); const [ftd, setFtd] = useState(""); const [ftp, setFtp] = useState("");
+  const [vals, setVals] = useState({});
+  const [err, setErr] = useState("");
+  const o = (entries.find(([id]) => id === oid) || [])[1];
+  const sizes = o ? rieSizes(o) : [];
+  const limit = {}; if (o) sizes.forEach((s) => { limit[s] = rieOrd(o, s) - rieDel(o, s); });
+  const over = sizes.filter((s) => (manSum(vals[s]) || 0) > limit[s]);
+  const save = () => {
+    if (!o) { setErr("Scegli l'articolo."); return; }
+    if (!ddt.trim()) { setErr("Scrivi il numero del DDT."); return; }
+    if (rieBad(vals, sizes)) { setErr("Una quantità non è valida."); return; }
+    const q = rieVals(vals, sizes);
+    if (!Object.keys(q).length) { setErr("Inserisci almeno una quantità."); return; }
+    const row = { ddt: ddt.trim().slice(0, 20), data, q, o: Date.now() };
+    if (ft.trim()) row.ft = ft.trim().slice(0, 20);
+    if (ftd) row.ftd = ftd;
+    const p = manSum(ftp); if (!Number.isNaN(p) && p > 0) row.ftp = p;
+    rieSet(`${oid}/rows/${uid()}${uid()}`, row);
+    onClose();
+  };
+  return (
+    <Modal onClose={onClose}>
+      <div style={{ fontFamily: FONT, maxHeight: "78vh", overflowY: "auto" }}>
+        <div style={{ fontSize: 18, fontWeight: 900, color: TXT }}>Nuovo rientro</div>
+        {rieLbl("Articolo")}
+        <select value={oid} onChange={(e) => { setOid(e.target.value); setVals({}); }} style={RIE_INP}>
+          {entries.map(([id, x]) => <option key={id} value={id}>{x.lab} · {x.brand} · {x.linea} · {x.art} {x.col}</option>)}
+        </select>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 120 }}>{rieLbl("DDT n.")}<input value={ddt} maxLength={20} onChange={(e) => setDdt(e.target.value)} style={{ ...RIE_INP, fontFamily: MONO, fontWeight: 700 }} /></div>
+          <div style={{ flex: 1, minWidth: 150 }}>{rieLbl("Data")}<input type="date" value={data} onChange={(e) => setData(e.target.value)} style={{ ...RIE_INP, fontFamily: MONO }} /></div>
+        </div>
+        {rieLbl("Paia rientrate per taglia")}
+        <RieQtyGrid sizes={sizes} vals={vals} setVals={setVals} limit={limit} />
+        <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 800, color: TXT, marginTop: 8 }}>Totale: {sizes.reduce((t, s) => t + (manSum(vals[s]) || 0), 0)}</div>
+        {over.length > 0 && <div style={{ fontSize: 13, fontWeight: 700, color: ACC, marginTop: 6 }}>Attenzione: taglia {over.join(", ")} supera le paia ancora da consegnare. Controlla il DDT (puoi salvare lo stesso).</div>}
+        {rieLbl("Fattura di lavorazione (facoltativo, si può compilare dopo)")}
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <input placeholder="FT n." value={ft} maxLength={20} onChange={(e) => setFt(e.target.value)} style={{ ...RIE_INP, flex: 1, minWidth: 100, fontFamily: MONO }} />
+          <input type="date" value={ftd} onChange={(e) => setFtd(e.target.value)} style={{ ...RIE_INP, flex: 1, minWidth: 150, fontFamily: MONO }} />
+          <input placeholder="Paia" value={ftp} onChange={(e) => setFtp(e.target.value)} style={{ ...RIE_INP, width: 90, fontFamily: MONO, textAlign: "center" }} />
+        </div>
+        {err && <div style={{ fontSize: 13, fontWeight: 700, color: RED, marginTop: 8 }}>{err}</div>}
+        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+          <Btn style={{ flex: 1 }} onClick={save}>Salva rientro</Btn>
+          <Btn color={BG} textColor={T2} style={{ width: "auto", padding: "13px 18px" }} onClick={onClose}>Annulla</Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/* Incolla da DDT: testo preparato da Claude a partire dalla scansione.
+   Formato:  DDT 951 27/10/2026
+             MS261-1503 | 126 TAN | 39=0 40=1 41=1 43=5 44=4 */
+function rieParse(text) {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const out = { ddt: "", data: "", items: [], errors: [] };
+  for (const l of lines) {
+    const h = l.match(/^DDT\s*[:n.°]*\s*(\S+)\s+(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/i);
+    if (h) { const y = h[4].length === 2 ? "20" + h[4] : h[4]; out.ddt = h[1]; out.data = `${y}-${h[3].padStart(2, "0")}-${h[2].padStart(2, "0")}`; continue; }
+    const p = l.split("|").map((x) => x.trim());
+    if (p.length >= 3) {
+      const q = {}; let m; const re = /(\d{2})\s*=\s*(\d+)/g;
+      while ((m = re.exec(p[2]))) q[+m[1]] = +m[2];
+      if (Object.keys(q).length) { out.items.push({ art: p[0].toUpperCase(), col: p[1].toUpperCase(), q }); continue; }
+    }
+    out.errors.push(l);
+  }
+  return out;
+}
+function RiePasteModal({ entries, onClose }) {
+  const [txt, setTxt] = useState("");
+  const [res, setRes] = useState(null);
+  const [lab, setLab] = useState("");
+  const labs = Array.from(new Set(entries.map(([, o]) => o.lab))).sort();
+  const read = () => {
+    const p = rieParse(txt);
+    const pool = entries.filter(([, o]) => !lab || o.lab === lab);
+    p.items = p.items.map((it) => {
+      const hit = pool.filter(([, o]) => o.art === it.art && o.col === it.col);
+      const found = hit.length === 1 ? hit[0] : null;
+      const over = found ? Object.entries(it.q).filter(([s, n]) => n > rieOrd(found[1], +s) - rieDel(found[1], +s)).map(([s]) => s) : [];
+      const outside = found ? Object.keys(it.q).filter((s) => +s < found[1].smin || +s > found[1].smax) : [];
+      return { ...it, found, amb: hit.length > 1, over, outside };
+    });
+    setRes(p);
+  };
+  const ok = res && res.ddt && res.data && res.items.some((i) => i.found && !i.outside.length);
+  const confirm = () => {
+    res.items.forEach((it) => {
+      if (!it.found || it.outside.length) return;
+      const q = {}; Object.entries(it.q).forEach(([s, n]) => { if (n > 0) q[rieKey(s)] = n; });
+      rieSet(`${it.found[0]}/rows/${uid()}${uid()}`, { ddt: res.ddt, data: res.data, q, o: Date.now() });
+    });
+    onClose();
+  };
+  return (
+    <Modal onClose={onClose}>
+      <div style={{ fontFamily: FONT, maxHeight: "78vh", overflowY: "auto" }}>
+        <div style={{ fontSize: 18, fontWeight: 900, color: TXT }}>Incolla da DDT</div>
+        <div style={{ fontSize: 12, color: T2, marginBottom: 6 }}>Incolla il testo ricevuto da Claude dopo la scansione del DDT. Prima di salvare vedi cosa è stato riconosciuto.</div>
+        {rieLbl("Laboratorio del DDT (aiuta a trovare l'articolo giusto)")}
+        <select value={lab} onChange={(e) => setLab(e.target.value)} style={RIE_INP}><option value="">Tutti</option>{labs.map((l) => <option key={l} value={l}>{l}</option>)}</select>
+        <textarea value={txt} onChange={(e) => { setTxt(e.target.value); setRes(null); }} rows={6} placeholder={"DDT 951 27/10/2026\nMS261-1503 | 126 TAN | 39=0 40=1 41=1 43=5 44=4"} style={{ ...RIE_INP, marginTop: 10, fontFamily: MONO, fontSize: 13, resize: "vertical" }} />
+        {!res && <Btn style={{ marginTop: 10 }} onClick={read}>Leggi</Btn>}
+        {res && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: res.ddt && res.data ? TXT : RED }}>{res.ddt && res.data ? `DDT ${res.ddt} del ${fmtD(res.data)}` : "Manca la riga «DDT numero data»."}</div>
+            {res.items.map((it, i) => (
+              <div key={i} style={{ marginTop: 8, padding: "8px 10px", borderRadius: 10, background: it.found && !it.outside.length ? EL : "#FDECEC", fontSize: 13 }}>
+                <b>{it.art} {it.col}</b> · {Object.values(it.q).reduce((a, b) => a + b, 0)} paia
+                {it.found ? <span style={{ color: T2 }}> → {it.found[1].lab} · {it.found[1].linea}</span> : <span style={{ color: RED, fontWeight: 700 }}> — {it.amb ? "più ordini corrispondono: scegli il laboratorio" : "ordine non trovato: crea prima l'ordine"}</span>}
+                {it.outside.length > 0 && <div style={{ color: RED, fontWeight: 700 }}>Taglie fuori curva: {it.outside.join(", ")}</div>}
+                {it.over.length > 0 && <div style={{ color: ACC, fontWeight: 700 }}>Taglie oltre il residuo: {it.over.join(", ")}</div>}
+              </div>
+            ))}
+            {res.errors.length > 0 && <div style={{ marginTop: 8, fontSize: 12, color: RED }}>Righe non lette: {res.errors.join(" · ")}</div>}
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <Btn color={ok ? GRN : BRD} textColor={ok ? "#fff" : T3} style={{ flex: 1 }} onClick={() => ok && confirm()}>Conferma e aggiungi ai rientri</Btn>
+              <Btn color={BG} textColor={T2} style={{ width: "auto", padding: "13px 18px" }} onClick={() => setRes(null)}>Modifica testo</Btn>
+            </div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+// Excel con lo stesso schema dei file del collega: un foglio per linea, blocchi Articolo/Colore/DDT/DATA/taglie/ORDINE/CONSEGNATE/FT LAV
+async function exportRientriXlsx(entries, title) {
+  const ExcelJS = (await import("exceljs")).default;
+  const wb = new ExcelJS.Workbook();
+  const groups = {};
+  entries.forEach(([, o]) => { (groups[`${o.brand} ${o.linea}`] ||= []).push(o); });
+  const colL = (n) => { let s = ""; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
+  const thin = { style: "thin", color: { argb: "FFBBBBBB" } };
+  const used = new Set();
+  Object.keys(groups).sort().forEach((gname) => {
+    let nm = gname.replace(/[\\/?*[\]:]/g, " ").slice(0, 31); let k = 2;
+    while (used.has(nm)) nm = nm.slice(0, 28) + " " + k++;
+    used.add(nm);
+    const ws = wb.addWorksheet(nm);
+    let r = 1;
+    groups[gname].sort(rieCmp).forEach((o) => {
+      const sizes = rieSizes(o), n = sizes.length;
+      const cOrd = 5 + n, cCons = cOrd + 1, cFt = cCons + 1;
+      const head = ["Articolo", "Colore", "DDT", "DATA", ...sizes, "ORDINE", "CONSEGNATE", "FT LAV", "DATA", "PAIA"];
+      head.forEach((h, i) => { const c = ws.getCell(r, i + 1); c.value = h; c.font = { bold: true }; c.alignment = { horizontal: "center" }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEBF0FF" } }; c.border = { top: thin, bottom: thin, left: thin, right: thin }; });
+      const ordRow = r + 1;
+      ws.getCell(ordRow, 1).value = o.art; ws.getCell(ordRow, 2).value = o.col;
+      sizes.forEach((s, i) => { ws.getCell(ordRow, 5 + i).value = rieOrd(o, s) || null; });
+      ws.getCell(ordRow, cOrd).value = { formula: `SUM(${colL(5)}${ordRow}:${colL(4 + n)}${ordRow})`, result: rieOrdTot(o) };
+      ws.getRow(ordRow).font = { bold: true };
+      const rows = rieRows(o);
+      rows.forEach((x, i) => {
+        const rr = ordRow + 1 + i;
+        ws.getCell(rr, 3).value = isNaN(+x.ddt) ? x.ddt : +x.ddt;
+        if (x.data) { ws.getCell(rr, 4).value = new Date(x.data + "T12:00:00"); ws.getCell(rr, 4).numFmt = "dd/mm/yy"; }
+        sizes.forEach((s, j) => { ws.getCell(rr, 5 + j).value = +(x.q?.[rieKey(s)]) || null; });
+        ws.getCell(rr, cCons).value = { formula: `SUM(${colL(5)}${rr}:${colL(4 + n)}${rr})`, result: rieRowTot(o, x) };
+        if (x.ft) ws.getCell(rr, cFt).value = isNaN(+x.ft) ? x.ft : +x.ft;
+        if (x.ftd) { ws.getCell(rr, cFt + 1).value = new Date(x.ftd + "T12:00:00"); ws.getCell(rr, cFt + 1).numFmt = "dd/mm/yy"; }
+        if (x.ftp) ws.getCell(rr, cFt + 2).value = +x.ftp;
+      });
+      const last = ordRow + rows.length, resRow = last + 1;
+      ws.getCell(resRow, 3).value = "DA CONSEGNARE";
+      sizes.forEach((s, j) => { const L = colL(5 + j); ws.getCell(resRow, 5 + j).value = { formula: `${L}${ordRow}-SUM(${L}${ordRow + 1}:${L}${Math.max(last, ordRow + 1)})`, result: rieOrd(o, s) - rieDel(o, s) }; });
+      ws.getCell(resRow, cOrd).value = { formula: `SUM(${colL(5)}${resRow}:${colL(4 + n)}${resRow})`, result: rieOrdTot(o) - rieDelTot(o) };
+      ws.getRow(resRow).font = { bold: true, color: { argb: "FF00796B" } };
+      for (let rr = ordRow; rr <= resRow; rr++) for (let c = 1; c <= cFt + 2; c++) ws.getCell(rr, c).border = { top: thin, bottom: thin, left: thin, right: thin };
+      r = resRow + 2;
+    });
+    ws.getColumn(1).width = 16; ws.getColumn(2).width = 18; ws.getColumn(3).width = 14; ws.getColumn(4).width = 11;
+    for (let c = 5; c <= 20; c++) ws.getColumn(c).width = 9;
+  });
+  const buf = await wb.xlsx.writeBuffer();
+  const filename = `rientri_${title.replace(/[^A-Za-z0-9]+/g, "_")}_${todayStr()}.xlsx`;
+  const type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  const url = URL.createObjectURL(new Blob([buf], { type }));
+  const a = document.createElement("a"); a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+function RientriTab({ rie, wide }) {
+  const [view, setView] = useState("ord");
+  const [fLab, setFLab] = useState(""); const [fBrand, setFBrand] = useState(""); const [fLinea, setFLinea] = useState("");
+  const [onlyRes, setOnlyRes] = useState(false);
+  const [modal, setModal] = useState(null);
+  const [editId, setEditId] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const all = useMemo(() => Object.entries(rie || {}).filter(([, o]) => o && o.art).sort((a, b) => rieCmp(a[1], b[1])), [rie]);
+  const uniq = (arr) => Array.from(new Set(arr)).sort((a, b) => a.localeCompare(b, "it"));
+  const labs = uniq(all.map(([, o]) => o.lab));
+  const brands = uniq(all.filter(([, o]) => !fLab || o.lab === fLab).map(([, o]) => o.brand));
+  const lines = uniq(all.filter(([, o]) => (!fLab || o.lab === fLab) && (!fBrand || o.brand === fBrand)).map(([, o]) => o.linea));
+  const shown = all.filter(([, o]) => (!fLab || o.lab === fLab) && (!fBrand || o.brand === fBrand) && (!fLinea || o.linea === fLinea) && (!onlyRes || rieOrdTot(o) !== rieDelTot(o)));
+  const ordT = shown.reduce((t, [, o]) => t + rieOrdTot(o), 0), delT = shown.reduce((t, [, o]) => t + rieDelTot(o), 0);
+  const pct = ordT ? Math.round((delT / ordT) * 100) : 0;
+  const sel = { ...RIE_INP, width: "auto", minWidth: 140, padding: "9px 12px", fontWeight: 700, fontSize: 14 };
+  const kpi = (l, v, c) => (<div style={{ background: S0, border: `1px solid ${BRD}`, borderRadius: 14, padding: "10px 14px" }}><div style={{ fontSize: 10, fontWeight: 700, color: T2, letterSpacing: "0.1em", textTransform: "uppercase" }}>{l}</div><div style={{ fontFamily: MONO, fontSize: 24, fontWeight: 800, color: c || TXT }}>{v}</div></div>);
+  const tabBtn = (id, l) => (<button onClick={() => setView(id)} style={{ background: view === id ? M : S0, color: view === id ? "#fff" : M, border: `1.5px solid ${M}`, borderRadius: 12, padding: "9px 14px", fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>{l}</button>);
+  const actBtn = (l, c, tc, fn, bd) => (<button onClick={fn} style={{ background: c, color: tc, border: bd ? `1.5px solid ${M}` : "none", borderRadius: 12, padding: "10px 14px", fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>{l}</button>);
+  const doExport = async () => { setBusy(true); try { await exportRientriXlsx(shown, [fLab || "tutti", fBrand].filter(Boolean).join("_")); } catch (e) { console.error(e); window.alert("Export non riuscito: " + e.message); } finally { setBusy(false); } };
+
+  // riepilogo per laboratorio / brand / linea
+  const groups = {};
+  all.forEach(([, o]) => {
+    const k = [o.lab, o.brand, o.linea].join("|");
+    const g = (groups[k] ||= { lab: o.lab, brand: o.brand, linea: o.linea, ord: 0, del: 0, last: "", far: false, neg: false });
+    g.ord += rieOrdTot(o); g.del += rieDelTot(o);
+    if (rieOrdTot(o) < rieDelTot(o)) g.neg = true;
+    rieRows(o).forEach((r) => { if (r.data && r.data > g.last && r.data <= rieFarDate()) g.last = r.data; if ((r.data && r.data > rieFarDate()) || (r.ftd && r.ftd > rieFarDate())) g.far = true; });
+  });
+  const gl = Object.values(groups).sort((a, b) => [a.lab, a.brand, a.linea].join().localeCompare([b.lab, b.brand, b.linea].join(), "it"));
+  const alerts = [];
+  gl.forEach((g) => { if (g.far) alerts.push(`${g.lab} · ${g.brand} · ${g.linea}: c'è una data molto avanti nel tempo (probabile errore di battitura).`); if (g.neg) alerts.push(`${g.lab} · ${g.brand} · ${g.linea}: consegnate più paia di quelle ordinate su almeno un articolo.`); });
+
+  let prevHead = "";
+  return (
+    <div style={{ fontFamily: FONT, padding: "14px 14px", paddingBottom: 32 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ fontSize: 18, fontWeight: 900, color: TXT }}>Rientri dai laboratori</div>
+          <div style={{ fontSize: 12, color: T2 }}>Ordini affidati ai calzaturifici esterni, DDT di rientro e fatture di lavorazione. Le caselle accettano somme (17+11) e ci si muove con le frecce.</div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>{tabBtn("ord", "Ordini e rientri")}{tabBtn("riep", "Riepilogo")}</div>
+      </div>
+
+      {view === "ord" && (
+        <>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+            <select value={fLab} onChange={(e) => { setFLab(e.target.value); setFBrand(""); setFLinea(""); }} style={sel}><option value="">Tutti i laboratori</option>{labs.map((x) => <option key={x}>{x}</option>)}</select>
+            <select value={fBrand} onChange={(e) => { setFBrand(e.target.value); setFLinea(""); }} style={sel}><option value="">Tutti i brand</option>{brands.map((x) => <option key={x}>{x}</option>)}</select>
+            <select value={fLinea} onChange={(e) => setFLinea(e.target.value)} style={sel}><option value="">Tutte le linee</option>{lines.map((x) => <option key={x}>{x}</option>)}</select>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, color: T2, cursor: "pointer" }}><input type="checkbox" checked={onlyRes} onChange={(e) => setOnlyRes(e.target.checked)} />Solo da consegnare</label>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+            {actBtn("＋ Nuovo ordine", M, "#fff", () => setModal({ k: "ord" }))}
+            {actBtn("＋ Nuovo rientro", S0, M, () => all.length ? setModal({ k: "ddt" }) : window.alert("Crea prima un ordine."), true)}
+            {actBtn("📋 Incolla da DDT", S0, M, () => all.length ? setModal({ k: "paste" }) : window.alert("Crea prima un ordine."), true)}
+            {actBtn(busy ? "Preparo…" : "📊 Esporta Excel", GRN, "#fff", () => shown.length && !busy && doExport())}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: wide ? "repeat(4, 1fr)" : "repeat(2, 1fr)", gap: 10, marginBottom: 14 }}>
+            {kpi("Ordinate", ordT)}{kpi("Consegnate", delT)}{kpi("Residuo", ordT - delT, ordT - delT > 0 ? ACC : ordT - delT < 0 ? RED : GRN)}{kpi("Evasione", pct + "%")}
+          </div>
+          {shown.length === 0 && (
+            <div style={{ background: S0, border: `1px dashed ${BRD2}`, borderRadius: 14, padding: 24, textAlign: "center", color: T2, fontSize: 14 }}>
+              {all.length ? "Nessun articolo con questi filtri." : "Ancora nessun ordine. Premi «＋ Nuovo ordine» per inserire il primo."}
+            </div>
+          )}
+          {shown.map(([id, o]) => {
+            const head = `${o.lab} · ${o.brand} · ${o.linea}`;
+            const showHead = head !== prevHead; prevHead = head;
+            return (
+              <Fragment key={id}>
+                {showHead && <div style={{ fontSize: 11, fontWeight: 800, color: T2, letterSpacing: "0.1em", textTransform: "uppercase", margin: "6px 2px 8px" }}>{head}</div>}
+                <RieBlock oid={id} o={o} edit={editId === id} onEdit={setEditId} onAddDdt={(x) => setModal({ k: "ddt", id: x })} />
+              </Fragment>
+            );
+          })}
+        </>
+      )}
+
+      {view === "riep" && (
+        <>
+          <div style={{ overflowX: "auto", background: S0, border: `1px solid ${BRD}`, borderRadius: 14 }}>
+            <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 640, fontSize: 13 }}>
+              <thead><tr style={{ background: ML }}>{["Laboratorio", "Brand", "Linea", "Ordinate", "Consegnate", "Residuo", "Evasione", "Ultimo rientro"].map((h, i) => <th key={h} style={{ padding: "9px 10px", fontSize: 11, color: T2, textAlign: i > 2 ? "right" : "left", borderBottom: `2px solid ${M}` }}>{h}</th>)}</tr></thead>
+              <tbody>
+                {gl.map((g) => { const res = g.ord - g.del, p = g.ord ? Math.round((g.del / g.ord) * 100) : 0; return (
+                  <tr key={[g.lab, g.brand, g.linea].join("|")} style={{ borderBottom: `1px solid ${BRD}` }}>
+                    <td style={{ padding: "9px 10px", fontWeight: 800 }}>{g.lab}</td><td style={{ padding: "9px 10px" }}>{g.brand}</td><td style={{ padding: "9px 10px" }}>{g.linea}</td>
+                    <td style={{ padding: "9px 10px", textAlign: "right", fontFamily: MONO }}>{g.ord}</td><td style={{ padding: "9px 10px", textAlign: "right", fontFamily: MONO }}>{g.del}</td>
+                    <td style={{ padding: "9px 10px", textAlign: "right", fontFamily: MONO, fontWeight: 800, color: res > 0 ? ACC : res < 0 ? RED : GRN }}>{res}</td>
+                    <td style={{ padding: "9px 10px", textAlign: "right", fontFamily: MONO }}>{p}%</td>
+                    <td style={{ padding: "9px 10px", textAlign: "right", fontFamily: MONO }}>{g.last ? fmtD(g.last) : "—"}</td>
+                  </tr>); })}
+                {gl.length === 0 && <tr><td colSpan={8} style={{ padding: 20, textAlign: "center", color: T2 }}>Nessun dato.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          {alerts.length > 0 && <div style={{ marginTop: 12, background: ACL, border: `1px solid ${ACC}`, borderRadius: 12, padding: "10px 14px", fontSize: 13, color: TXT }}>{alerts.map((a, i) => <div key={i}>⚠ {a}</div>)}</div>}
+        </>
+      )}
+
+      {modal?.k === "ord" && <RieOrdModal list={all.map(([, o]) => o)} defaults={{ lab: fLab, brand: fBrand, linea: fLinea }} onClose={() => setModal(null)} />}
+      {modal?.k === "ddt" && <RieDdtModal entries={all} startId={modal.id} onClose={() => setModal(null)} />}
+      {modal?.k === "paste" && <RiePasteModal entries={all} onClose={() => setModal(null)} />}
     </div>
   );
 }
