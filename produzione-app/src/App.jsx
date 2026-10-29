@@ -2481,11 +2481,15 @@ function rieNav(e) {
 // Resi: paia che Mosaicon rimanda al laboratorio (DDT Mosaicon) e che il laboratorio restituisce con il proprio DDT (rdd)
 const rieResi = (o) => Object.entries(o.resi || {}).map(([id, r]) => ({ id, ...r })).sort((a, b) => (a.o || 0) - (b.o || 0));
 const rieResoTot = (o, r) => rieSizes(o).reduce((t, s) => t + (+(r.q?.[rieKey(s)]) || 0), 0) + (+r.xt || 0);
-const rieResoOpen = (o) => rieResi(o).filter((r) => !String(r.rdd || "").trim()).reduce((t, r) => t + rieResoTot(o, r), 0);
+// paia già rientrate: con rdd e senza dettaglio (qr) = tutto il reso; con qr = le paia registrate
+const rieResoBack = (o, r) => !String(r.rdd || "").trim() ? 0 : r.qr ? rieSizes(o).reduce((t, s) => t + (+(r.qr?.[rieKey(s)]) || 0), 0) : rieResoTot(o, r);
+const rieResoOpen = (o) => rieResi(o).reduce((t, r) => t + Math.max(0, rieResoTot(o, r) - rieResoBack(o, r)), 0);
+// paia ancora fuori per taglia (dopo i rientri già registrati)
+const rieResoRem = (o, r) => { const m = {}; rieSizes(o).forEach((s) => { const k = rieKey(s); const sent = +(r.q?.[k]) || 0; const back = !String(r.rdd || "").trim() ? 0 : r.qr ? (+(r.qr?.[k]) || 0) : sent; m[s] = Math.max(0, sent - back); }); return m; };
 // ricerca DDT / FT: uguale, oppure (da 3 caratteri) contenuto
 const rieMatch = (val, q) => { const v = String(val ?? "").trim().toUpperCase(), t = q.trim().toUpperCase(); return !!t && !!v && (v === t || (t.length >= 3 && v.includes(t))); };
 
-function RieBlock({ oid, o, edit, onEdit, onAddDdt, onAddReso, allEntries, ddtQ, ftQ }) {
+function RieBlock({ oid, o, edit, onEdit, onAddDdt, onAddReso, onRientra, allEntries, ddtQ, ftQ }) {
   const sizes = rieSizes(o);
   const rows = rieRows(o);
   const ordT = rieOrdTot(o), delT = rieDelTot(o), res = ordT - delT;
@@ -2609,7 +2613,8 @@ function RieBlock({ oid, o, edit, onEdit, onAddDdt, onAddReso, allEntries, ddtQ,
             <tbody>
               {resi.map((r, ri) => {
                 const t = rieResoTot(o, r);
-                const back = String(r.rdd || "").trim() !== "";
+                const backN = rieResoBack(o, r);
+                const back = backN >= t && t > 0;
                 const hit = (ddtQ && (rieMatch(r.ddt, ddtQ) || rieMatch(r.rdd, ddtQ)));
                 return (
                   <tr key={r.id} style={hit ? { background: "#FFF6CC" } : undefined}>
@@ -2621,7 +2626,11 @@ function RieBlock({ oid, o, edit, onEdit, onAddDdt, onAddReso, allEntries, ddtQ,
                     <td title={r.xt ? `di cui ${r.xt} paia senza dettaglio per taglia` : undefined} style={{ ...td, padding: "8px 6px", textAlign: "right", fontFamily: MONO, fontWeight: 900, color: TXT }}>{t}{r.xt ? "*" : ""}</td>
                     <td style={td}><RCell kind="text" g={`${ri}:${sizes.length}`} value={r.rdd} onCommit={(v) => rieSet(`${oid}/resi/${r.id}/rdd`, v)} bold /></td>
                     <td style={td}><RCell kind="date" g={`${ri}:${sizes.length + 1}`} value={r.rdata} onCommit={(v) => rieSet(`${oid}/resi/${r.id}/rdata`, v)} /></td>
-                    <td style={{ ...td, textAlign: "center" }}><span style={{ fontSize: 11, fontWeight: 800, color: back ? GRN : "#B45309", background: back ? "#E3F8EF" : "#FEF3C7", borderRadius: 20, padding: "3px 9px" }}>{back ? "rientrato" : "fuori"}</span></td>
+                    <td style={{ ...td, textAlign: "center", whiteSpace: "nowrap" }}>
+                      {back
+                        ? <span style={{ fontSize: 11, fontWeight: 800, color: GRN, background: "#E3F8EF", borderRadius: 20, padding: "3px 9px" }}>rientrato</span>
+                        : <button onClick={() => onRientra(oid, r.id)} title="Registra il rientro di queste paia" style={{ background: "#B45309", color: "#fff", border: "none", borderRadius: 10, padding: "5px 10px", fontFamily: FONT, fontWeight: 800, fontSize: 11, cursor: "pointer" }}>{backN > 0 ? `Rientra · mancano ${t - backN}` : "↩ Rientra"}</button>}
+                    </td>
                     <td style={{ ...td, textAlign: "center" }}><button title="Elimina reso" onClick={() => { if (window.confirm(`Eliminare il reso ${r.ddt || ""}?`)) rieSet(`${oid}/resi/${r.id}`, null); }} style={{ background: "none", border: "none", color: T3, fontSize: 16, cursor: "pointer", padding: "6px 8px" }}>×</button></td>
                   </tr>
                 );
@@ -2817,6 +2826,52 @@ function RieResoModal({ entries, startId, onClose }) {
         {err && <div style={{ fontSize: 13, fontWeight: 700, color: RED, marginTop: 8 }}>{err}</div>}
         <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
           <Btn style={{ flex: 1 }} onClick={save}>Salva reso</Btn>
+          <Btn color={BG} textColor={T2} style={{ width: "auto", padding: "13px 18px" }} onClick={onClose}>Annulla</Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// Rientro (anche parziale) di un reso: il laboratorio riconsegna le paia con il proprio DDT
+function RieRientraModal({ oid, o, rid, onClose }) {
+  const r = o && o.resi && o.resi[rid] ? { id: rid, ...o.resi[rid] } : null;
+  const sizes = o ? rieSizes(o) : [];
+  const rem = r ? rieResoRem(o, r) : {};
+  const [vals, setVals] = useState(() => { const v = {}; sizes.forEach((s) => { if (rem[s]) v[s] = String(rem[s]); }); return v; });
+  const [rdd, setRdd] = useState(""); const [rdata, setRdata] = useState(todayStr()); const [err, setErr] = useState("");
+  if (!r) return null;
+  const over = sizes.filter((s) => (manSum(vals[s]) || 0) > rem[s]);
+  const save = () => {
+    if (!rdd.trim()) { setErr("Scrivi il DDT con cui il laboratorio ha riconsegnato."); return; }
+    if (rieBad(vals, sizes)) { setErr("Una quantità non è valida."); return; }
+    const add = rieVals(vals, sizes);
+    if (!Object.keys(add).length) { setErr("Inserisci almeno una quantità rientrata."); return; }
+    const had = String(r.rdd || "").trim();
+    const prev = {}; sizes.forEach((s) => { const k = rieKey(s); prev[k] = had ? (r.qr ? (+(r.qr[k]) || 0) : (+(r.q?.[k]) || 0)) : 0; });
+    const qr = {}; sizes.forEach((s) => { const k = rieKey(s); const n = prev[k] + (add[k] || 0); if (n) qr[k] = n; });
+    const nd = rdd.trim().slice(0, 24);
+    rieSet(`${oid}/resi/${rid}/qr`, qr);
+    rieSet(`${oid}/resi/${rid}/rdd`, had && !had.split(",").map((x) => x.trim()).includes(nd) ? `${had}, ${nd}` : had || nd);
+    if (rdata) rieSet(`${oid}/resi/${rid}/rdata`, rdata);
+    onClose();
+  };
+  return (
+    <Modal onClose={onClose}>
+      <div style={{ fontFamily: FONT, maxHeight: "78vh", overflowY: "auto" }}>
+        <div style={{ fontSize: 18, fontWeight: 900, color: TXT }}>Rientro del reso</div>
+        <div style={{ fontSize: 13, color: T2 }}>{o.art} {o.col} · reso DDT Mosaicon <b>{r.ddt}</b>{r.data ? ` del ${fmtD(r.data)}` : ""}</div>
+        {rieLbl("Paia rientrate per taglia (già compilate con quelle ancora fuori)")}
+        <RieQtyGrid sizes={sizes} vals={vals} setVals={setVals} limit={rem} />
+        <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 800, color: TXT, marginTop: 8 }}>Rientrate ora: {sizes.reduce((t, x) => t + (manSum(vals[x]) || 0), 0)} · ancora fuori prima del rientro: {sizes.reduce((t, x) => t + rem[x], 0)}</div>
+        {over.length > 0 && <div style={{ fontSize: 13, fontWeight: 700, color: ACC, marginTop: 6 }}>Attenzione: taglia {over.join(", ")} supera le paia ancora fuori (puoi salvare lo stesso).</div>}
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 150 }}>{rieLbl("DDT del laboratorio")}<input value={rdd} maxLength={24} onChange={(e) => setRdd(e.target.value)} style={{ ...RIE_INP, fontFamily: MONO, fontWeight: 700 }} /></div>
+          <div style={{ flex: 1, minWidth: 150 }}>{rieLbl("Data rientro")}<input type="date" value={rdata} onChange={(e) => setRdata(e.target.value)} style={{ ...RIE_INP, fontFamily: MONO }} /></div>
+        </div>
+        {err && <div style={{ fontSize: 13, fontWeight: 700, color: RED, marginTop: 8 }}>{err}</div>}
+        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+          <Btn color={GRN} style={{ flex: 1 }} onClick={save}>Registra il rientro</Btn>
           <Btn color={BG} textColor={T2} style={{ width: "auto", padding: "13px 18px" }} onClick={onClose}>Annulla</Btn>
         </div>
       </div>
@@ -3068,7 +3123,7 @@ function RientriTab({ rie, wide }) {
             return (
               <Fragment key={id}>
                 {showHead && <div style={{ fontSize: 11, fontWeight: 800, color: T2, letterSpacing: "0.1em", textTransform: "uppercase", margin: "6px 2px 8px" }}>{head}</div>}
-                <RieBlock oid={id} o={o} edit={editId === id} onEdit={setEditId} allEntries={all} ddtQ={ddtQ} ftQ={ftQ} onAddDdt={(x) => setModal({ k: "ddt", id: x })} onAddReso={(x) => setModal({ k: "reso", id: x })} />
+                <RieBlock oid={id} o={o} edit={editId === id} onEdit={setEditId} allEntries={all} ddtQ={ddtQ} ftQ={ftQ} onAddDdt={(x) => setModal({ k: "ddt", id: x })} onAddReso={(x) => setModal({ k: "reso", id: x })} onRientra={(x, rid) => setModal({ k: "rientra", id: x, rid })} />
               </Fragment>
             );
           })}
@@ -3100,6 +3155,7 @@ function RientriTab({ rie, wide }) {
 
       {modal?.k === "ord" && <RieOrdModal list={all.map(([, o]) => o)} defaults={{ lab: fLab, brand: fBrand, linea: fLinea }} onClose={() => setModal(null)} />}
       {modal?.k === "ddt" && <RieDdtModal entries={all} startId={modal.id} onClose={() => setModal(null)} />}
+      {modal?.k === "rientra" && <RieRientraModal oid={modal.id} o={rie[modal.id]} rid={modal.rid} onClose={() => setModal(null)} />}
       {modal?.k === "reso" && <RieResoModal entries={all} startId={modal.id} onClose={() => setModal(null)} />}
       {modal?.k === "paste" && <RiePasteModal entries={all} onClose={() => setModal(null)} />}
     </div>
