@@ -2478,7 +2478,10 @@ function rieNav(e) {
   if (next) { next.el.focus(); if (next.el.type !== "date") next.el.select(); }
 }
 
-function RieBlock({ oid, o, edit, onEdit, onAddDdt, allEntries }) {
+// ricerca DDT / FT: uguale, oppure (da 3 caratteri) contenuto
+const rieMatch = (val, q) => { const v = String(val ?? "").trim().toUpperCase(), t = q.trim().toUpperCase(); return !!t && !!v && (v === t || (t.length >= 3 && v.includes(t))); };
+
+function RieBlock({ oid, o, edit, onEdit, onAddDdt, allEntries, ddtQ, ftQ }) {
   const sizes = rieSizes(o);
   const rows = rieRows(o);
   const ordT = rieOrdTot(o), delT = rieDelTot(o), res = ordT - delT;
@@ -2553,8 +2556,9 @@ function RieBlock({ oid, o, edit, onEdit, onAddDdt, allEntries }) {
             {rows.map((r, ri) => {
               const tot = rieRowTot(o, r);
               const ftp = r.ftp ? +r.ftp : null;
+              const hit = (ddtQ && rieMatch(r.ddt, ddtQ)) || (ftQ && rieMatch(r.ft, ftQ));
               return (
-                <tr key={r.id}>
+                <tr key={r.id} style={hit ? { background: "#FFF6CC" } : undefined}>
                   <td style={td}><RCell kind="text" g={`${ri + 1}:-2`} value={r.ddt} onCommit={(v) => rieSet(`${oid}/rows/${r.id}/ddt`, v)} bold /></td>
                   <td style={td}><RCell kind="date" g={`${ri + 1}:-1`} value={r.data} warn={r.data > far} onCommit={(v) => rieSet(`${oid}/rows/${r.id}/data`, v)} /></td>
                   {sizes.map((s, i) => (
@@ -2859,6 +2863,7 @@ function RientriTab({ rie, wide }) {
   const [view, setView] = useState("ord");
   const [fLab, setFLab] = useState(""); const [fBrand, setFBrand] = useState(""); const [fLinea, setFLinea] = useState("");
   const [fArt, setFArt] = useState(""); const [fQ, setFQ] = useState("");
+  const [ddtQ, setDdtQ] = useState(""); const [ftQ, setFtQ] = useState("");
   const [onlyRes, setOnlyRes] = useState(false);
   const [modal, setModal] = useState(null);
   const [editId, setEditId] = useState(null);
@@ -2871,7 +2876,7 @@ function RientriTab({ rie, wide }) {
   const inScope = (o) => (!fLab || o.lab === fLab) && (!fBrand || o.brand === fBrand) && (!fLinea || o.linea === fLinea);
   const arts = uniq(all.filter(([, o]) => inScope(o)).map(([, o]) => o.art));
   const q = fQ.trim().toUpperCase();
-  const shown = all.filter(([, o]) => inScope(o) && (!fArt || o.art === fArt) && (!q || `${o.art} ${o.col}`.toUpperCase().includes(q)) && (!onlyRes || rieOrdTot(o) !== rieDelTot(o)));
+  const shown = all.filter(([, o]) => inScope(o) && (!fArt || o.art === fArt) && (!q || `${o.art} ${o.col}`.toUpperCase().includes(q)) && (!ddtQ.trim() || rieRows(o).some((r) => rieMatch(r.ddt, ddtQ))) && (!ftQ.trim() || rieRows(o).some((r) => rieMatch(r.ft, ftQ))) && (!onlyRes || rieOrdTot(o) !== rieDelTot(o)));
   const ordT = shown.reduce((t, [, o]) => t + rieOrdTot(o), 0), delT = shown.reduce((t, [, o]) => t + rieDelTot(o), 0);
   const pct = ordT ? Math.round((delT / ordT) * 100) : 0;
   const sel = { ...RIE_INP, width: "auto", minWidth: 140, padding: "9px 12px", fontWeight: 700, fontSize: 14 };
@@ -2922,6 +2927,8 @@ function RientriTab({ rie, wide }) {
             <select value={fLinea} onChange={(e) => { setFLinea(e.target.value); setFArt(""); }} style={sel}><option value="">Tutte le linee</option>{lines.map((x) => <option key={x}>{x}</option>)}</select>
             <select value={fArt} onChange={(e) => setFArt(e.target.value)} style={sel}><option value="">Tutti gli articoli</option>{arts.map((x) => <option key={x}>{x}</option>)}</select>
             <input type="search" value={fQ} onChange={(e) => setFQ(e.target.value)} placeholder="Cerca articolo o colore…" style={{ ...sel, minWidth: 190, fontWeight: 600 }} />
+            <input type="search" value={ddtQ} onChange={(e) => setDdtQ(e.target.value)} placeholder="Cerca DDT…" style={{ ...sel, minWidth: 130, width: 130, fontWeight: 600 }} />
+            <input type="search" value={ftQ} onChange={(e) => setFtQ(e.target.value)} placeholder="Cerca FT LAV…" style={{ ...sel, minWidth: 140, width: 140, fontWeight: 600 }} />
             <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, color: T2, cursor: "pointer" }}><input type="checkbox" checked={onlyRes} onChange={(e) => setOnlyRes(e.target.checked)} />Solo da consegnare</label>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
@@ -2945,7 +2952,7 @@ function RientriTab({ rie, wide }) {
             return (
               <Fragment key={id}>
                 {showHead && <div style={{ fontSize: 11, fontWeight: 800, color: T2, letterSpacing: "0.1em", textTransform: "uppercase", margin: "6px 2px 8px" }}>{head}</div>}
-                <RieBlock oid={id} o={o} edit={editId === id} onEdit={setEditId} allEntries={all} onAddDdt={(x) => setModal({ k: "ddt", id: x })} />
+                <RieBlock oid={id} o={o} edit={editId === id} onEdit={setEditId} allEntries={all} ddtQ={ddtQ} ftQ={ftQ} onAddDdt={(x) => setModal({ k: "ddt", id: x })} />
               </Fragment>
             );
           })}
