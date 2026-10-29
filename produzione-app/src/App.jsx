@@ -2172,12 +2172,42 @@ function ManoviaTab({ man, saveManDay, wide }) {
   const cellB = { borderBottom: `1px solid ${BRD}`, borderRight: `1px solid ${BRD}` };
   const cellRed = { ...cellB, borderTop: `2px solid ${RED}` };
 
+  // Frecce / Invio: ci si muove tra le caselle come in Excel (←/→ solo a inizio/fine testo)
+  const navKey = (e) => {
+    const t = e.target;
+    const m = t.dataset && t.dataset.man;
+    if (!m || e.altKey || e.ctrlKey || e.metaKey) return;
+    const k = e.key;
+    if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter"].includes(k)) return;
+    if (k === "ArrowLeft" && !(t.selectionStart === 0 && t.selectionEnd === 0)) return;
+    if (k === "ArrowRight" && !(t.selectionStart === t.value.length && t.selectionEnd === t.value.length)) return;
+    const [sid, ri, ci] = m.split(":");
+    const r = Number(ri), c = Number(ci);
+    const all = Array.from(e.currentTarget.querySelectorAll("input[data-man]")).map((el) => {
+      const [, a, b] = el.dataset.man.split(":");
+      return { el, r: Number(a), c: Number(b) };
+    });
+    let next = null;
+    if (k === "ArrowUp" || k === "ArrowDown" || k === "Enter") {
+      const tr = k === "ArrowUp" ? r - 1 : r + 1;
+      const rowEls = all.filter((x) => x.r === tr);
+      if (rowEls.length) next = rowEls.reduce((a, b) => (Math.abs(b.c - c) < Math.abs(a.c - c) ? b : a));
+    } else {
+      const rowEls = all.filter((x) => x.r === r).sort((a, b) => a.c - b.c);
+      const i = rowEls.findIndex((x) => x.c === c);
+      next = rowEls[k === "ArrowLeft" ? i - 1 : i + 1] || null;
+    }
+    e.preventDefault();
+    if (k === "Enter") t.blur();
+    if (next) { next.el.focus(); next.el.select(); }
+  };
+
   const section = (sec) => {
     const rows = draft[sec.id] || [];
     return (
       <div key={sec.id} style={{ marginBottom: 20 }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: T2, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>{sec.title} · {rows.length} righe</div>
-        <div style={{ overflowX: "auto", background: S0, border: `1px solid ${BRD}`, borderRadius: 12 }}>
+        <div onKeyDown={navKey} style={{ overflowX: "auto", background: S0, border: `1px solid ${BRD}`, borderRadius: 12 }}>
           <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 13, minWidth: "max-content" }}>
             <thead>
               <tr>
@@ -2194,12 +2224,12 @@ function ManoviaTab({ man, saveManDay, wide }) {
                 <tr key={r.id}>
                   <td style={{ ...stickyBase, background: S0, padding: "2px 6px 2px 4px", ...cb }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      <input type="text" value={r.nome} maxLength={40} aria-label="Nome riga" onChange={(e) => setField(sec.id, r.id, "nome", e.target.value)}
+                      <input type="text" data-man={`${sec.id}:${ri}:-1`} value={r.nome} maxLength={40} aria-label="Nome riga" onChange={(e) => setField(sec.id, r.id, "nome", e.target.value)}
                         style={{ flex: 1, minWidth: 0, width: 110, border: "none", background: "transparent", outline: "none", fontFamily: FONT, fontSize: 13, fontWeight: 700, color: TXT, padding: "11px 4px" }} />
                       <button onClick={() => removeRow(sec.id, r.id)} aria-label={`Elimina ${r.nome}`} style={{ background: "#FEE2E2", color: RED, border: "none", borderRadius: 6, width: 24, height: 24, cursor: "pointer", fontSize: 11, flexShrink: 0 }}>🗑</button>
                     </div>
                   </td>
-                  {MAN_COLS.map((c) => {
+                  {MAN_COLS.map((c, ci) => {
                     if (c.calc) {
                       const v = manVal(r, c.k);
                       return <td key={c.k} style={{ background: S2, textAlign: "right", padding: "0 10px", fontFamily: MONO, fontSize: 14, fontWeight: 700, color: v ? TXT : T3, ...cb }}>{v === null ? "" : v}</td>;
@@ -2208,7 +2238,7 @@ function ManoviaTab({ man, saveManDay, wide }) {
                       const fld = c.brand ? "brand" : "cons";
                       return (
                         <td key={c.k} style={{ padding: 0, ...cb }}>
-                          <input type="text" value={c.brand ? manBrand(sec.id, r) : r.cons || ""} maxLength={c.brand ? 24 : 14} aria-label={`${r.nome} ${c.l}`} onChange={(e) => setField(sec.id, r.id, fld, e.target.value)} placeholder={c.brand ? "brand" : "gg/mm"}
+                          <input type="text" data-man={`${sec.id}:${ri}:${ci}`} value={c.brand ? manBrand(sec.id, r) : r.cons || ""} maxLength={c.brand ? 24 : 14} aria-label={`${r.nome} ${c.l}`} onChange={(e) => setField(sec.id, r.id, fld, e.target.value)} placeholder={c.brand ? "brand" : "gg/mm"}
                             style={{ width: "100%", boxSizing: "border-box", border: "none", background: "transparent", outline: "none", textAlign: "center", padding: "12px 4px", fontFamily: c.brand ? FONT : MONO, fontWeight: c.brand ? 700 : 400, fontSize: 13, color: TXT }} />
                         </td>
                       );
@@ -2217,9 +2247,8 @@ function ManoviaTab({ man, saveManDay, wide }) {
                     const bad = Number.isNaN(manSum(v));
                     return (
                       <td key={c.k} style={{ padding: 0, background: bad ? "#FEE2E2" : "transparent", ...cb }}>
-                        <input type="text" inputMode="text" value={v} maxLength={30} aria-label={`${r.nome} ${sec.variant && c.l2 ? c.l2 : c.l}`} onChange={(e) => setQ(sec.id, r.id, c.k, e.target.value)}
+                        <input type="text" inputMode="text" data-man={`${sec.id}:${ri}:${ci}`} value={v} maxLength={30} aria-label={`${r.nome} ${sec.variant && c.l2 ? c.l2 : c.l}`} onChange={(e) => setQ(sec.id, r.id, c.k, e.target.value)}
                           onBlur={() => { const n = manSum(v); if (!Number.isNaN(n) && /[+=]/.test(String(v))) setQ(sec.id, r.id, c.k, n === 0 ? "" : String(n)); }}
-                          onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
                           style={{ width: "100%", boxSizing: "border-box", border: "none", background: "transparent", outline: "none", textAlign: "right", padding: "12px 8px", fontFamily: MONO, fontSize: 14, fontWeight: 700, color: bad ? RED : M }} />
                       </td>
                     );
