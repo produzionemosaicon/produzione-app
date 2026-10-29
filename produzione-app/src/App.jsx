@@ -4,7 +4,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, Cell,
 } from "recharts";
-import { db, ref, set, onValue } from "./firebase.js";
+import { db, ref, set, onValue, update } from "./firebase.js";
 import { remove } from "firebase/database";
 /* ═══ COLORI ═══ */
 const M = "#1A5CFF", ML = "#EBF0FF";
@@ -2404,14 +2404,21 @@ function SettingsTab({ wide, stations, goals, saveGoal }) {
      ord:{s39:44,…}, rows:{ rid:{ ddt, data, q:{s39:17,…}, ft, ftd, ftp, o } }, ts }
    Un "ordine" è un articolo + colore di un laboratorio, con la sua curva taglie.
    ═══════════════════════════════════════════════════════════════ */
-const rieKey = (s) => `s${s}`;
-const rieSizes = (o) => { const a = []; for (let s = +o.smin; s <= +o.smax; s++) a.push(s); return a; };
+const rieKey = (s) => `s${String(s).replace(/[.#$\/\[\]\s]/g, "_")}`;
+// taglie dell'ordine: elenco esplicito (o.sizes, es. XS/S/M/L o con mezze misure) oppure intervallo smin–smax (passo 1 o 0,5)
+const rieSizes = (o) => {
+  if (o.sizes) return Array.isArray(o.sizes) ? o.sizes : Object.values(o.sizes);
+  const a = []; const st = o.half ? 0.5 : 1;
+  for (let s = +o.smin; s <= +o.smax; s += st) a.push(s);
+  return a;
+};
 const rieRows = (o) => Object.entries(o.rows || {}).map(([id, r]) => ({ id, ...r })).sort((a, b) => (a.o || 0) - (b.o || 0));
 const rieOrd = (o, s) => +(o.ord?.[rieKey(s)]) || 0;
 const rieDel = (o, s) => rieRows(o).reduce((t, r) => t + (+(r.q?.[rieKey(s)]) || 0), 0);
-const rieRowTot = (o, r) => rieSizes(o).reduce((t, s) => t + (+(r.q?.[rieKey(s)]) || 0), 0);
+// xt = paia del rientro registrate solo come totale, senza dettaglio per taglia
+const rieRowTot = (o, r) => rieSizes(o).reduce((t, s) => t + (+(r.q?.[rieKey(s)]) || 0), 0) + (+r.xt || 0);
 const rieOrdTot = (o) => rieSizes(o).reduce((t, s) => t + rieOrd(o, s), 0);
-const rieDelTot = (o) => rieSizes(o).reduce((t, s) => t + rieDel(o, s), 0);
+const rieDelTot = (o) => rieSizes(o).reduce((t, s) => t + rieDel(o, s), 0) + rieRows(o).reduce((t, r) => t + (+r.xt || 0), 0);
 const rieCmp = (a, b) => [a.lab, a.brand, a.linea, a.art, a.col].join("\u0001").localeCompare([b.lab, b.brand, b.linea, b.art, b.col].join("\u0001"), "it", { numeric: true, sensitivity: "base" });
 const rieFarDate = () => { const d = new Date(); d.setDate(d.getDate() + 60); return d.toISOString().slice(0, 10); };
 const rieSet = (path, v) => set(ref(db, `rientri/${path}`), v === undefined || v === "" ? null : v);
@@ -2535,7 +2542,7 @@ function RieBlock({ oid, o, edit, onEdit, onAddDdt }) {
                   {sizes.map((s, i) => (
                     <td key={s} style={td}><RCell g={`${ri + 1}:${i}`} value={r.q?.[rieKey(s)]} onCommit={(v) => rieSet(`${oid}/rows/${r.id}/q/${rieKey(s)}`, v)} warn={rieDel(o, s) > rieOrd(o, s)} /></td>
                   ))}
-                  <td style={{ ...td, padding: "8px 6px", textAlign: "right", fontFamily: MONO, fontWeight: 900, color: TXT }}>{tot}</td>
+                  <td title={r.xt ? `di cui ${r.xt} paia senza dettaglio per taglia` : undefined} style={{ ...td, padding: "8px 6px", textAlign: "right", fontFamily: MONO, fontWeight: 900, color: TXT }}>{tot}{r.xt ? "*" : ""}</td>
                   <td style={td}><RCell kind="text" g={`${ri + 1}:${sizes.length}`} value={r.ft} onCommit={(v) => rieSet(`${oid}/rows/${r.id}/ft`, v)} /></td>
                   <td style={td}><RCell kind="date" g={`${ri + 1}:${sizes.length + 1}`} value={r.ftd} warn={r.ftd > far} onCommit={(v) => rieSet(`${oid}/rows/${r.id}/ftd`, v)} /></td>
                   <td style={td}><RCell g={`${ri + 1}:${sizes.length + 2}`} value={r.ftp} warn={ftp !== null && ftp !== tot} onCommit={(v) => rieSet(`${oid}/rows/${r.id}/ftp`, v)} /></td>
@@ -2584,24 +2591,27 @@ const rieVals = (vals, sizes) => { const q = {}; for (const s of sizes) { const 
 const rieBad = (vals, sizes) => sizes.some((s) => Number.isNaN(manSum(vals[s])));
 
 function RieOrdModal({ list, defaults, onClose }) {
-  const [f, setF] = useState({ lab: defaults.lab || "", brand: defaults.brand || "", linea: defaults.linea || "", art: "", col: "", smin: "39", smax: "46" });
+  const [f, setF] = useState({ lab: defaults.lab || "", brand: defaults.brand || "", linea: defaults.linea || "", art: "", col: "", smin: "39", smax: "46", half: false, custom: "" });
   const [vals, setVals] = useState({});
   const [err, setErr] = useState("");
   const [done, setDone] = useState("");
   const smin = parseInt(f.smin, 10), smax = parseInt(f.smax, 10);
   const okRange = Number.isInteger(smin) && Number.isInteger(smax) && smin >= 20 && smax <= 60 && smin <= smax && smax - smin <= 20;
-  const sizes = okRange ? Array.from({ length: smax - smin + 1 }, (_, i) => smin + i) : [];
+  const customList = f.custom.split(/[\s,;]+/).map((x) => x.trim().toUpperCase()).filter(Boolean);
+  const useCustom = customList.length > 0;
+  const sizes = useCustom ? customList : okRange ? rieSizes({ smin, smax, half: f.half }) : [];
   const opts = (k) => Array.from(new Set(list.map((o) => o[k]))).sort();
   const norm = (s) => s.trim().replace(/\s+/g, " ");
   const save = (again) => {
     const lab = norm(f.lab).toUpperCase(), brand = norm(f.brand).toUpperCase(), linea = norm(f.linea).toUpperCase(), art = norm(f.art).toUpperCase(), col = norm(f.col).toUpperCase();
     if (!lab || !brand || !linea || !art || !col) { setErr("Compila laboratorio, brand, linea, articolo e colore."); return; }
-    if (!okRange) { setErr("Curva taglie non valida (es. da 39 a 46)."); return; }
+    if (!useCustom && !okRange) { setErr("Curva taglie non valida (es. da 39 a 46)."); return; }
+    if (useCustom && new Set(customList).size !== customList.length) { setErr("Nelle taglie personalizzate c'è un duplicato."); return; }
     if (rieBad(vals, sizes)) { setErr("Una quantità non è valida: usa numeri o somme come 17+11."); return; }
     const ord = rieVals(vals, sizes);
     if (!Object.keys(ord).length) { setErr("Inserisci almeno una quantità ordinata."); return; }
     if (list.some((o) => o.lab === lab && o.brand === brand && o.linea === linea && o.art === art && o.col === col)) { setErr("Questo articolo e colore esistono già in questa linea."); return; }
-    set(ref(db, `rientri/${uid()}${uid()}`), { lab, brand, linea, art, col, smin, smax, ord, ts: Date.now() });
+    set(ref(db, `rientri/${uid()}${uid()}`), useCustom ? { lab, brand, linea, art, col, sizes: customList, ord, ts: Date.now() } : { lab, brand, linea, art, col, smin, smax, ...(f.half ? { half: true } : {}), ord, ts: Date.now() });
     if (again) { setDone(`${art} ${col} salvato. Inserisci il colore successivo.`); setF((p) => ({ ...p, lab, brand, linea, art, col: "" })); setVals({}); setErr(""); }
     else onClose();
   };
@@ -2618,6 +2628,10 @@ function RieOrdModal({ list, defaults, onClose }) {
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>{field("art", "Articolo")}{field("col", "Colore")}
           <div style={{ width: 80 }}>{rieLbl("Da taglia")}<input value={f.smin} inputMode="numeric" onChange={(e) => setF((p) => ({ ...p, smin: e.target.value }))} style={{ ...RIE_INP, textAlign: "center", fontFamily: MONO }} /></div>
           <div style={{ width: 80 }}>{rieLbl("A taglia")}<input value={f.smax} inputMode="numeric" onChange={(e) => setF((p) => ({ ...p, smax: e.target.value }))} style={{ ...RIE_INP, textAlign: "center", fontFamily: MONO }} /></div>
+        </div>
+        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, color: T2, cursor: "pointer", marginTop: 10 }}><input type="checkbox" checked={f.half} onChange={(e) => setF((p) => ({ ...p, half: e.target.checked }))} />Con mezze misure (39,5…)</label>
+          <div style={{ flex: 1, minWidth: 200 }}>{rieLbl("Oppure taglie a lettere (es. XS S M L)")}<input value={f.custom} onChange={(e) => setF((p) => ({ ...p, custom: e.target.value }))} placeholder="lascia vuoto per usare i numeri" style={RIE_INP} /></div>
         </div>
         {rieLbl("Paia ordinate per taglia")}
         <RieQtyGrid sizes={sizes} vals={vals} setVals={setVals} />
@@ -2701,8 +2715,8 @@ function rieParse(text) {
     if (h) { const y = h[4].length === 2 ? "20" + h[4] : h[4]; out.ddt = h[1]; out.data = `${y}-${h[3].padStart(2, "0")}-${h[2].padStart(2, "0")}`; continue; }
     const p = l.split("|").map((x) => x.trim());
     if (p.length >= 3) {
-      const q = {}; let m; const re = /(\d{2})\s*=\s*(\d+)/g;
-      while ((m = re.exec(p[2]))) q[+m[1]] = +m[2];
+      const q = {}; let m; const re = /([A-Za-z0-9][A-Za-z0-9.,]*)\s*=\s*(\d+)/g;
+      while ((m = re.exec(p[2]))) q[m[1].replace(",", ".").toUpperCase()] = +m[2];
       if (Object.keys(q).length) { out.items.push({ art: p[0].toUpperCase(), col: p[1].toUpperCase(), q }); continue; }
     }
     out.errors.push(l);
@@ -2720,8 +2734,8 @@ function RiePasteModal({ entries, onClose }) {
     p.items = p.items.map((it) => {
       const hit = pool.filter(([, o]) => o.art === it.art && o.col === it.col);
       const found = hit.length === 1 ? hit[0] : null;
-      const over = found ? Object.entries(it.q).filter(([s, n]) => n > rieOrd(found[1], +s) - rieDel(found[1], +s)).map(([s]) => s) : [];
-      const outside = found ? Object.keys(it.q).filter((s) => +s < found[1].smin || +s > found[1].smax) : [];
+      const over = found ? Object.entries(it.q).filter(([s, n]) => { const x = rieSizes(found[1]).find((z) => String(z).toUpperCase() === s); return x !== undefined && n > rieOrd(found[1], x) - rieDel(found[1], x); }).map(([s]) => s) : [];
+      const outside = found ? Object.keys(it.q).filter((s) => !rieSizes(found[1]).some((x) => String(x).toUpperCase() === s)) : [];
       return { ...it, found, amb: hit.length > 1, over, outside };
     });
     setRes(p);
@@ -2730,7 +2744,7 @@ function RiePasteModal({ entries, onClose }) {
   const confirm = () => {
     res.items.forEach((it) => {
       if (!it.found || it.outside.length) return;
-      const q = {}; Object.entries(it.q).forEach(([s, n]) => { if (n > 0) q[rieKey(s)] = n; });
+      const q = {}; Object.entries(it.q).forEach(([s, n]) => { const x = rieSizes(it.found[1]).find((z) => String(z).toUpperCase() === s); if (n > 0 && x !== undefined) q[rieKey(x)] = n; });
       rieSet(`${it.found[0]}/rows/${uid()}${uid()}`, { ddt: res.ddt, data: res.data, q, o: Date.now() });
     });
     onClose();
@@ -2798,7 +2812,7 @@ async function exportRientriXlsx(entries, title) {
         ws.getCell(rr, 3).value = isNaN(+x.ddt) ? x.ddt : +x.ddt;
         if (x.data) { ws.getCell(rr, 4).value = new Date(x.data + "T12:00:00"); ws.getCell(rr, 4).numFmt = "dd/mm/yy"; }
         sizes.forEach((s, j) => { ws.getCell(rr, 5 + j).value = +(x.q?.[rieKey(s)]) || null; });
-        ws.getCell(rr, cCons).value = { formula: `SUM(${colL(5)}${rr}:${colL(4 + n)}${rr})`, result: rieRowTot(o, x) };
+        ws.getCell(rr, cCons).value = { formula: `SUM(${colL(5)}${rr}:${colL(4 + n)}${rr})${x.xt ? `+${+x.xt}` : ""}`, result: rieRowTot(o, x) };
         if (x.ft) ws.getCell(rr, cFt).value = isNaN(+x.ft) ? x.ft : +x.ft;
         if (x.ftd) { ws.getCell(rr, cFt + 1).value = new Date(x.ftd + "T12:00:00"); ws.getCell(rr, cFt + 1).numFmt = "dd/mm/yy"; }
         if (x.ftp) ws.getCell(rr, cFt + 2).value = +x.ftp;
@@ -2806,7 +2820,7 @@ async function exportRientriXlsx(entries, title) {
       const last = ordRow + rows.length, resRow = last + 1;
       ws.getCell(resRow, 3).value = "DA CONSEGNARE";
       sizes.forEach((s, j) => { const L = colL(5 + j); ws.getCell(resRow, 5 + j).value = { formula: `${L}${ordRow}-SUM(${L}${ordRow + 1}:${L}${Math.max(last, ordRow + 1)})`, result: rieOrd(o, s) - rieDel(o, s) }; });
-      ws.getCell(resRow, cOrd).value = { formula: `SUM(${colL(5)}${resRow}:${colL(4 + n)}${resRow})`, result: rieOrdTot(o) - rieDelTot(o) };
+      ws.getCell(resRow, cOrd).value = { formula: `${colL(cOrd)}${ordRow}-SUM(${colL(cCons)}${ordRow + 1}:${colL(cCons)}${Math.max(last, ordRow + 1)})`, result: rieOrdTot(o) - rieDelTot(o) };
       ws.getRow(resRow).font = { bold: true, color: { argb: "FF00796B" } };
       for (let rr = ordRow; rr <= resRow; rr++) for (let c = 1; c <= cFt + 2; c++) ws.getCell(rr, c).border = { top: thin, bottom: thin, left: thin, right: thin };
       r = resRow + 2;
@@ -2830,6 +2844,19 @@ function RientriTab({ rie, wide }) {
   const [modal, setModal] = useState(null);
   const [editId, setEditId] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [imp, setImp] = useState({ st: "idle", n: 0 });
+  // importazione una tantum dello storico (file public/rientri_storico.json), solo a database vuoto
+  const doImport = async () => {
+    if (Object.keys(rie || {}).length) return;
+    setImp({ st: "run", n: 0 });
+    try {
+      const r = await fetch("/rientri_storico.json", { cache: "no-store" });
+      if (!r.ok) throw new Error("file non trovato");
+      const data = await r.json();
+      await update(ref(db, "rientri"), data);
+      setImp({ st: "ok", n: Object.keys(data).length });
+    } catch (e) { console.error(e); setImp({ st: "err", n: 0 }); }
+  };
   const all = useMemo(() => Object.entries(rie || {}).filter(([, o]) => o && o.art).sort((a, b) => rieCmp(a[1], b[1])), [rie]);
   const uniq = (arr) => Array.from(new Set(arr)).sort((a, b) => a.localeCompare(b, "it"));
   const labs = uniq(all.map(([, o]) => o.lab));
@@ -2885,6 +2912,15 @@ function RientriTab({ rie, wide }) {
           <div style={{ display: "grid", gridTemplateColumns: wide ? "repeat(4, 1fr)" : "repeat(2, 1fr)", gap: 10, marginBottom: 14 }}>
             {kpi("Ordinate", ordT)}{kpi("Consegnate", delT)}{kpi("Residuo", ordT - delT, ordT - delT > 0 ? ACC : ordT - delT < 0 ? RED : GRN)}{kpi("Evasione", pct + "%")}
           </div>
+          {all.length === 0 && imp.st !== "ok" && (
+            <div style={{ background: ACL, border: `1px solid ${ACC}`, borderRadius: 14, padding: "14px 16px", marginBottom: 14 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: TXT }}>Importa lo storico dai file di Fantinato</div>
+              <div style={{ fontSize: 12, color: T2, margin: "4px 0 10px" }}>Carica in una volta sola ordini, DDT e fatture di Stil Tre (Dries Van Noten, Chrome Hearts) e Mac Barens (Dries Van Noten). Si fa una volta sola, con la scheda ancora vuota.</div>
+              <Btn color={ACC} style={{ width: "auto", padding: "11px 18px" }} onClick={() => imp.st !== "run" && doImport()}>{imp.st === "run" ? "Importazione in corso…" : "Importa lo storico"}</Btn>
+              {imp.st === "err" && <div style={{ fontSize: 13, fontWeight: 700, color: RED, marginTop: 8 }}>Importazione non riuscita: controlla la connessione e riprova.</div>}
+            </div>
+          )}
+          {imp.st === "ok" && <div style={{ fontSize: 13, fontWeight: 700, color: GRN, marginBottom: 10 }}>Importati {imp.n} articoli con i loro rientri.</div>}
           {shown.length === 0 && (
             <div style={{ background: S0, border: `1px dashed ${BRD2}`, borderRadius: 14, padding: 24, textAlign: "center", color: T2, fontSize: 14 }}>
               {all.length ? "Nessun articolo con questi filtri." : "Ancora nessun ordine. Premi «＋ Nuovo ordine» per inserire il primo."}
