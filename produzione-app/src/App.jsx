@@ -4,7 +4,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, Cell,
 } from "recharts";
-import { db, ref, set, onValue, update } from "./firebase.js";
+import { db, ref, set, onValue } from "./firebase.js";
 import { remove } from "firebase/database";
 /* ═══ COLORI ═══ */
 const M = "#1A5CFF", ML = "#EBF0FF";
@@ -2478,7 +2478,7 @@ function rieNav(e) {
   if (next) { next.el.focus(); if (next.el.type !== "date") next.el.select(); }
 }
 
-function RieBlock({ oid, o, edit, onEdit, onAddDdt }) {
+function RieBlock({ oid, o, edit, onEdit, onAddDdt, allEntries }) {
   const sizes = rieSizes(o);
   const rows = rieRows(o);
   const ordT = rieOrdTot(o), delT = rieDelTot(o), res = ordT - delT;
@@ -2489,6 +2489,14 @@ function RieBlock({ oid, o, edit, onEdit, onAddDdt }) {
   const delRow = (r) => {
     if (!window.confirm(`Eliminare il rientro ${r.ddt || ""}?`)) return;
     rieSet(`${oid}/rows/${r.id}`, null);
+  };
+  const setField = (k, raw, required) => {
+    const v = String(raw).trim().replace(/\s+/g, " ").toUpperCase();
+    if (v === (o[k] || "")) return;
+    if (required && !v) { window.alert("Questo campo non può restare vuoto."); return; }
+    const n = { ...o, [k]: v };
+    if (allEntries.some(([id, x]) => id !== oid && x.lab === n.lab && x.brand === n.brand && x.linea === n.linea && x.art === n.art && (x.col || "") === (n.col || ""))) { window.alert("Esiste già un articolo con questi dati nella stessa linea."); return; }
+    rieSet(`${oid}/${k}`, v);
   };
   const delOrder = () => {
     if (rows.length) { window.alert("Ci sono già dei rientri registrati: eliminali prima di eliminare l'ordine."); return; }
@@ -2505,6 +2513,16 @@ function RieBlock({ oid, o, edit, onEdit, onAddDdt }) {
         <button onClick={() => onAddDdt(oid)} style={{ background: M, color: "#fff", border: "none", borderRadius: 10, padding: "7px 12px", fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>+ Rientro</button>
         <button onClick={() => onEdit(edit ? null : oid)} style={{ background: edit ? ACL : S0, color: edit ? ACC : T2, border: `1px solid ${edit ? ACC : BRD2}`, borderRadius: 10, padding: "7px 12px", fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>{edit ? "Fine modifica" : "✎ Ordine"}</button>
       </div>
+      {edit && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "10px 14px", background: ACL, borderBottom: `1px solid ${BRD}` }}>
+          {[["lab", "Laboratorio", true], ["brand", "Brand", true], ["linea", "Linea / stagione", true], ["art", "Articolo", true], ["col", "Colore", false]].map(([k, l, req]) => (
+            <label key={k} style={{ flex: "1 1 130px", minWidth: 120 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: T2, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 2 }}>{l}</div>
+              <RCell kind="text" value={o[k] || ""} onCommit={(v) => setField(k, v ?? "", req)} bold align="left" />
+            </label>
+          ))}
+        </div>
+      )}
       <div onKeyDown={rieNav} style={{ overflowX: "auto" }}>
         <table style={{ borderCollapse: "separate", borderSpacing: 0, minWidth: "100%", fontSize: 13 }}>
           <thead>
@@ -2844,19 +2862,6 @@ function RientriTab({ rie, wide }) {
   const [modal, setModal] = useState(null);
   const [editId, setEditId] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [imp, setImp] = useState({ st: "idle", n: 0 });
-  // importazione una tantum dello storico (file public/rientri_storico.json), solo a database vuoto
-  const doImport = async () => {
-    if (Object.keys(rie || {}).length) return;
-    setImp({ st: "run", n: 0 });
-    try {
-      const r = await fetch("/rientri_storico.json", { cache: "no-store" });
-      if (!r.ok) throw new Error("file non trovato");
-      const data = await r.json();
-      await update(ref(db, "rientri"), data);
-      setImp({ st: "ok", n: Object.keys(data).length });
-    } catch (e) { console.error(e); setImp({ st: "err", n: 0 }); }
-  };
   const all = useMemo(() => Object.entries(rie || {}).filter(([, o]) => o && o.art).sort((a, b) => rieCmp(a[1], b[1])), [rie]);
   const uniq = (arr) => Array.from(new Set(arr)).sort((a, b) => a.localeCompare(b, "it"));
   const labs = uniq(all.map(([, o]) => o.lab));
@@ -2869,6 +2874,16 @@ function RientriTab({ rie, wide }) {
   const kpi = (l, v, c) => (<div style={{ background: S0, border: `1px solid ${BRD}`, borderRadius: 14, padding: "10px 14px" }}><div style={{ fontSize: 10, fontWeight: 700, color: T2, letterSpacing: "0.1em", textTransform: "uppercase" }}>{l}</div><div style={{ fontFamily: MONO, fontSize: 24, fontWeight: 800, color: c || TXT }}>{v}</div></div>);
   const tabBtn = (id, l) => (<button onClick={() => setView(id)} style={{ background: view === id ? M : S0, color: view === id ? "#fff" : M, border: `1.5px solid ${M}`, borderRadius: 12, padding: "9px 14px", fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>{l}</button>);
   const actBtn = (l, c, tc, fn, bd) => (<button onClick={fn} style={{ background: c, color: tc, border: bd ? `1.5px solid ${M}` : "none", borderRadius: 12, padding: "10px 14px", fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>{l}</button>);
+  const renameLinea = () => {
+    const nuova = (window.prompt(`Nuovo nome per la linea «${fLinea}»${fLab ? ` (${fLab}${fBrand ? " · " + fBrand : ""})` : ""}:`, fLinea) || "").trim().replace(/\s+/g, " ").toUpperCase();
+    if (!nuova || nuova === fLinea) return;
+    const target = all.filter(([, o]) => o.linea === fLinea && (!fLab || o.lab === fLab) && (!fBrand || o.brand === fBrand));
+    const clash = target.find(([id, o]) => all.some(([id2, x]) => !target.some(([t]) => t === id2) && x.lab === o.lab && x.brand === o.brand && x.linea === nuova && x.art === o.art && (x.col || "") === (o.col || "")));
+    if (clash) { window.alert(`Non posso rinominare: ${clash[1].art} ${clash[1].col} esiste già nella linea «${nuova}».`); return; }
+    if (!window.confirm(`Rinominare la linea in «${nuova}» per ${target.length} articoli?`)) return;
+    target.forEach(([id]) => rieSet(`${id}/linea`, nuova));
+    setFLinea(nuova);
+  };
   const doExport = async () => { setBusy(true); try { await exportRientriXlsx(shown, [fLab || "tutti", fBrand].filter(Boolean).join("_")); } catch (e) { console.error(e); window.alert("Export non riuscito: " + e.message); } finally { setBusy(false); } };
 
   // riepilogo per laboratorio / brand / linea
@@ -2907,20 +2922,12 @@ function RientriTab({ rie, wide }) {
             {actBtn("＋ Nuovo ordine", M, "#fff", () => setModal({ k: "ord" }))}
             {actBtn("＋ Nuovo rientro", S0, M, () => all.length ? setModal({ k: "ddt" }) : window.alert("Crea prima un ordine."), true)}
             {actBtn("📋 Incolla da DDT", S0, M, () => all.length ? setModal({ k: "paste" }) : window.alert("Crea prima un ordine."), true)}
+            {fLinea && actBtn("✎ Rinomina linea", S0, T2, renameLinea, true)}
             {actBtn(busy ? "Preparo…" : "📊 Esporta Excel", GRN, "#fff", () => shown.length && !busy && doExport())}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: wide ? "repeat(4, 1fr)" : "repeat(2, 1fr)", gap: 10, marginBottom: 14 }}>
             {kpi("Ordinate", ordT)}{kpi("Consegnate", delT)}{kpi("Residuo", ordT - delT, ordT - delT > 0 ? ACC : ordT - delT < 0 ? RED : GRN)}{kpi("Evasione", pct + "%")}
           </div>
-          {all.length === 0 && imp.st !== "ok" && (
-            <div style={{ background: ACL, border: `1px solid ${ACC}`, borderRadius: 14, padding: "14px 16px", marginBottom: 14 }}>
-              <div style={{ fontSize: 14, fontWeight: 800, color: TXT }}>Importa lo storico dai file di Fantinato</div>
-              <div style={{ fontSize: 12, color: T2, margin: "4px 0 10px" }}>Carica in una volta sola ordini, DDT e fatture di Stil Tre (Dries Van Noten, Chrome Hearts) e Mac Barens (Dries Van Noten). Si fa una volta sola, con la scheda ancora vuota.</div>
-              <Btn color={ACC} style={{ width: "auto", padding: "11px 18px" }} onClick={() => imp.st !== "run" && doImport()}>{imp.st === "run" ? "Importazione in corso…" : "Importa lo storico"}</Btn>
-              {imp.st === "err" && <div style={{ fontSize: 13, fontWeight: 700, color: RED, marginTop: 8 }}>Importazione non riuscita: controlla la connessione e riprova.</div>}
-            </div>
-          )}
-          {imp.st === "ok" && <div style={{ fontSize: 13, fontWeight: 700, color: GRN, marginBottom: 10 }}>Importati {imp.n} articoli con i loro rientri.</div>}
           {shown.length === 0 && (
             <div style={{ background: S0, border: `1px dashed ${BRD2}`, borderRadius: 14, padding: 24, textAlign: "center", color: T2, fontSize: 14 }}>
               {all.length ? "Nessun articolo con questi filtri." : "Ancora nessun ordine. Premi «＋ Nuovo ordine» per inserire il primo."}
@@ -2932,7 +2939,7 @@ function RientriTab({ rie, wide }) {
             return (
               <Fragment key={id}>
                 {showHead && <div style={{ fontSize: 11, fontWeight: 800, color: T2, letterSpacing: "0.1em", textTransform: "uppercase", margin: "6px 2px 8px" }}>{head}</div>}
-                <RieBlock oid={id} o={o} edit={editId === id} onEdit={setEditId} onAddDdt={(x) => setModal({ k: "ddt", id: x })} />
+                <RieBlock oid={id} o={o} edit={editId === id} onEdit={setEditId} allEntries={all} onAddDdt={(x) => setModal({ k: "ddt", id: x })} />
               </Fragment>
             );
           })}
