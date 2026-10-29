@@ -2858,6 +2858,7 @@ async function exportRientriXlsx(entries, title) {
 function RientriTab({ rie, wide }) {
   const [view, setView] = useState("ord");
   const [fLab, setFLab] = useState(""); const [fBrand, setFBrand] = useState(""); const [fLinea, setFLinea] = useState("");
+  const [fArt, setFArt] = useState(""); const [fQ, setFQ] = useState("");
   const [onlyRes, setOnlyRes] = useState(false);
   const [modal, setModal] = useState(null);
   const [editId, setEditId] = useState(null);
@@ -2867,7 +2868,10 @@ function RientriTab({ rie, wide }) {
   const labs = uniq(all.map(([, o]) => o.lab));
   const brands = uniq(all.filter(([, o]) => !fLab || o.lab === fLab).map(([, o]) => o.brand));
   const lines = uniq(all.filter(([, o]) => (!fLab || o.lab === fLab) && (!fBrand || o.brand === fBrand)).map(([, o]) => o.linea));
-  const shown = all.filter(([, o]) => (!fLab || o.lab === fLab) && (!fBrand || o.brand === fBrand) && (!fLinea || o.linea === fLinea) && (!onlyRes || rieOrdTot(o) !== rieDelTot(o)));
+  const inScope = (o) => (!fLab || o.lab === fLab) && (!fBrand || o.brand === fBrand) && (!fLinea || o.linea === fLinea);
+  const arts = uniq(all.filter(([, o]) => inScope(o)).map(([, o]) => o.art));
+  const q = fQ.trim().toUpperCase();
+  const shown = all.filter(([, o]) => inScope(o) && (!fArt || o.art === fArt) && (!q || `${o.art} ${o.col}`.toUpperCase().includes(q)) && (!onlyRes || rieOrdTot(o) !== rieDelTot(o)));
   const ordT = shown.reduce((t, [, o]) => t + rieOrdTot(o), 0), delT = shown.reduce((t, [, o]) => t + rieDelTot(o), 0);
   const pct = ordT ? Math.round((delT / ordT) * 100) : 0;
   const sel = { ...RIE_INP, width: "auto", minWidth: 140, padding: "9px 12px", fontWeight: 700, fontSize: 14 };
@@ -2913,9 +2917,11 @@ function RientriTab({ rie, wide }) {
       {view === "ord" && (
         <>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
-            <select value={fLab} onChange={(e) => { setFLab(e.target.value); setFBrand(""); setFLinea(""); }} style={sel}><option value="">Tutti i laboratori</option>{labs.map((x) => <option key={x}>{x}</option>)}</select>
-            <select value={fBrand} onChange={(e) => { setFBrand(e.target.value); setFLinea(""); }} style={sel}><option value="">Tutti i brand</option>{brands.map((x) => <option key={x}>{x}</option>)}</select>
-            <select value={fLinea} onChange={(e) => setFLinea(e.target.value)} style={sel}><option value="">Tutte le linee</option>{lines.map((x) => <option key={x}>{x}</option>)}</select>
+            <select value={fLab} onChange={(e) => { setFLab(e.target.value); setFBrand(""); setFLinea(""); setFArt(""); }} style={sel}><option value="">Tutti i laboratori</option>{labs.map((x) => <option key={x}>{x}</option>)}</select>
+            <select value={fBrand} onChange={(e) => { setFBrand(e.target.value); setFLinea(""); setFArt(""); }} style={sel}><option value="">Tutti i brand</option>{brands.map((x) => <option key={x}>{x}</option>)}</select>
+            <select value={fLinea} onChange={(e) => { setFLinea(e.target.value); setFArt(""); }} style={sel}><option value="">Tutte le linee</option>{lines.map((x) => <option key={x}>{x}</option>)}</select>
+            <select value={fArt} onChange={(e) => setFArt(e.target.value)} style={sel}><option value="">Tutti gli articoli</option>{arts.map((x) => <option key={x}>{x}</option>)}</select>
+            <input type="search" value={fQ} onChange={(e) => setFQ(e.target.value)} placeholder="Cerca articolo o colore…" style={{ ...sel, minWidth: 190, fontWeight: 600 }} />
             <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, color: T2, cursor: "pointer" }}><input type="checkbox" checked={onlyRes} onChange={(e) => setOnlyRes(e.target.checked)} />Solo da consegnare</label>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
