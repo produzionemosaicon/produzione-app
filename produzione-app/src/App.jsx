@@ -29,7 +29,7 @@ const TABS = [
   { id: "taglio",   icon: "✂️", label: "Taglio" },
   { id: "giacenza", icon: "📦", label: "Giacenza" },
   { id: "manovia",  icon: "🔄", label: "Manovia" },
-  { id: "rientri",  icon: "↩️", label: "Rientri" },
+  { id: "rientri",  icon: "↩️", label: "FANTARIENTRI" },
   { id: "setting",  icon: "⚙️", label: "Setting" },
 ];
 
@@ -2862,7 +2862,7 @@ function RientriTab({ rie, wide }) {
     <div style={{ fontFamily: FONT, padding: "14px 14px", paddingBottom: 32 }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
         <div style={{ flex: 1, minWidth: 220 }}>
-          <div style={{ fontSize: 18, fontWeight: 900, color: TXT }}>Rientri dai laboratori</div>
+          <div style={{ fontSize: 18, fontWeight: 900, color: TXT }}>FANTARIENTRI · rientri dai laboratori</div>
           <div style={{ fontSize: 12, color: T2 }}>Ordini affidati ai calzaturifici esterni, DDT di rientro e fatture di lavorazione. Le caselle accettano somme (17+11) e ci si muove con le frecce.</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>{tabBtn("ord", "Ordini e rientri")}{tabBtn("riep", "Riepilogo")}</div>
