@@ -3408,10 +3408,16 @@ function PianoTab({ pia, vers, wide }) {
     totBy[c] = totBy[c] || new Array(NW).fill(0); fatBy[c] = fatBy[c] || new Array(NW).fill(0);
     weeks.forEach((w, i) => { const v = piPn(r, w.k); if (v) { totBy[c][i] += v; fatBy[c][i] += v * (+r.p || 0); grand[i] += v; grandF[i] += v * (+r.p || 0); } });
   });
+  const wlOf = (i) => {
+    if (i <= 0) return {};
+    if (weeks[i].k.slice(0, 4) !== weeks[i - 1].k.slice(0, 4)) return { borderLeft: `4px solid ${RED}` };
+    if (weeks[i].month !== weeks[i - 1].month) return { borderLeft: "2px solid #5A7494" };
+    return {};
+  };
   const months = [];
   weeks.forEach((w, i) => {
     const last = months[months.length - 1];
-    if (last && last.name === w.month) { last.span++; last.eur += grandF[i]; } else months.push({ name: w.month, span: 1, eur: grandF[i] });
+    if (last && last.name === w.month) { last.span++; last.eur += grandF[i]; } else months.push({ name: w.month, span: 1, eur: grandF[i], first: i });
   });
 
   const selIds = Object.keys(sel).filter((id) => sel[id] && righe[id]);
@@ -3510,11 +3516,11 @@ function PianoTab({ pia, vers, wide }) {
                     <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", color: "#854D0E" }}>FATTURATO PREVISTO PER MESE</div>
                     <div style={{ fontSize: 11, color: "#854D0E" }}>paia pianificate × prezzo medio; si aggiorna mentre scrivi</div>
                   </td>
-                  {months.map((m, i) => <td key={i} colSpan={m.span} style={{ background: "#FFF7E0", borderRight: grid, textAlign: "center", padding: "6px 4px 0", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", color: "#854D0E" }}>{m.name}</td>)}
+                  {months.map((m, i) => <td key={i} colSpan={m.span} style={{ background: "#FFF7E0", borderRight: grid, ...wlOf(m.first), textAlign: "center", padding: "6px 4px 0", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", color: "#854D0E" }}>{m.name}</td>)}
                   <td rowSpan={2} style={{ background: "#FFF7E0", borderBottom: `2px solid ${BRD2}` }} />
                 </tr>
                 <tr>
-                  {months.map((m, i) => <td key={i} colSpan={m.span} style={{ background: "#FFF7E0", borderRight: grid, borderBottom: `2px solid ${BRD2}`, textAlign: "center", padding: "0 4px 6px", fontFamily: MONO, fontSize: 13, fontWeight: 700, color: TXT }}>{piEur(m.eur)}</td>)}
+                  {months.map((m, i) => <td key={i} colSpan={m.span} style={{ background: "#FFF7E0", borderRight: grid, ...wlOf(m.first), borderBottom: `2px solid ${BRD2}`, textAlign: "center", padding: "0 4px 6px", fontFamily: MONO, fontSize: 13, fontWeight: 700, color: TXT }}>{piEur(m.eur)}</td>)}
                 </tr>
                 <tr>
                   <th style={{ ...th, width: 26 }} />
@@ -3532,7 +3538,7 @@ function PianoTab({ pia, vers, wide }) {
                   <th style={{ ...th, minWidth: 46, background: "#DCE5F3" }}>Saldo</th>
                   <th style={{ ...th, minWidth: 44 }}>Check</th>
                   {weeks.map((w, i) => (
-                    <th key={w.k} style={{ ...th, minWidth: 44, ...(w.k === baseKey ? { background: "#D7E3FF", color: M } : {}) }}>{w.n}<div style={{ fontWeight: 400, fontSize: 9 }}>{w.cal}</div>{!usedW[w.k] && <button onClick={() => hideWeek(w.k)} title="Nascondi questa settimana (vuota)" aria-label={`Nascondi settimana ${w.n}`} style={{ border: "none", background: "transparent", color: T3, cursor: "pointer", fontSize: 11, lineHeight: 1, padding: "2px 4px" }}>×</button>}</th>
+                    <th key={w.k} style={{ ...th, minWidth: 44, ...wlOf(i), ...(w.k === baseKey ? { background: "#D7E3FF", color: M } : {}) }}>{w.n}<div style={{ fontWeight: 400, fontSize: 9 }}>{w.cal}</div>{!usedW[w.k] && <button onClick={() => hideWeek(w.k)} title="Nascondi questa settimana (vuota)" aria-label={`Nascondi settimana ${w.n}`} style={{ border: "none", background: "transparent", color: T3, cursor: "pointer", fontSize: 11, lineHeight: 1, padding: "2px 4px" }}>×</button>}</th>
                   ))}
                   <th style={{ ...thWrap, minWidth: 62 }}>Slitta riga</th>
                 </tr>
@@ -3593,7 +3599,7 @@ function PianoTab({ pia, vers, wide }) {
                               {weeks.map((w, i) => {
                                 const v = piPn(r, w.k);
                                 return (
-                                  <td key={w.k} style={cell()}>
+                                  <td key={w.k} style={{ ...cell(), ...wlOf(i) }}>
                                     <RCell kind="num" align="center" g={`${rg}:${10 + i}`} value={v || ""} onCommit={(nv) => piWrite(`righe/${r.id}/w/${w.k}`, nv)} pad="3px 0" fs={12} bold bg={v ? "#BBD0FF" : undefined} fg={v ? "#1A3FA0" : undefined} />
                                   </td>
                                 );
@@ -3609,7 +3615,7 @@ function PianoTab({ pia, vers, wide }) {
                         })}
                         <tr>
                           <td colSpan={COLS_L} style={{ ...sumCell, background: "#DCE5F3", textAlign: "left", padding: "6px 12px", fontFamily: FONT, borderTop: `2px solid ${BRD2}` }}>Totale paia pianificate {c}</td>
-                          {tot.map((v, i) => <td key={i} style={{ ...sumCell, background: "#DCE5F3", borderTop: `2px solid ${BRD2}` }}>{v || ""}</td>)}
+                          {tot.map((v, i) => <td key={i} style={{ ...sumCell, ...wlOf(i), background: "#DCE5F3", borderTop: `2px solid ${BRD2}` }}>{v || ""}</td>)}
                           <td style={{ background: "#DCE5F3", borderTop: `2px solid ${BRD2}` }} />
                         </tr>
                         <tr>
@@ -3623,7 +3629,7 @@ function PianoTab({ pia, vers, wide }) {
                         </tr>
                         <tr>
                           <td colSpan={COLS_L} style={{ background: "#FFF7E0", padding: "5px 12px", fontWeight: 600, fontSize: 11, color: "#854D0E", borderRight: grid, borderBottom: `2px solid ${BRD2}` }}>Fatturato previsto {c} (€)</td>
-                          {fat.map((v, i) => <td key={i} style={{ ...sumCell, background: "#FFF7E0", color: "#854D0E", borderBottom: `2px solid ${BRD2}` }}>{piK(v)}</td>)}
+                          {fat.map((v, i) => <td key={i} style={{ ...sumCell, ...wlOf(i), background: "#FFF7E0", color: "#854D0E", borderBottom: `2px solid ${BRD2}` }}>{piK(v)}</td>)}
                           <td style={{ background: "#FFF7E0", borderBottom: `2px solid ${BRD2}` }} />
                         </tr>
                       </Fragment>
@@ -3632,12 +3638,12 @@ function PianoTab({ pia, vers, wide }) {
                 })()}
                 <tr>
                   <td colSpan={COLS_L} style={{ background: M, color: "#fff", padding: "8px 12px", fontWeight: 800, fontSize: 12 }}>TOTALE GENERALE · paia</td>
-                  {grand.map((v, i) => <td key={i} style={{ background: M, color: "#fff", textAlign: "center", fontFamily: MONO, fontWeight: 800, fontSize: 12 }}>{v || ""}</td>)}
+                  {grand.map((v, i) => <td key={i} style={{ ...wlOf(i), background: M, color: "#fff", textAlign: "center", fontFamily: MONO, fontWeight: 800, fontSize: 12 }}>{v || ""}</td>)}
                   <td style={{ background: M }} />
                 </tr>
                 <tr>
                   <td colSpan={COLS_L} style={{ background: M, color: "#fff", padding: "8px 12px", fontWeight: 800, fontSize: 12 }}>TOTALE GENERALE · fatturato (€)</td>
-                  {grandF.map((v, i) => <td key={i} style={{ background: M, color: "#fff", textAlign: "center", fontFamily: MONO, fontWeight: 800, fontSize: 12 }}>{piK(v)}</td>)}
+                  {grandF.map((v, i) => <td key={i} style={{ ...wlOf(i), background: M, color: "#fff", textAlign: "center", fontFamily: MONO, fontWeight: 800, fontSize: 12 }}>{piK(v)}</td>)}
                   <td style={{ background: M }} />
                 </tr>
               </tbody>
