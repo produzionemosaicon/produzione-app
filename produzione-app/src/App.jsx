@@ -2492,7 +2492,7 @@ const rieFarDate = () => { const d = new Date(); d.setDate(d.getDate() + 60); re
 const rieSet = (path, v) => set(ref(db, `rientri/${path}`), v === undefined || v === "" ? null : v);
 
 // Casella: accetta somme (+5+5, =17+11) come nella Manovia; Invio/frecce per spostarsi
-function RCell({ value, onCommit, kind = "num", g, bold, warn, width, align, pad, fs, bg, fg, fmt }) {
+function RCell({ value, onCommit, kind = "num", g, bold, warn, width, align, pad, fs, bg, fg, fmt, readOnly }) {
   const [v, setV] = useState(null);
   const base = value === undefined || value === null ? "" : String(value);
   const shown = v === null ? (fmt && base !== "" ? fmt(base) : base) : v;
@@ -2520,7 +2520,7 @@ function RCell({ value, onCommit, kind = "num", g, bold, warn, width, align, pad
   return (
     <input
       type={kind === "date" ? "date" : "text"} inputMode={kind === "num" ? "text" : undefined}
-      value={shown} data-g={g} size={pad ? 1 : undefined}
+      value={shown} data-g={g} readOnly={readOnly} size={pad ? 1 : undefined}
       onFocus={(e) => { if (v === null) setV(base); if (kind !== "date") e.target.select(); }}
       onChange={(e) => setV(e.target.value)} onBlur={commit}
       style={{ width: width || "100%", boxSizing: "border-box", border: "none", background: bg || (warn ? ACL : "transparent"), outline: "none", fontFamily: kind === "num" || kind === "dec" ? MONO : FONT, fontSize: fs || 13, fontWeight: bold ? 800 : 600, color: fg || (warn ? ACC : kind === "num" || kind === "dec" ? M : TXT), textAlign: align || (kind === "num" || kind === "dec" ? "right" : "left"), padding: pad || "8px 6px", minWidth: 0 }}
@@ -3321,8 +3321,11 @@ const piCleanRow = (r) => {
 };
 
 function PianoTab({ pia, vers, wide }) {
-  const righe = pia.righe || {};
-  const meta = pia.meta || {};
+  const [view, setView] = useState(null);   // versione aperta in sola lettura (non tocca il piano di lavoro)
+  const ro = !!view;
+  const liveMeta = pia.meta || {};
+  const righe = view ? view.rows : (pia.righe || {});
+  const meta = view ? { name: view.name, week: view.week } : liveMeta;
   const cfg = pia.cfg || {};
   const [q, setQ] = useState("");
   const [onlyMiss, setOnlyMiss] = useState(false);
@@ -3333,6 +3336,7 @@ function PianoTab({ pia, vers, wide }) {
   const [busy, setBusy] = useState("");
 
   const rows = useMemo(() => Object.entries(righe).map(([id, r]) => ({ id, ...r })).sort((a, b) => (a.o || 0) - (b.o || 0)), [righe]);
+  const liveRows = useMemo(() => Object.entries(pia.righe || {}).map(([id, r]) => ({ id, ...r })).sort((a, b) => (a.o || 0) - (b.o || 0)), [pia.righe]);
   const baseKey = meta.week || piToday();
   const hideMap = cfg.hide || {};
   const ext = +cfg.ext || 0;
@@ -3475,10 +3479,17 @@ function PianoTab({ pia, vers, wide }) {
         </div>
         <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 14px", minHeight: 44, border: `1.5px solid ${BRD2}` }} onClick={() => setShowCfg(true)}>Limiti e giorni</Btn>
         <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 14px", minHeight: 44, border: `1.5px solid ${BRD2}` }} onClick={() => setShowVers(true)}>Versioni e confronto</Btn>
-        <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 14px", minHeight: 44, border: `1.5px solid ${BRD2}` }} onClick={newWeek}>{`Salva ${meta.name || wName(baseKey)} e apri ${wName(nextKey)}`}</Btn>
-        <Btn style={{ width: "auto", padding: "0 16px", minHeight: 44 }} onClick={() => setShowVers("save")}>Salva versione</Btn>
+        {!ro && <><Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 14px", minHeight: 44, border: `1.5px solid ${BRD2}` }} onClick={newWeek}>{`Salva ${meta.name || wName(baseKey)} e apri ${wName(nextKey)}`}</Btn>
+        <Btn style={{ width: "auto", padding: "0 16px", minHeight: 44 }} onClick={() => setShowVers("save")}>Salva versione</Btn></>}
       </div>
 
+      {ro && (
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px", background: "#FFF7E0", border: "1.5px solid #E8D9A8", borderRadius: 14, padding: "10px 14px", marginBottom: 10 }}>
+          <b style={{ fontSize: 14, color: "#854D0E" }}>Stai guardando {view.name} in sola lettura</b>
+          <span style={{ fontSize: 12, color: "#854D0E" }}>Il tuo piano di lavoro {liveMeta.name || ""} non è stato toccato.</span>
+          <Btn style={{ width: "auto", padding: "0 16px", minHeight: 40, marginLeft: "auto" }} onClick={() => setView(null)}>{`Torna a ${liveMeta.name || "piano di lavoro"}`}</Btn>
+        </div>
+      )}
       {empty && <PianoImport />}
 
       {rows.length > 0 && (
@@ -3489,7 +3500,7 @@ function PianoTab({ pia, vers, wide }) {
             <button onClick={() => setOnlyMiss((v) => !v)} style={{ background: onlyMiss ? ACC : "#FFF7E0", color: onlyMiss ? "#fff" : "#854D0E", border: "1.5px solid #E8D9A8", borderRadius: 12, padding: "0 14px", minHeight: 44, fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>
               {onlyMiss ? "Mostra tutte le righe" : "Solo righe con materiali mancanti"}
             </button>
-            <button onClick={() => setEdit({})} style={{ background: S0, color: M, border: `1.5px dashed ${BRD2}`, borderRadius: 12, padding: "0 14px", minHeight: 44, fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>+ Nuova riga</button>
+            {!ro && <button onClick={() => setEdit({})} style={{ background: S0, color: M, border: `1.5px dashed ${BRD2}`, borderRadius: 12, padding: "0 14px", minHeight: 44, fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>+ Nuova riga</button>}
             <button onClick={hideEmptyPast} style={{ background: S0, color: M, border: `1.5px solid ${BRD2}`, borderRadius: 12, padding: "0 14px", minHeight: 44, fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>Nascondi settimane passate vuote</button>
             <button onClick={addWeeks} style={{ background: S0, color: M, border: `1.5px solid ${BRD2}`, borderRadius: 12, padding: "0 14px", minHeight: 44, fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>+ 4 settimane future</button>
             {nHidden > 0 && <button onClick={showAllWeeks} style={{ background: S0, color: T2, border: `1.5px solid ${BRD2}`, borderRadius: 12, padding: "0 14px", minHeight: 44, fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Mostra {nHidden} settimane nascoste</button>}
@@ -3497,7 +3508,7 @@ function PianoTab({ pia, vers, wide }) {
             <span style={{ fontSize: 12, color: T2 }}>{shown.length !== rows.length ? `${shown.length} righe mostrate · ` : ""}frecce e Invio per muoversi · somme tipo 100+50</span>
           </div>
 
-          {selIds.length > 0 && (
+          {!ro && selIds.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 10px", background: M, color: "#fff", borderRadius: 14, padding: "8px 12px", marginBottom: 10 }}>
               <b style={{ fontSize: 13 }}>{selIds.length} righe selezionate</b>
               <span style={{ fontSize: 12, opacity: 0.9 }}>Sposta tutte di</span>
@@ -3578,7 +3589,7 @@ function PianoTab({ pia, vers, wide }) {
                             <tr key={r.id}>
                               <td style={{ ...bt, textAlign: "center", padding: "0 4px" }}><input type="checkbox" checked={isSel} onChange={(e) => setSel((p) => ({ ...p, [r.id]: e.target.checked }))} aria-label={`Seleziona ${r.a} ${r.k}`} style={{ width: 16, height: 16, accentColor: M }} /></td>
                               <td style={{ ...bt, padding: "2px 6px", fontWeight: 800, fontSize: 12, color: TXT }}>{r.b}</td>
-                              <td style={{ ...bt, padding: "2px 6px", lineHeight: 1.15, cursor: "pointer" }} onClick={() => setEdit({ id: r.id, ...r })} title="Modifica la riga">
+                              <td style={{ ...bt, padding: "2px 6px", lineHeight: 1.15, cursor: "pointer" }} onClick={() => { if (!ro) setEdit({ id: r.id, ...r }); }} title="Modifica la riga">
                                 <div style={{ fontWeight: 800, fontSize: 12, color: TXT }}>{r.a}</div>
                                 <div style={{ fontSize: 10, color: T2 }}>{r.k}</div>
                               </td>
@@ -3590,7 +3601,7 @@ function PianoTab({ pia, vers, wide }) {
                                 const col = PI_MATCOL[st];
                                 return (
                                   <td key={k} style={cell()}>
-                                    <RCell kind="txt" align="center" g={`${rg}:${j}`} value={r.m?.[k]} onCommit={(v) => piWrite(`righe/${r.id}/m/${k}`, v)} pad="3px 1px" fs={11} bg={col ? col[0] : undefined} fg={col ? col[1] : undefined} bold />
+                                    <RCell readOnly={ro} kind="txt" align="center" g={`${rg}:${j}`} value={r.m?.[k]} onCommit={(v) => piWrite(`righe/${r.id}/m/${k}`, v)} pad="3px 1px" fs={11} bg={col ? col[0] : undefined} fg={col ? col[1] : undefined} bold />
                                   </td>
                                 );
                               })}
@@ -3599,7 +3610,7 @@ function PianoTab({ pia, vers, wide }) {
                               </td>
                               {nums.map(([f, v, kd], j) => (
                                 <td key={f} style={f === "g" ? { ...cell(), background: "#E4E7EC" } : cell()}>
-                                  <RCell kind={kd} align="center" g={`${rg}:${6 + j}`} bg={f === "g" ? "#E4E7EC" : undefined} fg={f === "g" ? "#4B5563" : undefined} value={kd === "dec" && v ? piFmtN(v) : v} fmt={kd === "dec" ? (x) => "€ " + x : undefined} onCommit={(nv) => piWrite(`righe/${r.id}/${f}`, nv)} pad="3px 1px" fs={12} bold />
+                                  <RCell readOnly={ro} kind={kd} align="center" g={`${rg}:${6 + j}`} bg={f === "g" ? "#E4E7EC" : undefined} fg={f === "g" ? "#4B5563" : undefined} value={kd === "dec" && v ? piFmtN(v) : v} fmt={kd === "dec" ? (x) => "€ " + x : undefined} onCommit={(nv) => piWrite(`righe/${r.id}/${f}`, nv)} pad="3px 1px" fs={12} bold />
                                 </td>
                               ))}
                               <td style={{ ...bt, background: "#DCE5F3", textAlign: "center", fontFamily: MONO, fontSize: 12, fontWeight: 700 }}>{piSaldo(r)}</td>
@@ -3610,14 +3621,14 @@ function PianoTab({ pia, vers, wide }) {
                                 const v = piPn(r, w.k);
                                 return (
                                   <td key={w.k} style={{ ...cell(), ...wlOf(i) }}>
-                                    <RCell kind="num" align="center" g={`${rg}:${10 + i}`} value={v || ""} onCommit={(nv) => piWrite(`righe/${r.id}/w/${w.k}`, nv)} pad="3px 0" fs={12} bold bg={v ? "#BBD0FF" : undefined} fg={v ? "#1A3FA0" : undefined} />
+                                    <RCell readOnly={ro} kind="num" align="center" g={`${rg}:${10 + i}`} value={v || ""} onCommit={(nv) => piWrite(`righe/${r.id}/w/${w.k}`, nv)} pad="3px 0" fs={12} bold bg={v ? "#BBD0FF" : undefined} fg={v ? "#1A3FA0" : undefined} />
                                   </td>
                                 );
                               })}
                               <td style={{ ...bt, textAlign: "center", padding: "0 2px" }}>
                                 <div style={{ display: "flex", gap: 3, justifyContent: "center" }}>
-                                  <button aria-label={`Anticipa ${r.a} di una settimana`} disabled={!!busy} onClick={() => shiftIds([r.id], -1)} style={{ background: S0, border: `1px solid ${BRD2}`, borderRadius: 7, width: 26, height: 26, fontSize: 10, color: M, cursor: "pointer" }}>◀</button>
-                                  <button aria-label={`Posticipa ${r.a} di una settimana`} disabled={!!busy} onClick={() => shiftIds([r.id], 1)} style={{ background: S0, border: `1px solid ${BRD2}`, borderRadius: 7, width: 26, height: 26, fontSize: 10, color: M, cursor: "pointer" }}>▶</button>
+                                  <button aria-label={`Anticipa ${r.a} di una settimana`} disabled={!!busy || ro} onClick={() => shiftIds([r.id], -1)} style={{ background: S0, border: `1px solid ${BRD2}`, borderRadius: 7, width: 26, height: 26, fontSize: 10, color: M, cursor: "pointer" }}>◀</button>
+                                  <button aria-label={`Posticipa ${r.a} di una settimana`} disabled={!!busy || ro} onClick={() => shiftIds([r.id], 1)} style={{ background: S0, border: `1px solid ${BRD2}`, borderRadius: 7, width: 26, height: 26, fontSize: 10, color: M, cursor: "pointer" }}>▶</button>
                                 </div>
                               </td>
                             </tr>
@@ -3668,7 +3679,7 @@ function PianoTab({ pia, vers, wide }) {
       </div>
       {edit && <PianoRowModal row={edit} calzs={calzs} onSave={saveRow} onDelete={delRow} onClose={() => setEdit(null)} />}
       {showCfg && <PianoCfgModal cfg={cfg} calzs={calzs} weeks={weeks} onClose={() => setShowCfg(false)} />}
-      {showVers && <PianoVersModal vers={vers || {}} rows={rows} righe={righe} meta={meta} weeks={weeks} mode={showVers} onClose={() => setShowVers(false)} />}
+      {showVers && <PianoVersModal vers={vers || {}} rows={liveRows} righe={pia.righe || {}} meta={liveMeta} weeks={weeks} mode={showVers} onView={(v, rr) => { setSel({}); setView({ name: v.name, week: v.week, rows: rr }); }} onClose={() => setShowVers(false)} />}
     </div>
   );
 }
@@ -3746,7 +3757,7 @@ function PianoCfgModal({ cfg, calzs, weeks, onClose }) {
 }
 
 // Versioni settimanali: salva, elenco, confronto con il piano attuale, ripartenza da una versione
-function PianoVersModal({ vers, rows, righe, meta, weeks, mode, onClose }) {
+function PianoVersModal({ vers, rows, righe, meta, weeks, mode, onView, onClose }) {
   const list = Object.entries(vers).map(([id, v]) => ({ id, ...v })).sort((a, b) => String(b.weekStart || "").localeCompare(String(a.weekStart || "")) || (b.savedAt || 0) - (a.savedAt || 0));
   const [name, setName] = useState(() => "W" + piToday().slice(5));
   const [busy, setBusy] = useState(false);
@@ -3786,6 +3797,12 @@ function PianoVersModal({ vers, rows, righe, meta, weeks, mode, onClose }) {
     } catch (e) { console.error(e); window.alert("Confronto non riuscito: " + e.message); }
     finally { setBusy(false); }
   };
+  const openView = async (v) => {
+    setBusy(true);
+    try { const rr = await loadRows(v.id); onView(v, rr); onClose(); }
+    catch (e) { console.error(e); window.alert("Apertura non riuscita: " + e.message); }
+    finally { setBusy(false); }
+  };
   const useAsWork = async (v) => {
     if (!window.confirm(`Usare «${v.name}» come piano di lavoro? Il piano attuale verrà sostituito (salvane prima una versione se ti serve).`)) return;
     setBusy(true);
@@ -3814,7 +3831,7 @@ function PianoVersModal({ vers, rows, righe, meta, weeks, mode, onClose }) {
         ) : (
           <>
             <div style={{ fontSize: 16, fontWeight: 900, color: TXT, marginBottom: 4 }}>Versioni salvate</div>
-            <div style={{ fontSize: 12, color: T2, marginBottom: 10 }}>{list.length} versioni. «Confronta» le mette a fianco del piano attuale; «Usa come piano» ripartire da quella versione.</div>
+            <div style={{ fontSize: 12, color: T2, marginBottom: 10 }}>{list.length} versioni. «Apri» la mostra in sola lettura senza toccare il piano di lavoro; «Confronta» la mette a fianco del piano attuale; «Usa come piano» sostituisce il piano di lavoro con quella versione.</div>
             {list.length === 0 && <div style={{ fontSize: 13, color: T2 }}>Nessuna versione salvata.</div>}
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {list.map((v) => (
@@ -3823,6 +3840,7 @@ function PianoVersModal({ vers, rows, righe, meta, weeks, mode, onClose }) {
                     <div style={{ fontWeight: 800, fontSize: 14, color: TXT }}>{v.name}</div>
                     <div style={{ fontSize: 11, color: T2 }}>{v.n} righe{v.savedAt ? ` · salvata il ${new Date(v.savedAt).toLocaleDateString("it-IT")}` : ""}</div>
                   </div>
+                  <button disabled={busy} onClick={() => openView(v)} style={{ background: M, color: "#fff", border: "none", borderRadius: 10, padding: "0 12px", minHeight: 40, fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>Apri</button>
                   <button disabled={busy} onClick={() => compare(v)} style={{ background: S0, color: M, border: `1.5px solid ${BRD2}`, borderRadius: 10, padding: "0 12px", minHeight: 40, fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>Confronta</button>
                   <button disabled={busy} onClick={() => useAsWork(v)} style={{ background: S0, color: T2, border: `1.5px solid ${BRD2}`, borderRadius: 10, padding: "0 12px", minHeight: 40, fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>Usa come piano</button>
                 </div>
