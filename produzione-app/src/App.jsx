@@ -2492,10 +2492,10 @@ const rieFarDate = () => { const d = new Date(); d.setDate(d.getDate() + 60); re
 const rieSet = (path, v) => set(ref(db, `rientri/${path}`), v === undefined || v === "" ? null : v);
 
 // Casella: accetta somme (+5+5, =17+11) come nella Manovia; Invio/frecce per spostarsi
-function RCell({ value, onCommit, kind = "num", g, bold, warn, width, align, pad, fs, bg, fg }) {
+function RCell({ value, onCommit, kind = "num", g, bold, warn, width, align, pad, fs, bg, fg, fmt }) {
   const [v, setV] = useState(null);
   const base = value === undefined || value === null ? "" : String(value);
-  const shown = v === null ? base : v;
+  const shown = v === null ? (fmt && base !== "" ? fmt(base) : base) : v;
   const commit = () => {
     if (v === null) return;
     const raw = v; setV(null);
@@ -3512,7 +3512,7 @@ function PianoTab({ pia, vers, wide }) {
                   <th style={{ ...th, minWidth: 44 }}>Qnt</th>
                   <th style={{ ...th, minWidth: 44 }}>Sped.</th>
                   <th style={{ ...th, minWidth: 44 }}>Giac.</th>
-                  <th style={{ ...thWrap, minWidth: 46 }}>Prezzo medio</th>
+                  <th style={{ ...thWrap, minWidth: 54 }}>Prezzo medio (€)</th>
                   <th style={{ ...th, minWidth: 46, background: "#DCE5F3" }}>Saldo</th>
                   <th style={{ ...th, minWidth: 44 }}>Check</th>
                   {weeks.map((w, i) => (
@@ -3567,7 +3567,7 @@ function PianoTab({ pia, vers, wide }) {
                               </td>
                               {nums.map(([f, v, kd], j) => (
                                 <td key={f} style={cell()}>
-                                  <RCell kind={kd} align="center" g={`${rg}:${6 + j}`} value={kd === "dec" && v ? piFmtN(v) : v} onCommit={(nv) => piWrite(`righe/${r.id}/${f}`, nv)} pad="3px 1px" fs={12} bold />
+                                  <RCell kind={kd} align="center" g={`${rg}:${6 + j}`} value={kd === "dec" && v ? piFmtN(v) : v} fmt={kd === "dec" ? (x) => "€ " + x : undefined} onCommit={(nv) => piWrite(`righe/${r.id}/${f}`, nv)} pad="3px 1px" fs={12} bold />
                                 </td>
                               ))}
                               <td style={{ ...bt, background: "#DCE5F3", textAlign: "center", fontFamily: MONO, fontSize: 12, fontWeight: 700 }}>{piSaldo(r)}</td>
