@@ -4,7 +4,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, Cell,
 } from "recharts";
-import { db, ref, set, get, onValue } from "./firebase.js";
+import { db, ref, set, get, onValue, update } from "./firebase.js";
 import { remove } from "firebase/database";
 /* ═══ COLORI ═══ */
 const M = "#1A5CFF", ML = "#EBF0FF";
@@ -3334,13 +3334,29 @@ function PianoTab({ pia, vers, wide }) {
 
   const rows = useMemo(() => Object.entries(righe).map(([id, r]) => ({ id, ...r })).sort((a, b) => (a.o || 0) - (b.o || 0)), [righe]);
   const baseKey = meta.week || piToday();
-  const weeks = useMemo(() => {
-    let last = piAdd(baseKey, 20);
+  const hideMap = cfg.hide || {};
+  const ext = +cfg.ext || 0;
+  const allWeeks = useMemo(() => {
+    let last = piAdd(baseKey, 20 + ext);
     rows.forEach((r) => Object.keys(r.w || {}).forEach((k) => { if (piIdx(k) > piIdx(last)) last = k; }));
     const first = piAdd(baseKey, -3);
-    const n = Math.min(40, piIdx(last) - piIdx(first) + 1);
+    const n = Math.min(80, piIdx(last) - piIdx(first) + 1);
     return Array.from({ length: n }, (_, i) => piWeek(piAdd(first, i)));
-  }, [baseKey, rows]);
+  }, [baseKey, rows, ext]);
+  const usedW = useMemo(() => { const u = {}; rows.forEach((r) => Object.entries(r.w || {}).forEach(([k, v]) => { if (+v) u[k] = true; })); return u; }, [rows]);
+  const weeks = useMemo(() => allWeeks.filter((w) => !hideMap[w.k] || usedW[w.k]), [allWeeks, cfg.hide, usedW]);
+  const nHidden = allWeeks.filter((w) => hideMap[w.k] && !usedW[w.k]).length;
+  const nEmpty = weeks.filter((w) => !usedW[w.k]).length;
+  const [zm, setZm] = useState(() => { try { const v = parseFloat(localStorage.getItem("piano_zoom")); return v > 0.4 && v <= 1 ? v : 0.7; } catch (e) { return 0.7; } });
+  const setZoom = (v) => { setZm(v); try { localStorage.setItem("piano_zoom", String(v)); } catch (e) {} };
+  const hideWeek = (k) => set(ref(db, `piano/cfg/hide/${k}`), true).catch((e) => window.alert("Operazione non riuscita: " + e.message));
+  const hideEmptyPast = () => {
+    const o = { ...hideMap };
+    allWeeks.forEach((w) => { if (piIdx(w.k) < piIdx(baseKey) && !usedW[w.k]) o[w.k] = true; });
+    set(ref(db, "piano/cfg/hide"), o).catch((e) => window.alert("Operazione non riuscita: " + e.message));
+  };
+  const showAllWeeks = () => set(ref(db, "piano/cfg/hide"), null).catch((e) => window.alert("Operazione non riuscita: " + e.message));
+  const addWeeks = () => set(ref(db, "piano/cfg/ext"), ext + 4).catch((e) => window.alert("Operazione non riuscita: " + e.message));
   const NW = weeks.length;
   const COLS_L = 19; // colonne prima delle settimane: sel, brand, articolo, cons, blocco, R, 6 materiali, mat, qnt, sped, giac, prezzo, saldo, check
   const capOf = (c) => +(cfg.cap && cfg.cap[c]) || 0;
@@ -3426,10 +3442,15 @@ function PianoTab({ pia, vers, wide }) {
 
   return (
     <div style={{ fontFamily: FONT, padding: "14px 14px", paddingBottom: 40 }} onKeyDown={rieNav}>
+      <div style={{ zoom: zm }}>
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px", marginBottom: 10 }}>
         <div style={{ flex: "1 1 240px", minWidth: 0 }}>
           <div style={{ fontSize: 18, fontWeight: 900, color: TXT }}>Piano settimanale <span style={{ color: M }}>{meta.name || ""}</span></div>
           <div style={{ fontSize: 12, color: T2 }}>{rows.length} righe · tutti i calzaturifici{meta.savedName ? ` · ultima versione salvata: ${meta.savedName}` : ""}</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }} title="Dimensione della tabella">
+          <span style={{ fontSize: 11, color: T2, fontWeight: 700 }}>Zoom</span>
+          {[0.6, 0.7, 0.85, 1].map((v) => <button key={v} onClick={() => setZoom(v)} style={{ background: zm === v ? M : S0, color: zm === v ? "#fff" : M, border: `1.5px solid ${BRD2}`, borderRadius: 8, padding: "0 8px", minHeight: 32, fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>{Math.round(v * 100)}%</button>)}
         </div>
         <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 14px", minHeight: 44, border: `1.5px solid ${BRD2}` }} onClick={() => setShowCfg(true)}>Limiti e giorni</Btn>
         <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 14px", minHeight: 44, border: `1.5px solid ${BRD2}` }} onClick={() => setShowVers(true)}>Versioni e confronto</Btn>
@@ -3447,6 +3468,9 @@ function PianoTab({ pia, vers, wide }) {
               {onlyMiss ? "Mostra tutte le righe" : "Solo righe con materiali mancanti"}
             </button>
             <button onClick={() => setEdit({})} style={{ background: S0, color: M, border: `1.5px dashed ${BRD2}`, borderRadius: 12, padding: "0 14px", minHeight: 44, fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>+ Nuova riga</button>
+            <button onClick={hideEmptyPast} style={{ background: S0, color: M, border: `1.5px solid ${BRD2}`, borderRadius: 12, padding: "0 14px", minHeight: 44, fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>Nascondi settimane passate vuote</button>
+            <button onClick={addWeeks} style={{ background: S0, color: M, border: `1.5px solid ${BRD2}`, borderRadius: 12, padding: "0 14px", minHeight: 44, fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>+ 4 settimane future</button>
+            {nHidden > 0 && <button onClick={showAllWeeks} style={{ background: S0, color: T2, border: `1.5px solid ${BRD2}`, borderRadius: 12, padding: "0 14px", minHeight: 44, fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Mostra {nHidden} settimane nascoste</button>}
             <span style={{ fontSize: 12, color: "#854D0E", fontWeight: 600 }}>Materiali: {matRows - matBad} righe in piano complete, {matBad} con materiali mancanti o in ritardo</span>
             <span style={{ fontSize: 12, color: T2 }}>{shown.length !== rows.length ? `${shown.length} righe mostrate · ` : ""}frecce e Invio per muoversi · somme tipo 100+50</span>
           </div>
@@ -3492,7 +3516,7 @@ function PianoTab({ pia, vers, wide }) {
                   <th style={{ ...th, minWidth: 46, background: "#DCE5F3" }}>Saldo</th>
                   <th style={{ ...th, minWidth: 44 }}>Check</th>
                   {weeks.map((w, i) => (
-                    <th key={w.k} style={{ ...th, minWidth: 44, ...(w.k === baseKey ? { background: "#D7E3FF", color: M } : {}) }}>{w.n}<div style={{ fontWeight: 400, fontSize: 9 }}>{w.cal}</div></th>
+                    <th key={w.k} style={{ ...th, minWidth: 44, ...(w.k === baseKey ? { background: "#D7E3FF", color: M } : {}) }}>{w.n}<div style={{ fontWeight: 400, fontSize: 9 }}>{w.cal}</div>{!usedW[w.k] && <button onClick={() => hideWeek(w.k)} title="Nascondi questa settimana (vuota)" aria-label={`Nascondi settimana ${w.n}`} style={{ border: "none", background: "transparent", color: T3, cursor: "pointer", fontSize: 11, lineHeight: 1, padding: "2px 4px" }}>×</button>}</th>
                   ))}
                   <th style={{ ...thWrap, minWidth: 62 }}>Slitta riga</th>
                 </tr>
@@ -3609,6 +3633,7 @@ function PianoTab({ pia, vers, wide }) {
         </>
       )}
 
+      </div>
       {edit && <PianoRowModal row={edit} calzs={calzs} onSave={saveRow} onDelete={delRow} onClose={() => setEdit(null)} />}
       {showCfg && <PianoCfgModal cfg={cfg} calzs={calzs} weeks={weeks} onClose={() => setShowCfg(false)} />}
       {showVers && <PianoVersModal vers={vers || {}} rows={rows} righe={righe} meta={meta} weeks={weeks} mode={showVers} onClose={() => setShowVers(false)} />}
@@ -3655,7 +3680,7 @@ function PianoCfgModal({ cfg, calzs, weeks, onClose }) {
     weeks.forEach((w) => { const n = parseInt(days[w.k], 10); if (n >= 0 && days[w.k] !== "" && n !== w.days) d[w.k] = n; });
     // le settimane fuori dalla finestra mostrata restano come erano
     Object.entries(cfg.days || {}).forEach(([k, v]) => { if (!weeks.some((w) => w.k === k)) d[k] = v; });
-    try { await set(ref(db, "piano/cfg"), { cap: Object.keys(c).length ? c : null, days: Object.keys(d).length ? d : null }); onClose(); }
+    try { await update(ref(db, "piano/cfg"), { cap: Object.keys(c).length ? c : null, days: Object.keys(d).length ? d : null }); onClose(); }
     catch (e) { window.alert("Salvataggio non riuscito: " + e.message); }
   };
   return (
