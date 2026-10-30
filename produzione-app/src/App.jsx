@@ -777,13 +777,13 @@ export default function App() {
         .print-only{display:none}
       `}</style>
 
-      <div className="no-print" style={{ background:"linear-gradient(135deg,#0A3D9C 0%,#1A5CFF 55%,#0099CC 100%)", padding:"12px 16px", flexShrink:0, boxShadow:"0 3px 18px rgba(26,92,255,0.28)" }}>
+      <div className="no-print" style={{ background:"linear-gradient(135deg,#0A3D9C 0%,#1A5CFF 55%,#0099CC 100%)", padding: tab === "piano" ? "3px 12px" : "12px 16px", flexShrink:0, boxShadow:"0 3px 18px rgba(26,92,255,0.28)" }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            <span style={{ fontSize:24 }}>🏭</span>
+            <span style={{ fontSize: tab === "piano" ? 14 : 24 }}>🏭</span>
             <div>
-              <div style={{ fontSize:14, fontWeight:900, color:"#fff", letterSpacing:"0.04em" }}>MOSAICON · EMOS</div>
-              <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:1 }}>
+              <div style={{ fontSize: tab === "piano" ? 11 : 14, fontWeight:900, color:"#fff", letterSpacing:"0.04em" }}>MOSAICON · EMOS{tab === "piano" ? <span style={{ fontSize:8, color:"rgba(255,255,255,0.7)", fontWeight:600, marginLeft:8 }}>{online ? "● in linea" : "● offline"}{saving ? " · salvataggio…" : ""}</span> : null}</div>
+              <div style={{ display: tab === "piano" ? "none" : "flex", alignItems:"center", gap:5, marginTop:1 }}>
                 <div style={{ width:5, height:5, borderRadius:"50%", background: online ? GRN : RED }} />
                 <span style={{ fontSize:8, color:"rgba(255,255,255,0.65)", fontWeight:600 }}>
                   {online ? "In linea" : "Offline"}{saving ? " · salvataggio…" : ""}
@@ -796,11 +796,11 @@ export default function App() {
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              style={{ border:"none", background:"rgba(255,255,255,0.18)", fontFamily:MONO, fontSize:13, fontWeight:700, color:"#fff", cursor:"pointer", outline:"none", padding:"5px 10px", borderRadius:8 }}
+              style={{ border:"none", background:"rgba(255,255,255,0.18)", fontFamily:MONO, fontSize:13, fontWeight:700, color:"#fff", cursor:"pointer", outline:"none", padding: tab === "piano" ? "2px 8px" : "5px 10px", borderRadius:8 }}
             />
             <button
               onClick={tab === "analisi" ? shareAnalysisPdf : shareWA}
-              style={{ background:"#25D366", color:"#fff", border:"none", borderRadius:8, padding:"7px 13px", fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:FONT }}
+              style={{ background:"#25D366", color:"#fff", border:"none", borderRadius:8, padding: tab === "piano" ? "3px 10px" : "7px 13px", fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:FONT }}
             >
               📤 PDF
             </button>
@@ -808,7 +808,7 @@ export default function App() {
         </div>
       </div>
 
-      <div className="no-print" style={{ background:S0, borderBottom:`1px solid ${BRD}`, padding:"8px 10px", display:"grid", gridTemplateColumns: wide ? `repeat(${TABS.length}, minmax(0, 1fr))` : "repeat(4, minmax(0, 1fr))", gap:6, flexShrink:0, boxShadow:"0 2px 10px rgba(13,27,42,0.05)" }}>
+      <div className="no-print" style={{ background:S0, borderBottom:`1px solid ${BRD}`, padding: tab === "piano" ? "3px 10px" : "8px 10px", display:"grid", gridTemplateColumns: wide ? `repeat(${TABS.length}, minmax(0, 1fr))` : "repeat(4, minmax(0, 1fr))", gap:6, flexShrink:0, boxShadow:"0 2px 10px rgba(13,27,42,0.05)" }}>
         {TABS.map(({ id, icon, label }) => {
           const on = tab === id;
           return (
@@ -816,7 +816,7 @@ export default function App() {
               key={id}
               onClick={() => setTab(id)}
               aria-current={on ? "page" : undefined}
-              style={{ height:40, display:"flex", alignItems:"center", justifyContent:"center", gap:5, padding:"0 2px", minWidth:0, overflow:"hidden", borderRadius:12, cursor:"pointer", fontFamily:FONT, fontSize:12, fontWeight:800, whiteSpace:"nowrap", border:`1px solid ${on ? M : BRD}`, background: on ? M : S1, color: on ? "#fff" : T2, boxShadow: on ? "0 3px 10px rgba(26,92,255,0.25)" : "none" }}
+              style={{ height: tab === "piano" ? 26 : 40, display:"flex", alignItems:"center", justifyContent:"center", gap:5, padding:"0 2px", minWidth:0, overflow:"hidden", borderRadius:12, cursor:"pointer", fontFamily:FONT, fontSize:12, fontWeight:800, whiteSpace:"nowrap", border:`1px solid ${on ? M : BRD}`, background: on ? M : S1, color: on ? "#fff" : T2, boxShadow: on ? "0 3px 10px rgba(26,92,255,0.25)" : "none" }}
             >
               <span style={{ fontSize:15, lineHeight:1 }}>{icon}</span>
               <span>{label}</span>
@@ -3470,24 +3470,24 @@ function PianoTab({ pia, vers, wide }) {
       <div style={{ zoom: zm }}>
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px", marginBottom: 10 }}>
         <div style={{ flex: "1 1 240px", minWidth: 0 }}>
-          <div style={{ fontSize: 18, fontWeight: 900, color: TXT }}>Piano settimanale <span style={{ color: M }}>{meta.name || ""}</span></div>
+          <div style={{ fontSize: 15, fontWeight: 900, color: TXT }}>Piano settimanale <span style={{ color: M }}>{meta.name || ""}</span></div>
           <div style={{ fontSize: 12, color: T2 }}>{rows.length} righe · tutti i calzaturifici{meta.savedName ? ` · ultima versione salvata: ${meta.savedName}` : ""}</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }} title="Dimensione della tabella">
           <span style={{ fontSize: 11, color: T2, fontWeight: 700 }}>Zoom</span>
-          {[0.6, 0.7, 0.85, 1].map((v) => <button key={v} onClick={() => setZoom(v)} style={{ background: zm === v ? M : S0, color: zm === v ? "#fff" : M, border: `1.5px solid ${BRD2}`, borderRadius: 8, padding: "0 8px", minHeight: 32, fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>{Math.round(v * 100)}%</button>)}
+          {[0.6, 0.7, 0.85, 1].map((v) => <button key={v} onClick={() => setZoom(v)} style={{ background: zm === v ? M : S0, color: zm === v ? "#fff" : M, border: `1.5px solid ${BRD2}`, borderRadius: 8, padding: "0 8px", minHeight: 24, fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>{Math.round(v * 100)}%</button>)}
         </div>
-        <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 14px", minHeight: 44, border: `1.5px solid ${BRD2}` }} onClick={() => setShowCfg(true)}>Limiti e giorni</Btn>
-        <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 14px", minHeight: 44, border: `1.5px solid ${BRD2}` }} onClick={() => setShowVers(true)}>Versioni e confronto</Btn>
-        {!ro && <><Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 14px", minHeight: 44, border: `1.5px solid ${BRD2}` }} onClick={newWeek}>{`Salva ${meta.name || wName(baseKey)} e apri ${wName(nextKey)}`}</Btn>
-        <Btn style={{ width: "auto", padding: "0 16px", minHeight: 44 }} onClick={() => setShowVers("save")}>Salva versione</Btn></>}
+        <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28,fontSize: 11, border: `1.5px solid ${BRD2}` }} onClick={() => setShowCfg(true)}>Limiti e giorni</Btn>
+        <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28,fontSize: 11, border: `1.5px solid ${BRD2}` }} onClick={() => setShowVers(true)}>Versioni e confronto</Btn>
+        {!ro && <><Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28,fontSize: 11, border: `1.5px solid ${BRD2}` }} onClick={newWeek}>{`Salva ${meta.name || wName(baseKey)} e apri ${wName(nextKey)}`}</Btn>
+        <Btn style={{ width: "auto", padding: "0 12px", minHeight: 28, fontSize: 11 }} onClick={() => setShowVers("save")}>Salva versione</Btn></>}
       </div>
 
       {ro && (
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px", background: "#FFF7E0", border: "1.5px solid #E8D9A8", borderRadius: 14, padding: "10px 14px", marginBottom: 10 }}>
           <b style={{ fontSize: 14, color: "#854D0E" }}>Stai guardando {view.name} in sola lettura</b>
           <span style={{ fontSize: 12, color: "#854D0E" }}>Il tuo piano di lavoro {liveMeta.name || ""} non è stato toccato.</span>
-          <Btn style={{ width: "auto", padding: "0 16px", minHeight: 40, marginLeft: "auto" }} onClick={() => setView(null)}>{`Torna a ${liveMeta.name || "piano di lavoro"}`}</Btn>
+          <Btn style={{ width: "auto", padding: "0 12px", minHeight: 28, fontSize: 11, marginLeft: "auto" }} onClick={() => setView(null)}>{`Torna a ${liveMeta.name || "piano di lavoro"}`}</Btn>
         </div>
       )}
       {empty && <PianoImport />}
@@ -3496,14 +3496,14 @@ function PianoTab({ pia, vers, wide }) {
         <>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px", marginBottom: 10 }}>
             <input type="text" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca marchio, articolo, colore o blocco" aria-label="Cerca nel piano"
-              style={{ flex: "1 1 220px", maxWidth: 360, boxSizing: "border-box", background: S0, border: `1.5px solid ${BRD2}`, borderRadius: 12, padding: "0 12px", minHeight: 44, fontFamily: FONT, fontSize: 14, color: TXT, outline: "none" }} />
-            <button onClick={() => setOnlyMiss((v) => !v)} style={{ background: onlyMiss ? ACC : "#FFF7E0", color: onlyMiss ? "#fff" : "#854D0E", border: "1.5px solid #E8D9A8", borderRadius: 12, padding: "0 14px", minHeight: 44, fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>
+              style={{ flex: "1 1 220px", maxWidth: 360, boxSizing: "border-box", background: S0, border: `1.5px solid ${BRD2}`, borderRadius: 12, padding: "0 12px", minHeight: 28, fontFamily: FONT, fontSize: 14, color: TXT, outline: "none" }} />
+            <button onClick={() => setOnlyMiss((v) => !v)} style={{ background: onlyMiss ? ACC : "#FFF7E0", color: onlyMiss ? "#fff" : "#854D0E", border: "1.5px solid #E8D9A8", borderRadius: 9, padding: "0 10px", minHeight: 28, fontFamily: FONT, fontWeight: 800, fontSize: 11, cursor: "pointer" }}>
               {onlyMiss ? "Mostra tutte le righe" : "Solo righe con materiali mancanti"}
             </button>
-            {!ro && <button onClick={() => setEdit({})} style={{ background: S0, color: M, border: `1.5px dashed ${BRD2}`, borderRadius: 12, padding: "0 14px", minHeight: 44, fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>+ Nuova riga</button>}
-            <button onClick={hideEmptyPast} style={{ background: S0, color: M, border: `1.5px solid ${BRD2}`, borderRadius: 12, padding: "0 14px", minHeight: 44, fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>Nascondi settimane passate vuote</button>
-            <button onClick={addWeeks} style={{ background: S0, color: M, border: `1.5px solid ${BRD2}`, borderRadius: 12, padding: "0 14px", minHeight: 44, fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>+ 4 settimane future</button>
-            {nHidden > 0 && <button onClick={showAllWeeks} style={{ background: S0, color: T2, border: `1.5px solid ${BRD2}`, borderRadius: 12, padding: "0 14px", minHeight: 44, fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Mostra {nHidden} settimane nascoste</button>}
+            {!ro && <button onClick={() => setEdit({})} style={{ background: S0, color: M, border: `1.5px dashed ${BRD2}`, borderRadius: 9, padding: "0 10px", minHeight: 28, fontFamily: FONT, fontWeight: 800, fontSize: 11, cursor: "pointer" }}>+ Nuova riga</button>}
+            <button onClick={hideEmptyPast} style={{ background: S0, color: M, border: `1.5px solid ${BRD2}`, borderRadius: 9, padding: "0 10px", minHeight: 28, fontFamily: FONT, fontWeight: 800, fontSize: 11, cursor: "pointer" }}>Nascondi settimane passate vuote</button>
+            <button onClick={addWeeks} style={{ background: S0, color: M, border: `1.5px solid ${BRD2}`, borderRadius: 9, padding: "0 10px", minHeight: 28, fontFamily: FONT, fontWeight: 800, fontSize: 11, cursor: "pointer" }}>+ 4 settimane future</button>
+            {nHidden > 0 && <button onClick={showAllWeeks} style={{ background: S0, color: T2, border: `1.5px solid ${BRD2}`, borderRadius: 9, padding: "0 10px", minHeight: 28, fontFamily: FONT, fontWeight: 700, fontSize: 11, cursor: "pointer" }}>Mostra {nHidden} settimane nascoste</button>}
             <span style={{ fontSize: 12, color: "#854D0E", fontWeight: 600 }}>Materiali: {matRows - matBad} righe in piano complete, {matBad} con materiali mancanti o in ritardo</span>
             <span style={{ fontSize: 12, color: T2 }}>{shown.length !== rows.length ? `${shown.length} righe mostrate · ` : ""}frecce e Invio per muoversi · somme tipo 100+50</span>
           </div>
@@ -3513,25 +3513,15 @@ function PianoTab({ pia, vers, wide }) {
               <b style={{ fontSize: 13 }}>{selIds.length} righe selezionate</b>
               <span style={{ fontSize: 12, opacity: 0.9 }}>Sposta tutte di</span>
               {[[-1, "− 1 sett."], [1, "+ 1 sett."], [2, "+ 2 sett."]].map(([d, l]) => (
-                <button key={d} disabled={!!busy} onClick={() => shiftIds(selIds, d)} style={{ background: d === 1 ? "#fff" : "rgba(255,255,255,0.18)", color: d === 1 ? M : "#fff", border: d === 1 ? "none" : "1px solid rgba(255,255,255,0.5)", borderRadius: 10, padding: "0 12px", minHeight: 40, fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>{l}</button>
+                <button key={d} disabled={!!busy} onClick={() => shiftIds(selIds, d)} style={{ background: d === 1 ? "#fff" : "rgba(255,255,255,0.18)", color: d === 1 ? M : "#fff", border: d === 1 ? "none" : "1px solid rgba(255,255,255,0.5)", borderRadius: 10, padding: "0 12px", minHeight: 28, fontFamily: FONT, fontWeight: 800, fontSize: 11, cursor: "pointer" }}>{l}</button>
               ))}
-              <button onClick={() => setSel({})} style={{ marginLeft: "auto", background: "transparent", color: "#fff", border: "1px solid rgba(255,255,255,0.5)", borderRadius: 10, padding: "0 12px", minHeight: 40, fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>Deseleziona</button>
+              <button onClick={() => setSel({})} style={{ marginLeft: "auto", background: "transparent", color: "#fff", border: "1px solid rgba(255,255,255,0.5)", borderRadius: 10, padding: "0 12px", minHeight: 28, fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>Deseleziona</button>
             </div>
           )}
 
           <div style={{ overflow: "auto", maxHeight: `calc((100vh - 150px) / ${zm})`, background: S0, border: `1px solid ${BRD2}`, borderRadius: 14 }}>
             <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 12, minWidth: "max-content", width: "100%" }}>
               <thead style={{ position: "sticky", top: 0, zIndex: 5 }}>
-                <tr>
-                  <td colSpan={COLS_L} style={{ background: "#EEF2F8", borderRight: grid, borderBottom: grid, padding: "4px 12px", fontSize: 11, fontWeight: 800, color: TXT, letterSpacing: "0.06em" }}>PAIA SETTIMANALI <span style={{ fontWeight: 600, color: T2, letterSpacing: 0 }}>(tutti i calzaturifici)</span></td>
-                  {grand.map((v, i) => <td key={i} style={{ ...wlOf(i), background: "#EEF2F8", borderRight: grid, borderBottom: grid, textAlign: "center", fontFamily: MONO, fontSize: 12, fontWeight: 800, color: TXT }}>{v || ""}</td>)}
-                  <td style={{ background: "#EEF2F8", borderBottom: grid }} />
-                </tr>
-                <tr>
-                  <td colSpan={COLS_L} style={{ background: "#EEF2F8", borderRight: grid, borderBottom: grid, padding: "4px 12px", fontSize: 11, fontWeight: 800, color: TXT, letterSpacing: "0.06em" }}>PAIA GIORNALIERE <span style={{ fontWeight: 600, color: T2, letterSpacing: 0 }}>(tutti i calzaturifici ÷ giorni lavorativi)</span></td>
-                  {grand.map((v, i) => <td key={i} style={{ ...wlOf(i), background: "#EEF2F8", borderRight: grid, borderBottom: grid, textAlign: "center", fontFamily: MONO, fontSize: 12, fontWeight: 800, color: M }}>{v ? Math.round(v / daysOf(weeks[i])) : ""}</td>)}
-                  <td style={{ background: "#EEF2F8", borderBottom: grid }} />
-                </tr>
                 <tr>
                   <td colSpan={COLS_L} style={{ background: "#EEF2F8", borderRight: grid, borderBottom: grid, padding: "4px 12px", fontSize: 11, fontWeight: 800, color: TXT, letterSpacing: "0.06em" }}>PAIA SETTIMANALI · MOS</td>
                   {weeks.map((w, i) => { const v = (totBy.MOS || [])[i] || 0; return <td key={w.k} style={{ ...wlOf(i), background: "#EEF2F8", borderRight: grid, borderBottom: grid, textAlign: "center", fontFamily: MONO, fontSize: 12, fontWeight: 800, color: TXT }}>{v || ""}</td>; })}
@@ -3585,7 +3575,7 @@ function PianoTab({ pia, vers, wide }) {
                     const sumCell = { textAlign: "center", padding: "5px 2px", fontFamily: MONO, fontWeight: 700, fontSize: 12, borderRight: grid };
                     return (
                       <Fragment key={c}>
-                        <tr><td colSpan={COLS_L + NW + 1} style={{ background: M, color: "#fff", padding: "9px 12px", fontWeight: 800, fontSize: 13, letterSpacing: "0.04em" }}>{PI_NAMES[c] || c} · {rows.filter((r) => r.c === c).length} righe</td></tr>
+                        <tr><td colSpan={COLS_L + NW + 1} style={{ background: M, color: "#fff", padding: "2px 10px", fontWeight: 800, fontSize: 11, letterSpacing: "0.04em" }}>{PI_NAMES[c] || c} · {rows.filter((r) => r.c === c).length} righe</td></tr>
                         {list.map((r, zi) => {
                           const nf = info.get(r.id);
                           const rg = gi++;
