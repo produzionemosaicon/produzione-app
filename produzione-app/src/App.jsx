@@ -3533,6 +3533,16 @@ function PianoTab({ pia, vers, wide }) {
                   <td style={{ background: "#EEF2F8", borderBottom: grid }} />
                 </tr>
                 <tr>
+                  <td colSpan={COLS_L} style={{ background: "#EEF2F8", borderRight: grid, borderBottom: grid, padding: "4px 12px", fontSize: 11, fontWeight: 800, color: TXT, letterSpacing: "0.06em" }}>PAIA SETTIMANALI · MOS</td>
+                  {weeks.map((w, i) => { const v = (totBy.MOS || [])[i] || 0; return <td key={w.k} style={{ ...wlOf(i), background: "#EEF2F8", borderRight: grid, borderBottom: grid, textAlign: "center", fontFamily: MONO, fontSize: 12, fontWeight: 800, color: TXT }}>{v || ""}</td>; })}
+                  <td style={{ background: "#EEF2F8", borderBottom: grid }} />
+                </tr>
+                <tr>
+                  <td colSpan={COLS_L} style={{ background: "#EEF2F8", borderRight: grid, borderBottom: grid, padding: "4px 12px", fontSize: 11, fontWeight: 800, color: TXT, letterSpacing: "0.06em" }}>PAIA GIORNALIERE · MOS</td>
+                  {weeks.map((w, i) => { const v = (totBy.MOS || [])[i] || 0; return <td key={w.k} style={{ ...wlOf(i), background: "#EEF2F8", borderRight: grid, borderBottom: grid, textAlign: "center", fontFamily: MONO, fontSize: 12, fontWeight: 800, color: M }}>{v ? Math.round(v / daysOf(w)) : ""}</td>; })}
+                  <td style={{ background: "#EEF2F8", borderBottom: grid }} />
+                </tr>
+                <tr>
                   <td colSpan={COLS_L} rowSpan={2} style={{ background: "#FFF7E0", borderBottom: `2px solid ${BRD2}`, borderRight: grid, padding: "6px 12px", verticalAlign: "middle" }}>
                     <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", color: "#854D0E" }}>FATTURATO PREVISTO PER MESE</div>
                     <div style={{ fontSize: 11, color: "#854D0E" }}>paia pianificate × prezzo medio; si aggiorna mentre scrivi</div>
