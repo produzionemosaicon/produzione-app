@@ -3523,12 +3523,12 @@ function PianoTab({ pia, vers, wide }) {
             <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 12, minWidth: "max-content", width: "100%" }}>
               <thead style={{ position: "sticky", top: 0, zIndex: 5 }}>
                 <tr>
-                  <td colSpan={COLS_L} style={{ background: "#EEF2F8", borderRight: grid, borderBottom: grid, padding: "4px 12px", fontSize: 11, fontWeight: 800, color: TXT, letterSpacing: "0.06em" }}>PAIA SETTIMANALI</td>
+                  <td colSpan={COLS_L} style={{ background: "#EEF2F8", borderRight: grid, borderBottom: grid, padding: "4px 12px", fontSize: 11, fontWeight: 800, color: TXT, letterSpacing: "0.06em" }}>PAIA SETTIMANALI <span style={{ fontWeight: 600, color: T2, letterSpacing: 0 }}>(tutti i calzaturifici)</span></td>
                   {grand.map((v, i) => <td key={i} style={{ ...wlOf(i), background: "#EEF2F8", borderRight: grid, borderBottom: grid, textAlign: "center", fontFamily: MONO, fontSize: 12, fontWeight: 800, color: TXT }}>{v || ""}</td>)}
                   <td style={{ background: "#EEF2F8", borderBottom: grid }} />
                 </tr>
                 <tr>
-                  <td colSpan={COLS_L} style={{ background: "#EEF2F8", borderRight: grid, borderBottom: grid, padding: "4px 12px", fontSize: 11, fontWeight: 800, color: TXT, letterSpacing: "0.06em" }}>PAIA GIORNALIERE <span style={{ fontWeight: 600, color: T2, letterSpacing: 0 }}>(paia ÷ giorni lavorativi della settimana)</span></td>
+                  <td colSpan={COLS_L} style={{ background: "#EEF2F8", borderRight: grid, borderBottom: grid, padding: "4px 12px", fontSize: 11, fontWeight: 800, color: TXT, letterSpacing: "0.06em" }}>PAIA GIORNALIERE <span style={{ fontWeight: 600, color: T2, letterSpacing: 0 }}>(tutti i calzaturifici ÷ giorni lavorativi)</span></td>
                   {grand.map((v, i) => <td key={i} style={{ ...wlOf(i), background: "#EEF2F8", borderRight: grid, borderBottom: grid, textAlign: "center", fontFamily: MONO, fontSize: 12, fontWeight: 800, color: M }}>{v ? Math.round(v / daysOf(weeks[i])) : ""}</td>)}
                   <td style={{ background: "#EEF2F8", borderBottom: grid }} />
                 </tr>
