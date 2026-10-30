@@ -3512,6 +3512,16 @@ function PianoTab({ pia, vers, wide }) {
             <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 12, minWidth: "max-content", width: "100%" }}>
               <thead style={{ position: "sticky", top: 0, zIndex: 5 }}>
                 <tr>
+                  <td colSpan={COLS_L} style={{ background: "#EEF2F8", borderRight: grid, borderBottom: grid, padding: "4px 12px", fontSize: 11, fontWeight: 800, color: TXT, letterSpacing: "0.06em" }}>PAIA SETTIMANALI</td>
+                  {grand.map((v, i) => <td key={i} style={{ ...wlOf(i), background: "#EEF2F8", borderRight: grid, borderBottom: grid, textAlign: "center", fontFamily: MONO, fontSize: 12, fontWeight: 800, color: TXT }}>{v || ""}</td>)}
+                  <td style={{ background: "#EEF2F8", borderBottom: grid }} />
+                </tr>
+                <tr>
+                  <td colSpan={COLS_L} style={{ background: "#EEF2F8", borderRight: grid, borderBottom: grid, padding: "4px 12px", fontSize: 11, fontWeight: 800, color: TXT, letterSpacing: "0.06em" }}>PAIA GIORNALIERE <span style={{ fontWeight: 600, color: T2, letterSpacing: 0 }}>(paia ÷ giorni lavorativi della settimana)</span></td>
+                  {grand.map((v, i) => <td key={i} style={{ ...wlOf(i), background: "#EEF2F8", borderRight: grid, borderBottom: grid, textAlign: "center", fontFamily: MONO, fontSize: 12, fontWeight: 800, color: M }}>{v ? Math.round(v / daysOf(weeks[i])) : ""}</td>)}
+                  <td style={{ background: "#EEF2F8", borderBottom: grid }} />
+                </tr>
+                <tr>
                   <td colSpan={COLS_L} rowSpan={2} style={{ background: "#FFF7E0", borderBottom: `2px solid ${BRD2}`, borderRight: grid, padding: "6px 12px", verticalAlign: "middle" }}>
                     <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", color: "#854D0E" }}>FATTURATO PREVISTO PER MESE</div>
                     <div style={{ fontSize: 11, color: "#854D0E" }}>paia pianificate × prezzo medio; si aggiorna mentre scrivi</div>
@@ -3533,7 +3543,7 @@ function PianoTab({ pia, vers, wide }) {
                   <th style={{ ...thWrap, background: "#FFF7E0", color: "#854D0E", minWidth: 52 }}>Materiali</th>
                   <th style={{ ...th, minWidth: 44 }}>Qnt</th>
                   <th style={{ ...th, minWidth: 44 }}>Sped.</th>
-                  <th style={{ ...th, minWidth: 44 }}>Giac.</th>
+                  <th style={{ ...th, minWidth: 44, background: "#C9CED6", color: "#4B5563" }}>Giac.</th>
                   <th style={{ ...thWrap, minWidth: 54 }}>Prezzo medio (€)</th>
                   <th style={{ ...th, minWidth: 46, background: "#DCE5F3" }}>Saldo</th>
                   <th style={{ ...th, minWidth: 44 }}>Check</th>
@@ -3588,8 +3598,8 @@ function PianoTab({ pia, vers, wide }) {
                                 {nf.plan > 0 && <span style={{ background: nf.miss ? "#FFE4D6" : "#DCFCE7", color: nf.miss ? "#9A3412" : "#166534", fontWeight: 800, fontSize: 10, padding: "2px 6px", borderRadius: 8, whiteSpace: "nowrap" }}>{nf.miss ? `manca ${nf.miss}` : "ok"}</span>}
                               </td>
                               {nums.map(([f, v, kd], j) => (
-                                <td key={f} style={cell()}>
-                                  <RCell kind={kd} align="center" g={`${rg}:${6 + j}`} value={kd === "dec" && v ? piFmtN(v) : v} fmt={kd === "dec" ? (x) => "€ " + x : undefined} onCommit={(nv) => piWrite(`righe/${r.id}/${f}`, nv)} pad="3px 1px" fs={12} bold />
+                                <td key={f} style={f === "g" ? { ...cell(), background: "#E4E7EC" } : cell()}>
+                                  <RCell kind={kd} align="center" g={`${rg}:${6 + j}`} bg={f === "g" ? "#E4E7EC" : undefined} fg={f === "g" ? "#4B5563" : undefined} value={kd === "dec" && v ? piFmtN(v) : v} fmt={kd === "dec" ? (x) => "€ " + x : undefined} onCommit={(nv) => piWrite(`righe/${r.id}/${f}`, nv)} pad="3px 1px" fs={12} bold />
                                 </td>
                               ))}
                               <td style={{ ...bt, background: "#DCE5F3", textAlign: "center", fontFamily: MONO, fontSize: 12, fontWeight: 700 }}>{piSaldo(r)}</td>
