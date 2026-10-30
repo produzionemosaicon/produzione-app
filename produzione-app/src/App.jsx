@@ -3486,9 +3486,9 @@ function PianoTab({ pia, vers, wide }) {
             </div>
           )}
 
-          <div style={{ overflowX: "auto", background: S0, border: `1px solid ${BRD2}`, borderRadius: 14 }}>
+          <div style={{ overflow: "auto", maxHeight: `calc((100vh - 150px) / ${zm})`, background: S0, border: `1px solid ${BRD2}`, borderRadius: 14 }}>
             <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 12, minWidth: "max-content", width: "100%" }}>
-              <thead>
+              <thead style={{ position: "sticky", top: 0, zIndex: 5 }}>
                 <tr>
                   <td colSpan={COLS_L} rowSpan={2} style={{ background: "#FFF7E0", borderBottom: `2px solid ${BRD2}`, borderRight: grid, padding: "6px 12px", verticalAlign: "middle" }}>
                     <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", color: "#854D0E" }}>FATTURATO PREVISTO PER MESE</div>
