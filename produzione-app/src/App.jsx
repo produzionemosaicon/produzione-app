@@ -3356,6 +3356,21 @@ function PianoTab({ pia, vers, wide }) {
     set(ref(db, "piano/cfg/hide"), o).catch((e) => window.alert("Operazione non riuscita: " + e.message));
   };
   const showAllWeeks = () => set(ref(db, "piano/cfg/hide"), null).catch((e) => window.alert("Operazione non riuscita: " + e.message));
+  const nextKey = piAdd(baseKey, 1);
+  const wName = (k) => "W" + String(parseInt(k.split("-")[1], 10));
+  const newWeek = async () => {
+    const cur = meta.name || wName(baseKey), nxt = wName(nextKey);
+    if (!window.confirm(`Salvo il piano attuale come versione «${cur}» e apro ${nxt} con le stesse righe (poi lo modifichi). Procedo?`)) return;
+    setBusy("w");
+    try {
+      const vid = piSlug(cur);
+      const clean = {}; rows.forEach((r) => { const { id, ...rest } = r; clean[id] = rest; });
+      await set(ref(db, `pianoVersRighe/${vid}`), clean);
+      await set(ref(db, `pianoVers/${vid}`), { name: cur, week: baseKey, weekStart: piMonday(baseKey).toISOString().slice(0, 10), savedAt: Date.now(), n: rows.length });
+      await set(ref(db, "piano/meta"), { name: nxt, week: nextKey, savedName: cur });
+    } catch (e) { window.alert("Operazione non riuscita: " + e.message); }
+    finally { setBusy(""); }
+  };
   const addWeeks = () => set(ref(db, "piano/cfg/ext"), ext + 4).catch((e) => window.alert("Operazione non riuscita: " + e.message));
   const NW = weeks.length;
   const COLS_L = 19; // colonne prima delle settimane: sel, brand, articolo, cons, blocco, R, 6 materiali, mat, qnt, sped, giac, prezzo, saldo, check
@@ -3454,6 +3469,7 @@ function PianoTab({ pia, vers, wide }) {
         </div>
         <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 14px", minHeight: 44, border: `1.5px solid ${BRD2}` }} onClick={() => setShowCfg(true)}>Limiti e giorni</Btn>
         <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 14px", minHeight: 44, border: `1.5px solid ${BRD2}` }} onClick={() => setShowVers(true)}>Versioni e confronto</Btn>
+        <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 14px", minHeight: 44, border: `1.5px solid ${BRD2}` }} onClick={newWeek}>{`Salva ${meta.name || wName(baseKey)} e apri ${wName(nextKey)}`}</Btn>
         <Btn style={{ width: "auto", padding: "0 16px", minHeight: 44 }} onClick={() => setShowVers("save")}>Salva versione</Btn>
       </div>
 
