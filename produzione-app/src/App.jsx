@@ -4,7 +4,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, Cell,
 } from "recharts";
-import { db, ref, set, onValue } from "./firebase.js";
+import { db, ref, set, get, onValue } from "./firebase.js";
 import { remove } from "firebase/database";
 /* ═══ COLORI ═══ */
 const M = "#1A5CFF", ML = "#EBF0FF";
@@ -29,6 +29,7 @@ const TABS = [
   { id: "taglio",   icon: "✂️", label: "Taglio" },
   { id: "giacenza", icon: "📦", label: "Giacenza" },
   { id: "manovia",  icon: "🔄", label: "Manovia" },
+  { id: "piano",    icon: "🗓️", label: "Piano" },
   { id: "rientri",  icon: "↩️", label: "Rientri" },
   { id: "setting",  icon: "⚙️", label: "Setting" },
 ];
@@ -273,6 +274,8 @@ export default function App() {
   const [giac, setGiac] = useState({});
   const [man, setMan] = useState({});
   const [rie, setRie] = useState({});
+  const [pia, setPia] = useState({});
+  const [pvers, setPvers] = useState({});
 
   useEffect(() => {
     return onValue(ref(db, "giacenze"), (snap) => {
@@ -322,6 +325,17 @@ export default function App() {
   useEffect(() => {
     return onValue(ref(db, "rientri"), (snap) => {
       setRie(snap.exists() ? snap.val() : {});
+    });
+  }, []);
+
+  useEffect(() => {
+    return onValue(ref(db, "piano"), (snap) => {
+      setPia(snap.exists() ? snap.val() : {});
+    });
+  }, []);
+  useEffect(() => {
+    return onValue(ref(db, "pianoVers"), (snap) => {
+      setPvers(snap.exists() ? snap.val() : {});
     });
   }, []);
 
@@ -844,6 +858,7 @@ export default function App() {
         <div style={{ display: tab === "manovia" ? "block" : "none" }}>
           <ManoviaTab man={man} saveManDay={saveManDay} wide={wide} />
         </div>
+        {tab === "piano" && <PianoTab pia={pia} vers={pvers} wide={wide} />}
         {tab === "rientri" && <RientriTab rie={rie} wide={wide} />}
       </div>
 
@@ -2477,14 +2492,20 @@ const rieFarDate = () => { const d = new Date(); d.setDate(d.getDate() + 60); re
 const rieSet = (path, v) => set(ref(db, `rientri/${path}`), v === undefined || v === "" ? null : v);
 
 // Casella: accetta somme (+5+5, =17+11) come nella Manovia; Invio/frecce per spostarsi
-function RCell({ value, onCommit, kind = "num", g, bold, warn, width, align }) {
+function RCell({ value, onCommit, kind = "num", g, bold, warn, width, align, pad, fs, bg, fg }) {
   const [v, setV] = useState(null);
   const base = value === undefined || value === null ? "" : String(value);
   const shown = v === null ? base : v;
   const commit = () => {
     if (v === null) return;
     const raw = v; setV(null);
-    if (kind === "num") {
+    if (kind === "dec") {
+      const t = raw.trim().replace(",", ".");
+      if (t !== "" && !/^\d+(\.\d+)?$/.test(t)) return;
+      const nv = t === "" || +t === 0 ? null : +t;
+      if (nv === (base === "" ? null : +base.replace(",", "."))) return;
+      onCommit(nv);
+    } else if (kind === "num") {
       const n = manSum(raw);
       if (Number.isNaN(n)) return;
       const nv = n === 0 ? null : n;
@@ -2499,10 +2520,10 @@ function RCell({ value, onCommit, kind = "num", g, bold, warn, width, align }) {
   return (
     <input
       type={kind === "date" ? "date" : "text"} inputMode={kind === "num" ? "text" : undefined}
-      value={shown} data-g={g}
+      value={shown} data-g={g} size={pad ? 1 : undefined}
       onFocus={(e) => { if (v === null) setV(base); if (kind !== "date") e.target.select(); }}
       onChange={(e) => setV(e.target.value)} onBlur={commit}
-      style={{ width: width || "100%", boxSizing: "border-box", border: "none", background: warn ? ACL : "transparent", outline: "none", fontFamily: kind === "num" ? MONO : FONT, fontSize: 13, fontWeight: bold ? 800 : 600, color: warn ? ACC : kind === "num" ? M : TXT, textAlign: align || (kind === "num" ? "right" : "left"), padding: "8px 6px", minWidth: 0 }}
+      style={{ width: width || "100%", boxSizing: "border-box", border: "none", background: bg || (warn ? ACL : "transparent"), outline: "none", fontFamily: kind === "num" || kind === "dec" ? MONO : FONT, fontSize: fs || 13, fontWeight: bold ? 800 : 600, color: fg || (warn ? ACC : kind === "num" || kind === "dec" ? M : TXT), textAlign: align || (kind === "num" || kind === "dec" ? "right" : "left"), padding: pad || "8px 6px", minWidth: 0 }}
     />
   );
 }
@@ -3223,6 +3244,600 @@ function RientriTab({ rie, wide }) {
       {modal?.k === "rientra" && <RieRientraModal oid={modal.id} o={rie[modal.id]} rid={modal.rid} onClose={() => setModal(null)} />}
       {modal?.k === "reso" && <RieResoModal entries={all} startId={modal.id} onClose={() => setModal(null)} />}
       {modal?.k === "paste" && <RiePasteModal entries={all} onClose={() => setModal(null)} />}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PIANO — pianificazione settimanale della produzione (tutti i calzaturifici)
+   Nodi: piano/righe/{id}, piano/meta, piano/cfg, pianoVers/{vid} (indice), pianoVersRighe/{vid} (righe della versione)
+   ═══════════════════════════════════════════════════════════════ */
+const PI_ORD = ["MOS", "EMOS", "STIL3", "MACB", "MICM", "CINA"];
+const PI_NAMES = { MOS: "MOS · Mosaicon", EMOS: "EMOS", STIL3: "STIL3", MACB: "MACB · Macbarens", MICM: "MICM · Micmar", CINA: "CINA" };
+const PI_DAYS = { "2026-42": 4, "2026-50": 4, "2026-52": 3, "2026-53": 3, "2027-01": 4 }; // giorni lavorativi diversi da 5 (come nel foglio)
+const PI_MESI = ["GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO", "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE", "NOVEMBRE", "DICEMBRE"];
+const PI_MAT = [["pe", "PE"], ["fo", "FO"], ["so", "SO"], ["su", "SU"], ["ta", "TA"], ["fm", "Tot. forme"]];
+const piMonday = (key) => {
+  const [y, w] = key.split("-").map(Number);
+  const j4 = new Date(Date.UTC(y, 0, 4)), dow = j4.getUTCDay() || 7;
+  const m = new Date(j4); m.setUTCDate(j4.getUTCDate() - dow + 1 + (w - 1) * 7);
+  return m;
+};
+const piKey = (d) => {
+  const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+  const y = t.getUTCFullYear();
+  const w = Math.ceil(((t - Date.UTC(y, 0, 1)) / 864e5 + 1) / 7);
+  return `${y}-${String(w).padStart(2, "0")}`;
+};
+const piToday = () => { const n = new Date(); return piKey(new Date(Date.UTC(n.getFullYear(), n.getMonth(), n.getDate()))); };
+const piAdd = (key, n) => { const m = piMonday(key); m.setUTCDate(m.getUTCDate() + 7 * n); return piKey(m); };
+const piIdx = (key) => Math.round(piMonday(key).getTime() / (7 * 864e5));
+const piWeek = (key) => {
+  const m = piMonday(key), f = new Date(m); f.setUTCDate(m.getUTCDate() + 4);
+  const p2 = (n) => String(n).padStart(2, "0");
+  return { k: key, n: "S" + key.slice(5), cal: `${p2(m.getUTCDate())}-${p2(f.getUTCDate())}`, month: PI_MESI[new Date(m.getTime() + 3 * 864e5).getUTCMonth()], days: PI_DAYS[key] || 5 };
+};
+const piPn = (r, k) => +(r.w && r.w[k]) || 0;
+const piPlanTot = (r) => Object.values(r.w || {}).reduce((a, b) => a + (+b || 0), 0);
+const piSaldo = (r) => (+r.q || 0) - (+r.sp || 0) - (+r.g || 0);
+const piFmtN = (n) => String(n).replace(".", ",");
+const piEur = (x) => "€ " + Math.round(x).toLocaleString("it-IT");
+const piK = (x) => (x ? (Math.round(x / 100) / 10).toLocaleString("it-IT") + "k" : "");
+const piRowKey = (r) => [r.b, r.c, r.a, r.k, r.bl, r.r].map((x) => String(x || "").trim().toUpperCase()).join("|");
+// settimana media (pesata sulle paia) del piano di una riga
+const piMass = (r) => { const e = Object.entries(r.w || {}).filter(([, v]) => +v > 0); const t = e.reduce((s, [, v]) => s + +v, 0); return t ? e.reduce((s, [k, v]) => s + piIdx(k) * +v, 0) / t : null; };
+// stato di un materiale: ok / na / soon (atteso prima dell'inizio del piano) / late (dopo) / miss (manca)
+function piMatStat(v, j, firstKey) {
+  const t = String(v ?? "").trim().toUpperCase();
+  if (j === 5) return t === "" ? "miss" : "ok";
+  if (t === "") return "miss";
+  if (t === "OK") return "ok";
+  if (t === "/") return "na";
+  const nn = (t.match(/\d+/g) || []).map(Number);
+  if (/AGG/.test(t) || !nn.length) return "miss";
+  const wk = (n) => (n <= 9 ? n + 52 : n);
+  const arr = Math.max(...nn.map(wk));
+  const start = firstKey ? wk(+firstKey.slice(5)) : 99;
+  return arr > start ? "late" : "soon";
+}
+const PI_MATCOL = { ok: [GRN + "22", "#166534"], na: [S2, T3], soon: ["#E0F2FE", "#075985"], late: ["#FFD9B8", "#9A3412"], miss: ["#FFF1E6", "#9A3412"] };
+function piSort(a, b) {
+  const ia = PI_ORD.indexOf(a), ib = PI_ORD.indexOf(b);
+  if (ia >= 0 || ib >= 0) return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  return a.localeCompare(b);
+}
+const piSlug = (s) => String(s).replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "");
+const piWrite = (path, v) => set(ref(db, `piano/${path}`), v === undefined || v === "" ? null : v);
+// materiale/data in forma da salvare: tolgo i vuoti
+const piCleanRow = (r) => {
+  const o = { ...r }; delete o.id;
+  const m = {}; Object.entries(o.m || {}).forEach(([k, v]) => { if (String(v ?? "").trim() !== "") m[k] = String(v).trim(); });
+  o.m = Object.keys(m).length ? m : null;
+  const w = {}; Object.entries(o.w || {}).forEach(([k, v]) => { if (+v > 0) w[k] = +v; });
+  o.w = Object.keys(w).length ? w : null;
+  Object.keys(o).forEach((k) => { if (o[k] === "" || o[k] === undefined) o[k] = null; });
+  return o;
+};
+
+function PianoTab({ pia, vers, wide }) {
+  const righe = pia.righe || {};
+  const meta = pia.meta || {};
+  const cfg = pia.cfg || {};
+  const [q, setQ] = useState("");
+  const [onlyMiss, setOnlyMiss] = useState(false);
+  const [sel, setSel] = useState({});
+  const [edit, setEdit] = useState(null);      // riga in modifica / nuova ({} = nuova)
+  const [showVers, setShowVers] = useState(false);
+  const [showCfg, setShowCfg] = useState(false);
+  const [busy, setBusy] = useState("");
+
+  const rows = useMemo(() => Object.entries(righe).map(([id, r]) => ({ id, ...r })).sort((a, b) => (a.o || 0) - (b.o || 0)), [righe]);
+  const baseKey = meta.week || piToday();
+  const weeks = useMemo(() => {
+    let last = piAdd(baseKey, 20);
+    rows.forEach((r) => Object.keys(r.w || {}).forEach((k) => { if (piIdx(k) > piIdx(last)) last = k; }));
+    const first = piAdd(baseKey, -3);
+    const n = Math.min(40, piIdx(last) - piIdx(first) + 1);
+    return Array.from({ length: n }, (_, i) => piWeek(piAdd(first, i)));
+  }, [baseKey, rows]);
+  const NW = weeks.length;
+  const COLS_L = 19; // colonne prima delle settimane: sel, brand, articolo, cons, blocco, R, 6 materiali, mat, qnt, sped, giac, prezzo, saldo, check
+  const capOf = (c) => +(cfg.cap && cfg.cap[c]) || 0;
+  const daysOf = (w) => (cfg.days && +cfg.days[w.k]) || w.days;
+
+  const info = useMemo(() => {
+    const m = new Map();
+    rows.forEach((r) => {
+      const ks = Object.keys(r.w || {}).filter((k) => +r.w[k] > 0).sort();
+      const first = ks[0] || null;
+      const plan = piPlanTot(r);
+      const ms = PI_MAT.map(([k], j) => (plan > 0 ? piMatStat(r.m?.[k], j, first) : "none"));
+      const miss = ms.filter((x) => x === "miss" || x === "late").length;
+      m.set(r.id, { plan, ms, miss, diff: piSaldo(r) - plan });
+    });
+    return m;
+  }, [rows]);
+  const matRows = rows.filter((r) => info.get(r.id).plan > 0).length;
+  const matBad = rows.filter((r) => info.get(r.id).plan > 0 && info.get(r.id).miss > 0).length;
+
+  const ql = q.trim().toUpperCase();
+  const shown = rows.filter((r) => {
+    if (onlyMiss && !(info.get(r.id).plan > 0 && info.get(r.id).miss > 0)) return false;
+    if (ql && ![r.b, r.c, r.a, r.k, r.bl].some((x) => String(x || "").toUpperCase().includes(ql))) return false;
+    return true;
+  });
+  const calzs = [...new Set(rows.map((r) => r.c))].sort(piSort);
+
+  // totali per settimana: tutti i calzaturifici (anche con filtro attivo: i totali sono del piano intero)
+  const totBy = {}, fatBy = {};
+  const grand = new Array(NW).fill(0), grandF = new Array(NW).fill(0);
+  rows.forEach((r) => {
+    const c = r.c;
+    totBy[c] = totBy[c] || new Array(NW).fill(0); fatBy[c] = fatBy[c] || new Array(NW).fill(0);
+    weeks.forEach((w, i) => { const v = piPn(r, w.k); if (v) { totBy[c][i] += v; fatBy[c][i] += v * (+r.p || 0); grand[i] += v; grandF[i] += v * (+r.p || 0); } });
+  });
+  const months = [];
+  weeks.forEach((w, i) => {
+    const last = months[months.length - 1];
+    if (last && last.name === w.month) { last.span++; last.eur += grandF[i]; } else months.push({ name: w.month, span: 1, eur: grandF[i] });
+  });
+
+  const selIds = Object.keys(sel).filter((id) => sel[id] && righe[id]);
+  const shiftIds = async (ids, d) => {
+    setBusy("shift");
+    try {
+      for (const id of ids) {
+        const r = righe[id]; if (!r) continue;
+        const nw = {}; Object.entries(r.w || {}).forEach(([k, v]) => { nw[piAdd(k, d)] = v; });
+        await piWrite(`righe/${id}/w`, Object.keys(nw).length ? nw : null);
+      }
+    } catch (e) { console.error(e); window.alert("Spostamento non riuscito: " + e.message); }
+    finally { setBusy(""); }
+  };
+
+  // ── salvataggio riga (nuova o modificata)
+  const saveRow = async (id, f) => {
+    const cur = id ? righe[id] : null;
+    const row = { ...(cur || {}), b: f.b.trim().toUpperCase(), c: f.c.trim().toUpperCase(), s: f.s.trim(), a: f.a.trim(), k: f.k.trim(), bl: f.bl.trim(), r: f.r.trim(), d: f.d.trim() };
+    if (!row.b || !row.c || !row.a) return window.alert("Servono almeno marchio, calzaturificio e articolo.");
+    let nid = id;
+    if (!id) {
+      nid = uid() + uid();
+      const same = rows.filter((x) => x.c === row.c && x.b === row.b);
+      const lastO = same.length ? Math.max(...same.map((x) => x.o || 0)) : null;
+      const all = rows.map((x) => x.o || 0).sort((a, b) => a - b);
+      if (lastO === null) row.o = (all.length ? all[all.length - 1] : 0) + 1;
+      else { const nx = all.find((v) => v > lastO); row.o = nx === undefined ? lastO + 1 : (lastO + nx) / 2; }
+      row.ts = Date.now();
+    }
+    try { await set(ref(db, `piano/righe/${nid}`), piCleanRow(row)); setEdit(null); }
+    catch (e) { console.error(e); window.alert("Salvataggio non riuscito: " + e.message); }
+  };
+  const delRow = async (id) => {
+    if (!window.confirm("Eliminare questa riga dal piano?")) return;
+    try { await set(ref(db, `piano/righe/${id}`), null); setEdit(null); } catch (e) { window.alert("Eliminazione non riuscita: " + e.message); }
+  };
+
+  const th = { background: ML, padding: "6px 4px", fontSize: 10, color: T2, fontWeight: 800, borderBottom: `2px solid ${BRD2}`, borderRight: `1px solid ${BRD}`, whiteSpace: "nowrap", textAlign: "center", lineHeight: 1.15 };
+  const thWrap = { ...th, whiteSpace: "normal" };
+  const grid = `1px solid ${BRD}`;
+  const empty = rows.length === 0 && Object.keys(vers || {}).length === 0;
+
+  return (
+    <div style={{ fontFamily: FONT, padding: "14px 14px", paddingBottom: 40 }} onKeyDown={rieNav}>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px", marginBottom: 10 }}>
+        <div style={{ flex: "1 1 240px", minWidth: 0 }}>
+          <div style={{ fontSize: 18, fontWeight: 900, color: TXT }}>Piano settimanale <span style={{ color: M }}>{meta.name || ""}</span></div>
+          <div style={{ fontSize: 12, color: T2 }}>{rows.length} righe · tutti i calzaturifici{meta.savedName ? ` · ultima versione salvata: ${meta.savedName}` : ""}</div>
+        </div>
+        <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 14px", minHeight: 44, border: `1.5px solid ${BRD2}` }} onClick={() => setShowCfg(true)}>Limiti e giorni</Btn>
+        <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 14px", minHeight: 44, border: `1.5px solid ${BRD2}` }} onClick={() => setShowVers(true)}>Versioni e confronto</Btn>
+        <Btn style={{ width: "auto", padding: "0 16px", minHeight: 44 }} onClick={() => setShowVers("save")}>Salva versione</Btn>
+      </div>
+
+      {empty && <PianoImport />}
+
+      {rows.length > 0 && (
+        <>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px", marginBottom: 10 }}>
+            <input type="text" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca marchio, articolo, colore o blocco" aria-label="Cerca nel piano"
+              style={{ flex: "1 1 220px", maxWidth: 360, boxSizing: "border-box", background: S0, border: `1.5px solid ${BRD2}`, borderRadius: 12, padding: "0 12px", minHeight: 44, fontFamily: FONT, fontSize: 14, color: TXT, outline: "none" }} />
+            <button onClick={() => setOnlyMiss((v) => !v)} style={{ background: onlyMiss ? ACC : "#FFF7E0", color: onlyMiss ? "#fff" : "#854D0E", border: "1.5px solid #E8D9A8", borderRadius: 12, padding: "0 14px", minHeight: 44, fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>
+              {onlyMiss ? "Mostra tutte le righe" : "Solo righe con materiali mancanti"}
+            </button>
+            <button onClick={() => setEdit({})} style={{ background: S0, color: M, border: `1.5px dashed ${BRD2}`, borderRadius: 12, padding: "0 14px", minHeight: 44, fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>+ Nuova riga</button>
+            <span style={{ fontSize: 12, color: "#854D0E", fontWeight: 600 }}>Materiali: {matRows - matBad} righe in piano complete, {matBad} con materiali mancanti o in ritardo</span>
+            <span style={{ fontSize: 12, color: T2 }}>{shown.length !== rows.length ? `${shown.length} righe mostrate · ` : ""}frecce e Invio per muoversi · somme tipo 100+50</span>
+          </div>
+
+          {selIds.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 10px", background: M, color: "#fff", borderRadius: 14, padding: "8px 12px", marginBottom: 10 }}>
+              <b style={{ fontSize: 13 }}>{selIds.length} righe selezionate</b>
+              <span style={{ fontSize: 12, opacity: 0.9 }}>Sposta tutte di</span>
+              {[[-1, "− 1 sett."], [1, "+ 1 sett."], [2, "+ 2 sett."]].map(([d, l]) => (
+                <button key={d} disabled={!!busy} onClick={() => shiftIds(selIds, d)} style={{ background: d === 1 ? "#fff" : "rgba(255,255,255,0.18)", color: d === 1 ? M : "#fff", border: d === 1 ? "none" : "1px solid rgba(255,255,255,0.5)", borderRadius: 10, padding: "0 12px", minHeight: 40, fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>{l}</button>
+              ))}
+              <button onClick={() => setSel({})} style={{ marginLeft: "auto", background: "transparent", color: "#fff", border: "1px solid rgba(255,255,255,0.5)", borderRadius: 10, padding: "0 12px", minHeight: 40, fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>Deseleziona</button>
+            </div>
+          )}
+
+          <div style={{ overflowX: "auto", background: S0, border: `1px solid ${BRD2}`, borderRadius: 14 }}>
+            <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 12, minWidth: "max-content", width: "100%" }}>
+              <thead>
+                <tr>
+                  <td colSpan={COLS_L} rowSpan={2} style={{ background: "#FFF7E0", borderBottom: `2px solid ${BRD2}`, borderRight: grid, padding: "6px 12px", verticalAlign: "middle" }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", color: "#854D0E" }}>FATTURATO PREVISTO PER MESE</div>
+                    <div style={{ fontSize: 11, color: "#854D0E" }}>paia pianificate × prezzo medio; si aggiorna mentre scrivi</div>
+                  </td>
+                  {months.map((m, i) => <td key={i} colSpan={m.span} style={{ background: "#FFF7E0", borderRight: grid, textAlign: "center", padding: "6px 4px 0", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", color: "#854D0E" }}>{m.name}</td>)}
+                  <td rowSpan={2} style={{ background: "#FFF7E0", borderBottom: `2px solid ${BRD2}` }} />
+                </tr>
+                <tr>
+                  {months.map((m, i) => <td key={i} colSpan={m.span} style={{ background: "#FFF7E0", borderRight: grid, borderBottom: `2px solid ${BRD2}`, textAlign: "center", padding: "0 4px 6px", fontFamily: MONO, fontSize: 13, fontWeight: 700, color: TXT }}>{piEur(m.eur)}</td>)}
+                </tr>
+                <tr>
+                  <th style={{ ...th, width: 26 }} />
+                  <th style={{ ...th, textAlign: "left", minWidth: 62 }}>Marchio</th>
+                  <th style={{ ...th, textAlign: "left", minWidth: 160 }}>Articolo · colore</th>
+                  <th style={{ ...th, minWidth: 48 }}>Consegna</th>
+                  <th style={{ ...th, minWidth: 64 }}>Blocco ordine</th>
+                  <th style={{ ...th, minWidth: 24 }}>R</th>
+                  {PI_MAT.map(([k, l]) => <th key={k} style={{ ...thWrap, background: "#FFF7E0", color: "#854D0E", minWidth: k === "fm" ? 46 : 48 }}>{l}</th>)}
+                  <th style={{ ...thWrap, background: "#FFF7E0", color: "#854D0E", minWidth: 52 }}>Materiali</th>
+                  <th style={{ ...th, minWidth: 44 }}>Qnt</th>
+                  <th style={{ ...th, minWidth: 44 }}>Sped.</th>
+                  <th style={{ ...th, minWidth: 44 }}>Giac.</th>
+                  <th style={{ ...thWrap, minWidth: 46 }}>Prezzo medio</th>
+                  <th style={{ ...th, minWidth: 46, background: "#DCE5F3" }}>Saldo</th>
+                  <th style={{ ...th, minWidth: 44 }}>Check</th>
+                  {weeks.map((w, i) => (
+                    <th key={w.k} style={{ ...th, minWidth: 44, ...(w.k === baseKey ? { background: "#D7E3FF", color: M } : {}) }}>{w.n}<div style={{ fontWeight: 400, fontSize: 9 }}>{w.cal}</div></th>
+                  ))}
+                  <th style={{ ...thWrap, minWidth: 62 }}>Slitta riga</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  let gi = 0;
+                  return calzs.map((c) => {
+                    const list = shown.filter((r) => r.c === c);
+                    if (!list.length && (q || onlyMiss)) return null;
+                    const tot = totBy[c] || new Array(NW).fill(0), fat = fatBy[c] || new Array(NW).fill(0);
+                    const cap = capOf(c);
+                    const sumCell = { textAlign: "center", padding: "5px 2px", fontFamily: MONO, fontWeight: 700, fontSize: 12, borderRight: grid };
+                    return (
+                      <Fragment key={c}>
+                        <tr><td colSpan={COLS_L + NW + 1} style={{ background: M, color: "#fff", padding: "9px 12px", fontWeight: 800, fontSize: 13, letterSpacing: "0.04em" }}>{PI_NAMES[c] || c} · {rows.filter((r) => r.c === c).length} righe</td></tr>
+                        {list.map((r, zi) => {
+                          const nf = info.get(r.id);
+                          const rg = gi++;
+                          const newB = zi > 0 && list[zi - 1].b !== r.b;
+                          const isSel = !!sel[r.id];
+                          const bg = isSel ? "#C9DBFF" : zi % 2 === 0 ? "#EAF1FF" : "#FFFFFF";
+                          const bt = { background: bg, borderBottom: `1px solid ${BRD}`, borderRight: grid, ...(newB ? { borderTop: `3px double ${RED}` } : {}) };
+                          const cell = (n) => ({ ...bt, padding: 0, textAlign: "center" });
+                          const nums = [["q", r.q, "num"], ["sp", r.sp, "num"], ["g", r.g, "num"], ["p", r.p, "dec"]];
+                          return (
+                            <tr key={r.id}>
+                              <td style={{ ...bt, textAlign: "center", padding: "0 4px" }}><input type="checkbox" checked={isSel} onChange={(e) => setSel((p) => ({ ...p, [r.id]: e.target.checked }))} aria-label={`Seleziona ${r.a} ${r.k}`} style={{ width: 16, height: 16, accentColor: M }} /></td>
+                              <td style={{ ...bt, padding: "2px 6px", fontWeight: 800, fontSize: 12, color: TXT }}>{r.b}</td>
+                              <td style={{ ...bt, padding: "2px 6px", lineHeight: 1.15, cursor: "pointer" }} onClick={() => setEdit({ id: r.id, ...r })} title="Modifica la riga">
+                                <div style={{ fontWeight: 800, fontSize: 12, color: TXT }}>{r.a}</div>
+                                <div style={{ fontSize: 10, color: T2 }}>{r.k}</div>
+                              </td>
+                              <td style={{ ...bt, textAlign: "center", fontFamily: MONO, fontSize: 11, padding: "2px 4px" }}>{r.d && /^\d{4}-\d\d-\d\d$/.test(r.d) ? r.d.slice(8) + "/" + r.d.slice(5, 7) : r.d || ""}</td>
+                              <td style={{ ...bt, textAlign: "center", fontFamily: MONO, fontSize: 11, fontWeight: 700, padding: "2px 4px" }}>{r.bl}</td>
+                              <td style={{ ...bt, textAlign: "center", fontFamily: MONO, fontSize: 12, fontWeight: 700, padding: "2px 2px" }}>{r.r}</td>
+                              {PI_MAT.map(([k], j) => {
+                                const st = nf.ms[j];
+                                const col = PI_MATCOL[st];
+                                return (
+                                  <td key={k} style={cell()}>
+                                    <RCell kind="txt" align="center" g={`${rg}:${j}`} value={r.m?.[k]} onCommit={(v) => piWrite(`righe/${r.id}/m/${k}`, v)} pad="3px 1px" fs={11} bg={col ? col[0] : undefined} fg={col ? col[1] : undefined} bold />
+                                  </td>
+                                );
+                              })}
+                              <td style={{ ...bt, textAlign: "center", padding: "2px 3px" }}>
+                                {nf.plan > 0 && <span style={{ background: nf.miss ? "#FFE4D6" : "#DCFCE7", color: nf.miss ? "#9A3412" : "#166534", fontWeight: 800, fontSize: 10, padding: "2px 6px", borderRadius: 8, whiteSpace: "nowrap" }}>{nf.miss ? `manca ${nf.miss}` : "ok"}</span>}
+                              </td>
+                              {nums.map(([f, v, kd], j) => (
+                                <td key={f} style={cell()}>
+                                  <RCell kind={kd} align="center" g={`${rg}:${6 + j}`} value={kd === "dec" && v ? piFmtN(v) : v} onCommit={(nv) => piWrite(`righe/${r.id}/${f}`, nv)} pad="3px 1px" fs={12} bold />
+                                </td>
+                              ))}
+                              <td style={{ ...bt, background: "#DCE5F3", textAlign: "center", fontFamily: MONO, fontSize: 12, fontWeight: 700 }}>{piSaldo(r)}</td>
+                              <td style={{ ...bt, textAlign: "center", padding: "2px 3px" }}>
+                                <span style={{ background: nf.diff === 0 ? "#DCFCE7" : "#FFF0EA", color: nf.diff === 0 ? "#166534" : "#C2410C", fontWeight: 800, fontSize: 11, padding: "2px 7px", borderRadius: 8, fontFamily: MONO }}>{nf.diff === 0 ? "ok" : nf.diff > 0 ? "−" + nf.diff : "+" + Math.abs(nf.diff)}</span>
+                              </td>
+                              {weeks.map((w, i) => {
+                                const v = piPn(r, w.k);
+                                return (
+                                  <td key={w.k} style={cell()}>
+                                    <RCell kind="num" align="center" g={`${rg}:${10 + i}`} value={v || ""} onCommit={(nv) => piWrite(`righe/${r.id}/w/${w.k}`, nv)} pad="3px 0" fs={12} bold bg={v ? "#BBD0FF" : undefined} fg={v ? "#1A3FA0" : undefined} />
+                                  </td>
+                                );
+                              })}
+                              <td style={{ ...bt, textAlign: "center", padding: "0 2px" }}>
+                                <div style={{ display: "flex", gap: 3, justifyContent: "center" }}>
+                                  <button aria-label={`Anticipa ${r.a} di una settimana`} disabled={!!busy} onClick={() => shiftIds([r.id], -1)} style={{ background: S0, border: `1px solid ${BRD2}`, borderRadius: 7, width: 26, height: 26, fontSize: 10, color: M, cursor: "pointer" }}>◀</button>
+                                  <button aria-label={`Posticipa ${r.a} di una settimana`} disabled={!!busy} onClick={() => shiftIds([r.id], 1)} style={{ background: S0, border: `1px solid ${BRD2}`, borderRadius: 7, width: 26, height: 26, fontSize: 10, color: M, cursor: "pointer" }}>▶</button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        <tr>
+                          <td colSpan={COLS_L} style={{ ...sumCell, background: "#DCE5F3", textAlign: "left", padding: "6px 12px", fontFamily: FONT, borderTop: `2px solid ${BRD2}` }}>Totale paia pianificate {c}</td>
+                          {tot.map((v, i) => <td key={i} style={{ ...sumCell, background: "#DCE5F3", borderTop: `2px solid ${BRD2}` }}>{v || ""}</td>)}
+                          <td style={{ background: "#DCE5F3", borderTop: `2px solid ${BRD2}` }} />
+                        </tr>
+                        <tr>
+                          <td colSpan={COLS_L} style={{ background: S0, padding: "5px 12px", fontWeight: 600, fontSize: 11, color: T2, borderRight: grid, borderBottom: grid }}>Paia al giorno{cap ? ` · limite ${cap}` : " · limite non impostato"}</td>
+                          {tot.map((v, i) => {
+                            const dl = Math.round(v / daysOf(weeks[i]));
+                            const over = cap && dl > cap, near = cap && dl >= cap - 2 && !over;
+                            return <td key={i} style={{ ...sumCell, borderBottom: grid, background: over ? "#FFE4D6" : near ? "#FFF6D6" : S0, color: over ? "#9A3412" : near ? "#854D0E" : TXT }}>{v ? dl : ""}</td>;
+                          })}
+                          <td style={{ background: S0, borderBottom: grid }} />
+                        </tr>
+                        <tr>
+                          <td colSpan={COLS_L} style={{ background: "#FFF7E0", padding: "5px 12px", fontWeight: 600, fontSize: 11, color: "#854D0E", borderRight: grid, borderBottom: `2px solid ${BRD2}` }}>Fatturato previsto {c} (€)</td>
+                          {fat.map((v, i) => <td key={i} style={{ ...sumCell, background: "#FFF7E0", color: "#854D0E", borderBottom: `2px solid ${BRD2}` }}>{piK(v)}</td>)}
+                          <td style={{ background: "#FFF7E0", borderBottom: `2px solid ${BRD2}` }} />
+                        </tr>
+                      </Fragment>
+                    );
+                  });
+                })()}
+                <tr>
+                  <td colSpan={COLS_L} style={{ background: M, color: "#fff", padding: "8px 12px", fontWeight: 800, fontSize: 12 }}>TOTALE GENERALE · paia</td>
+                  {grand.map((v, i) => <td key={i} style={{ background: M, color: "#fff", textAlign: "center", fontFamily: MONO, fontWeight: 800, fontSize: 12 }}>{v || ""}</td>)}
+                  <td style={{ background: M }} />
+                </tr>
+                <tr>
+                  <td colSpan={COLS_L} style={{ background: M, color: "#fff", padding: "8px 12px", fontWeight: 800, fontSize: 12 }}>TOTALE GENERALE · fatturato (€)</td>
+                  {grandF.map((v, i) => <td key={i} style={{ background: M, color: "#fff", textAlign: "center", fontFamily: MONO, fontWeight: 800, fontSize: 12 }}>{piK(v)}</td>)}
+                  <td style={{ background: M }} />
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div style={{ fontSize: 11, color: T2, marginTop: 8, lineHeight: 1.5, maxWidth: 900 }}>
+            Saldo = Qnt − Sped. − Giac.; il Check è verde quando le paia pianificate coincidono con il saldo. Materiali (PE · FO · SO · SU · TA · Tot. forme, li compila Luca): «OK» arrivato, «WK40» atteso in quella settimana, «/» non serve; vuoto, «DA AGG» o un arrivo dopo la prima settimana di piano della riga sono segnalati in arancio. Clicca sul nome di una riga per modificarne marchio, articolo, colore, blocco, R e consegna.
+          </div>
+        </>
+      )}
+
+      {edit && <PianoRowModal row={edit} calzs={calzs} onSave={saveRow} onDelete={delRow} onClose={() => setEdit(null)} />}
+      {showCfg && <PianoCfgModal cfg={cfg} calzs={calzs} weeks={weeks} onClose={() => setShowCfg(false)} />}
+      {showVers && <PianoVersModal vers={vers || {}} rows={rows} righe={righe} meta={meta} weeks={weeks} mode={showVers} onClose={() => setShowVers(false)} />}
+    </div>
+  );
+}
+
+function PianoRowModal({ row, calzs, onSave, onDelete, onClose }) {
+  const [f, setF] = useState({ b: row.b || "", c: row.c || (calzs[0] || "MOS"), s: row.s || "", a: row.a || "", k: row.k || "", bl: row.bl || "", r: row.r || "", d: row.d || "" });
+  const set1 = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
+  const inp = { width: "100%", boxSizing: "border-box", background: S0, border: `1.5px solid ${BRD2}`, borderRadius: 10, padding: "10px 12px", fontFamily: FONT, fontSize: 14, color: TXT, outline: "none" };
+  const lab = (t) => <div style={{ fontSize: 10, fontWeight: 700, color: T2, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}>{t}</div>;
+  return (
+    <Modal onClose={onClose}>
+      <div style={{ fontFamily: FONT }}>
+        <div style={{ fontSize: 16, fontWeight: 900, color: TXT, marginBottom: 12 }}>{row.id ? "Modifica riga" : "Nuova riga"}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+          <div>{lab("Marchio")}<input style={inp} value={f.b} onChange={set1("b")} /></div>
+          <div>{lab("Calzaturificio")}<input style={inp} list="pi-calz" value={f.c} onChange={set1("c")} /><datalist id="pi-calz">{PI_ORD.map((c) => <option key={c} value={c} />)}</datalist></div>
+          <div>{lab("Stagione")}<input style={inp} value={f.s} onChange={set1("s")} /></div>
+          <div>{lab("Articolo")}<input style={inp} value={f.a} onChange={set1("a")} /></div>
+          <div>{lab("Colore")}<input style={inp} value={f.k} onChange={set1("k")} /></div>
+          <div>{lab("Blocco ordine")}<input style={inp} value={f.bl} onChange={set1("bl")} /></div>
+          <div>{lab("R (riga d'ordine)")}<input style={inp} value={f.r} onChange={set1("r")} /></div>
+          <div>{lab("Consegna")}<input style={inp} type="date" value={/^\d{4}-\d\d-\d\d$/.test(f.d) ? f.d : ""} onChange={set1("d")} /></div>
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+          {row.id && <Btn color="#FEE2E2" textColor={RED} style={{ width: "auto", padding: "0 16px", minHeight: 46 }} onClick={() => onDelete(row.id)}>Elimina</Btn>}
+          <Btn color={S2} textColor={T2} style={{ flex: 1, minHeight: 46 }} onClick={onClose}>Annulla</Btn>
+          <Btn style={{ flex: 2, minHeight: 46 }} onClick={() => onSave(row.id || null, f)}>Salva</Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function PianoCfgModal({ cfg, calzs, weeks, onClose }) {
+  const [cap, setCap] = useState(() => { const o = {}; calzs.forEach((c) => { o[c] = cfg.cap?.[c] ? String(cfg.cap[c]) : ""; }); return o; });
+  const [days, setDays] = useState(() => { const o = {}; weeks.forEach((w) => { o[w.k] = cfg.days?.[w.k] ? String(cfg.days[w.k]) : ""; }); return o; });
+  const inp = { width: 70, boxSizing: "border-box", background: S0, border: `1.5px solid ${BRD2}`, borderRadius: 10, padding: "8px 8px", fontFamily: MONO, fontSize: 14, color: TXT, outline: "none", textAlign: "center" };
+  const save = async () => {
+    const c = {}, d = {};
+    calzs.forEach((k) => { const n = parseInt(cap[k], 10); if (n > 0) c[k] = n; });
+    weeks.forEach((w) => { const n = parseInt(days[w.k], 10); if (n >= 0 && days[w.k] !== "" && n !== w.days) d[w.k] = n; });
+    // le settimane fuori dalla finestra mostrata restano come erano
+    Object.entries(cfg.days || {}).forEach(([k, v]) => { if (!weeks.some((w) => w.k === k)) d[k] = v; });
+    try { await set(ref(db, "piano/cfg"), { cap: Object.keys(c).length ? c : null, days: Object.keys(d).length ? d : null }); onClose(); }
+    catch (e) { window.alert("Salvataggio non riuscito: " + e.message); }
+  };
+  return (
+    <Modal onClose={onClose}>
+      <div style={{ fontFamily: FONT, maxHeight: "70vh", overflowY: "auto" }}>
+        <div style={{ fontSize: 16, fontWeight: 900, color: TXT, marginBottom: 4 }}>Limiti e giorni lavorativi</div>
+        <div style={{ fontSize: 12, color: T2, marginBottom: 12 }}>Il limite di paia al giorno per calzaturificio evidenzia in arancio le settimane troppo cariche. I giorni lavorativi di ogni settimana sono 5 salvo ponti e festività (quelli già indicati nel vostro foglio sono precompilati).</div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: T2, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 6 }}>Limite paia al giorno</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
+          {calzs.map((c) => (
+            <label key={c} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, color: TXT }}>{c}
+              <input style={inp} inputMode="numeric" value={cap[c]} placeholder="—" onChange={(e) => setCap((p) => ({ ...p, [c]: e.target.value.replace(/\D/g, "") }))} />
+            </label>
+          ))}
+        </div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: T2, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 6 }}>Giorni lavorativi per settimana</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {weeks.map((w) => (
+            <label key={w.k} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, fontSize: 10, color: T2, fontWeight: 700 }}>{w.n}
+              <input style={{ ...inp, width: 46 }} inputMode="numeric" value={days[w.k]} placeholder={String(w.days)} onChange={(e) => setDays((p) => ({ ...p, [w.k]: e.target.value.replace(/\D/g, "").slice(0, 1) }))} />
+            </label>
+          ))}
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        <Btn color={S2} textColor={T2} style={{ flex: 1, minHeight: 46 }} onClick={onClose}>Annulla</Btn>
+        <Btn style={{ flex: 2, minHeight: 46 }} onClick={save}>Salva</Btn>
+      </div>
+    </Modal>
+  );
+}
+
+// Versioni settimanali: salva, elenco, confronto con il piano attuale, ripartenza da una versione
+function PianoVersModal({ vers, rows, righe, meta, weeks, mode, onClose }) {
+  const list = Object.entries(vers).map(([id, v]) => ({ id, ...v })).sort((a, b) => String(b.weekStart || "").localeCompare(String(a.weekStart || "")) || (b.savedAt || 0) - (a.savedAt || 0));
+  const [name, setName] = useState(() => "W" + piToday().slice(5));
+  const [busy, setBusy] = useState(false);
+  const [cmp, setCmp] = useState(null);
+  const save = async () => {
+    const nm = name.trim();
+    if (!nm) return;
+    const vid = piSlug(nm);
+    if (vers[vid] && !window.confirm(`Esiste già una versione «${nm}». Sostituirla con il piano attuale?`)) return;
+    setBusy(true);
+    try {
+      const clean = {}; rows.forEach((r) => { const { id, ...rest } = r; clean[id] = rest; });
+      await set(ref(db, `pianoVersRighe/${vid}`), clean);
+      await set(ref(db, `pianoVers/${vid}`), { name: nm, week: meta.week || piToday(), weekStart: piMonday(meta.week || piToday()).toISOString().slice(0, 10), savedAt: Date.now(), n: rows.length });
+      await set(ref(db, "piano/meta/savedName"), nm);
+      onClose();
+    } catch (e) { console.error(e); window.alert("Salvataggio non riuscito: " + e.message); }
+    finally { setBusy(false); }
+  };
+  const loadRows = async (vid) => { const snap = await get(ref(db, `pianoVersRighe/${vid}`)); return snap.exists() ? snap.val() : {}; };
+  const compare = async (v) => {
+    setBusy(true);
+    try {
+      const old = Object.values(await loadRows(v.id));
+      const a = new Map(old.map((r) => [piRowKey(r), r])), b = new Map(rows.map((r) => [piRowKey(r), r]));
+      const moved = [], qty = [], added = [], removed = [];
+      b.forEach((r, k) => {
+        const o = a.get(k);
+        if (!o) { added.push(r); return; }
+        const m0 = piMass(o), m1 = piMass(r);
+        if (m0 !== null && m1 !== null && Math.abs(m1 - m0) >= 0.5) moved.push({ r, from: m0, to: m1, d: m1 - m0 });
+        if ((+o.q || 0) !== (+r.q || 0)) qty.push({ r, from: +o.q || 0, to: +r.q || 0 });
+      });
+      a.forEach((o, k) => { if (!b.has(k)) removed.push(o); });
+      moved.sort((x, y) => Math.abs(y.d) - Math.abs(x.d));
+      setCmp({ v, moved, qty, added, removed, common: [...b.keys()].filter((k) => a.has(k)).length });
+    } catch (e) { console.error(e); window.alert("Confronto non riuscito: " + e.message); }
+    finally { setBusy(false); }
+  };
+  const useAsWork = async (v) => {
+    if (!window.confirm(`Usare «${v.name}» come piano di lavoro? Il piano attuale verrà sostituito (salvane prima una versione se ti serve).`)) return;
+    setBusy(true);
+    try {
+      const rr = await loadRows(v.id);
+      await set(ref(db, "piano/righe"), rr);
+      await set(ref(db, "piano/meta"), { ...(meta || {}), name: v.name, week: v.week || meta.week || null, savedName: meta.savedName || null });
+      onClose();
+    } catch (e) { console.error(e); window.alert("Operazione non riuscita: " + e.message); }
+    finally { setBusy(false); }
+  };
+  const wl = (m) => { const idx = Math.round(m); const mon = new Date(idx * 7 * 864e5); return "S" + piKey(mon).slice(5); };
+  return (
+    <Modal onClose={onClose}>
+      <div style={{ fontFamily: FONT, maxHeight: "72vh", overflowY: "auto" }}>
+        {mode === "save" ? (
+          <>
+            <div style={{ fontSize: 16, fontWeight: 900, color: TXT, marginBottom: 4 }}>Salva la versione della settimana</div>
+            <div style={{ fontSize: 12, color: T2, marginBottom: 12 }}>Una fotografia del piano attuale (righe, quantità, materiali, settimane). Il piano di lavoro resta quello che stai modificando.</div>
+            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={30} aria-label="Nome della versione" style={{ width: "100%", boxSizing: "border-box", background: S0, border: `1.5px solid ${BRD2}`, borderRadius: 10, padding: "12px 14px", fontFamily: FONT, fontSize: 15, color: TXT, outline: "none", marginBottom: 12 }} />
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn color={S2} textColor={T2} style={{ flex: 1, minHeight: 46 }} onClick={onClose}>Annulla</Btn>
+              <Btn style={{ flex: 2, minHeight: 46 }} onClick={save}>{busy ? "Salvo…" : "Salva versione"}</Btn>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 16, fontWeight: 900, color: TXT, marginBottom: 4 }}>Versioni salvate</div>
+            <div style={{ fontSize: 12, color: T2, marginBottom: 10 }}>{list.length} versioni. «Confronta» le mette a fianco del piano attuale; «Usa come piano» ripartire da quella versione.</div>
+            {list.length === 0 && <div style={{ fontSize: 13, color: T2 }}>Nessuna versione salvata.</div>}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {list.map((v) => (
+                <div key={v.id} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, background: S1, border: `1px solid ${BRD}`, borderRadius: 12, padding: "8px 12px" }}>
+                  <div style={{ flex: "1 1 160px" }}>
+                    <div style={{ fontWeight: 800, fontSize: 14, color: TXT }}>{v.name}</div>
+                    <div style={{ fontSize: 11, color: T2 }}>{v.n} righe{v.savedAt ? ` · salvata il ${new Date(v.savedAt).toLocaleDateString("it-IT")}` : ""}</div>
+                  </div>
+                  <button disabled={busy} onClick={() => compare(v)} style={{ background: S0, color: M, border: `1.5px solid ${BRD2}`, borderRadius: 10, padding: "0 12px", minHeight: 40, fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>Confronta</button>
+                  <button disabled={busy} onClick={() => useAsWork(v)} style={{ background: S0, color: T2, border: `1.5px solid ${BRD2}`, borderRadius: 10, padding: "0 12px", minHeight: 40, fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>Usa come piano</button>
+                </div>
+              ))}
+            </div>
+            {cmp && (
+              <div style={{ marginTop: 14, borderTop: `1px solid ${BRD}`, paddingTop: 12 }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: TXT, marginBottom: 4 }}>{cmp.v.name} → piano attuale</div>
+                <div style={{ fontSize: 13, color: TXT, lineHeight: 1.5, marginBottom: 8 }}>
+                  Su {cmp.common} righe presenti in entrambi, <b>{cmp.moved.length}</b> sono state spostate di mezza settimana o più
+                  {cmp.qty.length ? <>, <b>{cmp.qty.length}</b> hanno cambiato quantità</> : null}
+                  {cmp.added.length ? <>; <b>{cmp.added.length}</b> righe nuove</> : null}
+                  {cmp.removed.length ? <>; <b>{cmp.removed.length}</b> righe tolte</> : null}.
+                </div>
+                {cmp.moved.slice(0, 15).map((m, i) => (
+                  <div key={i} style={{ display: "flex", flexWrap: "wrap", gap: "2px 10px", alignItems: "center", fontSize: 12, padding: "5px 0", borderBottom: `1px solid ${BRD}` }}>
+                    <b style={{ flex: "1 1 180px", color: TXT }}>{m.r.a} <span style={{ fontWeight: 400, color: T2 }}>{m.r.k}</span></b>
+                    <span style={{ fontFamily: MONO, color: T2 }}>{wl(m.from)} → {wl(m.to)}</span>
+                    <span style={{ fontWeight: 800, color: m.d > 0 ? "#9A3412" : "#166534" }}>{m.d > 0 ? "posticipata" : "anticipata"} di {Math.abs(m.d).toFixed(1).replace(".", ",")} sett.</span>
+                  </div>
+                ))}
+                {cmp.moved.length > 15 && <div style={{ fontSize: 11, color: T2, marginTop: 4 }}>… e altre {cmp.moved.length - 15} righe spostate.</div>}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+// Primo avvio: carica il file con il piano attuale e lo storico dei fogli settimanali
+function PianoImport() {
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const onFile = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    setBusy(true); setMsg("Leggo il file…");
+    try {
+      const data = JSON.parse(await f.text());
+      if (!data || !Array.isArray(data.versions) || !data.versions.length) throw new Error("File non riconosciuto");
+      const conv = (rows) => {
+        const out = {};
+        rows.forEach((x, i) => {
+          const m = {}; (x.m || []).forEach((v, j) => { const t = String(v ?? "").trim(); if (t) m[PI_MAT[j][0]] = t; });
+          const row = { b: x.b, c: x.c, s: x.s || null, a: x.a, k: x.k || null, bl: x.bl || null, r: x.r || null, d: x.d || null, m: Object.keys(m).length ? m : null, q: x.q || null, sp: x.sp || null, g: x.g || null, p: x.p || null, w: x.w && Object.keys(x.w).length ? x.w : null, o: i + 1 };
+          out[uid() + uid()] = row;
+        });
+        return out;
+      };
+      let k = 0;
+      for (const v of data.versions) {
+        k++; setMsg(`Importo ${v.name} (${k} di ${data.versions.length})…`);
+        const vid = piSlug(v.name);
+        await set(ref(db, `pianoVersRighe/${vid}`), conv(v.rows));
+        await set(ref(db, `pianoVers/${vid}`), { name: v.name, week: v.week, weekStart: v.weekStart, savedAt: new Date(v.weekStart + "T12:00:00").getTime(), n: v.rows.length, imported: true });
+      }
+      const cur = data.versions.find((v) => v.name === data.current) || data.versions[data.versions.length - 1];
+      setMsg("Imposto il piano di lavoro…");
+      await set(ref(db, "piano/righe"), conv(cur.rows));
+      await set(ref(db, "piano/meta"), { name: cur.name, week: cur.week, savedName: cur.name });
+      setMsg("Fatto.");
+    } catch (err) { console.error(err); setMsg("Import non riuscito: " + err.message); }
+    finally { setBusy(false); e.target.value = ""; }
+  };
+  return (
+    <div style={{ background: ACL, borderRadius: 14, padding: "14px 16px", marginBottom: 14 }}>
+      <div style={{ fontSize: 14, fontWeight: 800, color: TXT, marginBottom: 4 }}>Il piano è vuoto</div>
+      <div style={{ fontSize: 13, color: T2, marginBottom: 10, lineHeight: 1.5 }}>Carica il file «piano_storico.json» preparato dal vostro Mosaicon_1: diventa il piano di lavoro (W44) e i fogli precedenti diventano le versioni da confrontare.</div>
+      <input type="file" accept=".json,application/json" onChange={onFile} disabled={busy} aria-label="File del piano da importare" />
+      {msg && <div style={{ fontSize: 13, fontWeight: 700, color: T2, marginTop: 8 }}>{msg}</div>}
     </div>
   );
 }
