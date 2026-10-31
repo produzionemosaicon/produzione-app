@@ -3430,31 +3430,65 @@ const piCleanRow = (r) => {
 function PianoTab({ pia, vers, wide }) {
   const [view, setView] = useState(null);   // versione aperta in sola lettura (non tocca il piano di lavoro)
   const ro = !!view;
-  // selezione a trascinamento stile Excel: somma delle celle numeriche selezionate
+  // selezione stile Excel: trascinamento = rettangolo, Ctrl/Cmd+clic = aggiunge/toglie celle, Maiusc+clic = estende
   const rootRef = useRef(null);
   const [selTot, setSelTot] = useState(null);
   useEffect(() => {
     const root = rootRef.current; if (!root) return;
-    let anchor = null, drag = false, active = false;
+    let anchor = null, drag = false, active = false, base = new Set(), cur = new Set(), add = false;
     const pos = (el) => { const m = el && el.dataset && el.dataset.g; if (!m) return null; const [r, c] = m.split(":").map(Number); return { r, c }; };
-    const clear = () => { root.querySelectorAll("input[data-sel]").forEach((el) => el.removeAttribute("data-sel")); setSelTot(null); };
-    const paint = (b) => {
-      const r1 = Math.min(anchor.r, b.r), r2 = Math.max(anchor.r, b.r), c1 = Math.min(anchor.c, b.c), c2 = Math.max(anchor.c, b.c);
-      let sum = 0, n = 0, cells = 0;
+    const inp = (t) => (t && t.tagName === "INPUT" && t.dataset && t.dataset.g ? t : null);
+    const paint = () => {
+      let sum = 0, n = 0;
       root.querySelectorAll("input[data-g]").forEach((el) => {
-        const q = pos(el), inside = q.r >= r1 && q.r <= r2 && q.c >= c1 && q.c <= c2;
-        if (inside) { el.setAttribute("data-sel", "1"); cells++; const t = String(el.value).replace(/[^0-9,.\-]/g, "").replace(",", "."); const x = parseFloat(t); if (t !== "" && !Number.isNaN(x)) { sum += x; n++; } }
-        else el.removeAttribute("data-sel");
+        if (cur.has(el.dataset.g)) {
+          el.setAttribute("data-sel", "1");
+          const t = String(el.value).replace(/[^0-9,.\-]/g, "").replace(",", "."); const x = parseFloat(t);
+          if (t !== "" && !Number.isNaN(x)) { sum += x; n++; }
+        } else el.removeAttribute("data-sel");
       });
-      setSelTot({ sum, n, cells });
+      setSelTot(cur.size ? { sum, n, cells: cur.size } : null);
     };
-    const down = (e) => { if (e.button !== 0) return; const q = e.target.tagName === "INPUT" ? pos(e.target) : null; active = false; if (q) { anchor = q; drag = true; } else { drag = false; } if (!(e.shiftKey && q)) clear(); };
-    const over = (e) => { if (!drag) return; const q = e.target.tagName === "INPUT" ? pos(e.target) : null; if (!q) return; if (!active && q.r === anchor.r && q.c === anchor.c) return; active = true; if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); const sl = window.getSelection(); if (sl) sl.removeAllRanges(); paint(q); };
+    const clear = () => { cur = new Set(); base = new Set(); paint(); };
+    const rect = (a, b) => {
+      const r1 = Math.min(a.r, b.r), r2 = Math.max(a.r, b.r), c1 = Math.min(a.c, b.c), c2 = Math.max(a.c, b.c);
+      const out = new Set(add ? base : []);
+      root.querySelectorAll("input[data-g]").forEach((el) => { const q = pos(el); if (q.r >= r1 && q.r <= r2 && q.c >= c1 && q.c <= c2) out.add(el.dataset.g); });
+      return out;
+    };
+    const down = (e) => {
+      if (e.button !== 0) return;
+      const t = inp(e.target); const q = t ? pos(t) : null;
+      const multi = e.ctrlKey || e.metaKey;
+      if (!q) { drag = false; if (!multi) clear(); return; }
+      if (multi) {
+        e.preventDefault(); if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+        const g = t.dataset.g; cur = new Set(cur); if (cur.has(g)) cur.delete(g); else cur.add(g);
+        base = new Set(cur); anchor = q; add = true; drag = true; active = false; paint(); return;
+      }
+      if (e.shiftKey && anchor) { e.preventDefault(); add = false; cur = rect(anchor, q); paint(); drag = false; return; }
+      anchor = q; add = false; drag = true; active = false; clear();
+    };
+    const over = (e) => {
+      if (!drag) return; const t = inp(e.target); const q = t ? pos(t) : null; if (!q) return;
+      if (!active && q.r === anchor.r && q.c === anchor.c) return;
+      active = true; if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      const sl = window.getSelection(); if (sl) sl.removeAllRanges();
+      cur = rect(anchor, q); paint();
+    };
     const up = () => { drag = false; };
-    const ss = (e) => { if (active) e.preventDefault(); };
-    const key = (e) => { if (e.key === "Escape") clear(); };
-    root.addEventListener("mousedown", down); root.addEventListener("mouseover", over); window.addEventListener("mouseup", up); root.addEventListener("selectstart", ss); window.addEventListener("keydown", key);
-    return () => { root.removeEventListener("mousedown", down); root.removeEventListener("mouseover", over); window.removeEventListener("mouseup", up); root.removeEventListener("selectstart", ss); window.removeEventListener("keydown", key); };
+    const ss = (e) => { if (active || e.ctrlKey || e.metaKey) e.preventDefault(); };
+    const ds = (e) => { if (e.target && e.target.tagName === "INPUT") e.preventDefault(); };   // niente trascinamento del testo selezionato
+    const key = (e) => {
+      if (e.key === "Escape") clear();
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c" && cur.size > 1) {
+        const rows = {}; root.querySelectorAll("input[data-g]").forEach((el) => { if (cur.has(el.dataset.g)) { const q = pos(el); (rows[q.r] = rows[q.r] || []).push([q.c, el.value]); } });
+        const txt = Object.keys(rows).map(Number).sort((a, b) => a - b).map((r) => rows[r].sort((a, b) => a[0] - b[0]).map((x) => x[1]).join("\t")).join("\n");
+        try { navigator.clipboard.writeText(txt); e.preventDefault(); } catch (_) {}
+      }
+    };
+    root.addEventListener("mousedown", down); root.addEventListener("mouseover", over); window.addEventListener("mouseup", up); root.addEventListener("selectstart", ss); root.addEventListener("dragstart", ds); window.addEventListener("keydown", key);
+    return () => { root.removeEventListener("mousedown", down); root.removeEventListener("mouseover", over); window.removeEventListener("mouseup", up); root.removeEventListener("selectstart", ss); root.removeEventListener("dragstart", ds); window.removeEventListener("keydown", key); };
   }, []);
   const liveMeta = pia.meta || {};
   const righe = view ? view.rows : (pia.righe || {});
@@ -3604,7 +3638,7 @@ function PianoTab({ pia, vers, wide }) {
       {selTot && selTot.n > 0 && (
         <div style={{ position: "fixed", bottom: 16, left: "50%", transform: "translateX(-50%)", zIndex: 60, background: TXT, color: "#fff", borderRadius: 12, padding: "8px 16px", fontSize: 13, fontWeight: 700, display: "flex", gap: 14, alignItems: "center", boxShadow: "0 6px 20px rgba(11,18,32,0.25)" }}>
           <span>Totale selezionato: <span style={{ fontFamily: MONO, fontSize: 16 }}>{Number.isInteger(selTot.sum) ? selTot.sum.toLocaleString("it-IT") : selTot.sum.toLocaleString("it-IT", { maximumFractionDigits: 2 })}</span></span>
-          <span style={{ opacity: 0.7, fontSize: 11 }}>{selTot.n} celle numeriche · Esc per annullare</span>
+          <span style={{ opacity: 0.7, fontSize: 11 }}>{selTot.n} celle numeriche · Ctrl+clic per aggiungere · Esc per annullare</span>
         </div>
       )}
       <div style={{ zoom: zm }}>
