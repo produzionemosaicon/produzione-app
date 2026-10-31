@@ -3430,6 +3430,32 @@ const piCleanRow = (r) => {
 function PianoTab({ pia, vers, wide }) {
   const [view, setView] = useState(null);   // versione aperta in sola lettura (non tocca il piano di lavoro)
   const ro = !!view;
+  // selezione a trascinamento stile Excel: somma delle celle numeriche selezionate
+  const rootRef = useRef(null);
+  const [selTot, setSelTot] = useState(null);
+  useEffect(() => {
+    const root = rootRef.current; if (!root) return;
+    let anchor = null, drag = false, active = false;
+    const pos = (el) => { const m = el && el.dataset && el.dataset.g; if (!m) return null; const [r, c] = m.split(":").map(Number); return { r, c }; };
+    const clear = () => { root.querySelectorAll("input[data-sel]").forEach((el) => el.removeAttribute("data-sel")); setSelTot(null); };
+    const paint = (b) => {
+      const r1 = Math.min(anchor.r, b.r), r2 = Math.max(anchor.r, b.r), c1 = Math.min(anchor.c, b.c), c2 = Math.max(anchor.c, b.c);
+      let sum = 0, n = 0, cells = 0;
+      root.querySelectorAll("input[data-g]").forEach((el) => {
+        const q = pos(el), inside = q.r >= r1 && q.r <= r2 && q.c >= c1 && q.c <= c2;
+        if (inside) { el.setAttribute("data-sel", "1"); cells++; const t = String(el.value).replace(/[^0-9,.\-]/g, "").replace(",", "."); const x = parseFloat(t); if (t !== "" && !Number.isNaN(x)) { sum += x; n++; } }
+        else el.removeAttribute("data-sel");
+      });
+      setSelTot({ sum, n, cells });
+    };
+    const down = (e) => { if (e.button !== 0) return; const q = e.target.tagName === "INPUT" ? pos(e.target) : null; active = false; if (q) { anchor = q; drag = true; } else { drag = false; } if (!(e.shiftKey && q)) clear(); };
+    const over = (e) => { if (!drag) return; const q = e.target.tagName === "INPUT" ? pos(e.target) : null; if (!q) return; if (!active && q.r === anchor.r && q.c === anchor.c) return; active = true; if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); const sl = window.getSelection(); if (sl) sl.removeAllRanges(); paint(q); };
+    const up = () => { drag = false; };
+    const ss = (e) => { if (active) e.preventDefault(); };
+    const key = (e) => { if (e.key === "Escape") clear(); };
+    root.addEventListener("mousedown", down); root.addEventListener("mouseover", over); window.addEventListener("mouseup", up); root.addEventListener("selectstart", ss); window.addEventListener("keydown", key);
+    return () => { root.removeEventListener("mousedown", down); root.removeEventListener("mouseover", over); window.removeEventListener("mouseup", up); root.removeEventListener("selectstart", ss); window.removeEventListener("keydown", key); };
+  }, []);
   const liveMeta = pia.meta || {};
   const righe = view ? view.rows : (pia.righe || {});
   const meta = view ? { name: view.name, week: view.week } : liveMeta;
@@ -3573,7 +3599,14 @@ function PianoTab({ pia, vers, wide }) {
   const empty = rows.length === 0 && Object.keys(vers || {}).length === 0;
 
   return (
-    <div style={{ fontFamily: FONT, padding: "14px 14px", paddingBottom: 40 }} onKeyDown={rieNav}>
+    <div ref={rootRef} style={{ fontFamily: FONT, padding: "14px 14px", paddingBottom: 40 }} onKeyDown={rieNav}>
+      <style>{`input[data-sel="1"]{box-shadow:inset 0 0 0 100px rgba(47,91,255,.22) !important}`}</style>
+      {selTot && selTot.n > 0 && (
+        <div style={{ position: "fixed", bottom: 16, left: "50%", transform: "translateX(-50%)", zIndex: 60, background: TXT, color: "#fff", borderRadius: 12, padding: "8px 16px", fontSize: 13, fontWeight: 700, display: "flex", gap: 14, alignItems: "center", boxShadow: "0 6px 20px rgba(11,18,32,0.25)" }}>
+          <span>Totale selezionato: <span style={{ fontFamily: MONO, fontSize: 16 }}>{Number.isInteger(selTot.sum) ? selTot.sum.toLocaleString("it-IT") : selTot.sum.toLocaleString("it-IT", { maximumFractionDigits: 2 })}</span></span>
+          <span style={{ opacity: 0.7, fontSize: 11 }}>{selTot.n} celle numeriche · Esc per annullare</span>
+        </div>
+      )}
       <div style={{ zoom: zm }}>
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px", marginBottom: 10 }}>
         <div style={{ flex: "1 1 240px", minWidth: 0 }}>
