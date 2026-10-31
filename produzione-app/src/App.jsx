@@ -3679,7 +3679,7 @@ function PianoTab({ pia, vers, wide }) {
     try { await set(ref(db, `piano/righe/${id}`), null); setEdit(null); } catch (e) { window.alert("Eliminazione non riuscita: " + e.message); }
   };
 
-  const th = { background: ML, padding: "6px 4px", fontSize: 10, color: T2, fontWeight: 800, borderBottom: `2px solid ${BRD2}`, borderRight: `1px solid ${BRD}`, whiteSpace: "nowrap", textAlign: "center", lineHeight: 1.15 };
+  const th = { background: ML, padding: "7px 5px", fontSize: 13, color: "#1E293B", fontWeight: 800, borderBottom: `2px solid ${BRD2}`, borderRight: `1px solid ${BRD}`, whiteSpace: "nowrap", textAlign: "center", lineHeight: 1.15 };
   const thWrap = { ...th, whiteSpace: "normal" };
   const grid = `1px solid ${BRD}`;
   const empty = rows.length === 0 && Object.keys(vers || {}).length === 0;
@@ -3786,7 +3786,7 @@ function PianoTab({ pia, vers, wide }) {
                   <th style={{ ...th, minWidth: 46, background: "#DCE5F3" }}>Saldo</th>
                   <th style={{ ...th, minWidth: 44 }}>Check</th>
                   {weeks.map((w, i) => (
-                    <th key={w.k} style={{ ...th, minWidth: 44, ...wlOf(i), ...(w.k === baseKey ? { background: "#D7E3FF", color: M } : {}) }}>{w.n}<div style={{ fontWeight: 400, fontSize: 9 }}>{w.cal}</div>{!usedW[w.k] && <button onClick={() => hideWeek(w.k)} title="Nascondi questa settimana (vuota)" aria-label={`Nascondi settimana ${w.n}`} style={{ border: "none", background: "transparent", color: T3, cursor: "pointer", fontSize: 11, lineHeight: 1, padding: "2px 4px" }}>×</button>}</th>
+                    <th key={w.k} style={{ ...th, minWidth: 54, ...wlOf(i), ...(w.k === baseKey ? { background: "#D7E3FF", color: M } : {}) }}>{w.n}<div style={{ fontWeight: 600, fontSize: 11 }}>{w.cal}</div>{!usedW[w.k] && <button onClick={() => hideWeek(w.k)} title="Nascondi questa settimana (vuota)" aria-label={`Nascondi settimana ${w.n}`} style={{ border: "none", background: "transparent", color: T3, cursor: "pointer", fontSize: 11, lineHeight: 1, padding: "2px 4px" }}>×</button>}</th>
                   ))}
                   <th style={{ ...thWrap, minWidth: 62 }}>Slitta riga</th>
                 </tr>
