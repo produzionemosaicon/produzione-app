@@ -3427,6 +3427,54 @@ const piCleanRow = (r) => {
   return o;
 };
 
+// intestazione di colonna con filtro a tendina (stile Excel): elenco valori con spunte + ricerca
+function FilterTh({ label, style, values, selected, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
+  const [qq, setQq] = useState("");
+  const btn = useRef(null);
+  const on = selected.length > 0;
+  useEffect(() => {
+    if (!open) return;
+    const close = (e) => { if (!e.target.closest || !e.target.closest("[data-fpop]")) setOpen(false); };
+    const esc = (e) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("mousedown", close); window.addEventListener("keydown", esc);
+    return () => { window.removeEventListener("mousedown", close); window.removeEventListener("keydown", esc); };
+  }, [open]);
+  const toggle = (v) => onChange(selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v]);
+  const list = values.filter((v) => v.label.toUpperCase().includes(qq.trim().toUpperCase()));
+  return (
+    <th style={style}>
+      <div style={{ display: "flex", alignItems: "center", gap: 3, justifyContent: style.textAlign === "left" ? "flex-start" : "center" }}>
+        <span>{label}</span>
+        <button ref={btn} data-fpop="1" aria-label={`Filtra ${label}`}
+          onClick={() => { const r = btn.current.getBoundingClientRect(); setPos({ x: Math.min(r.left, window.innerWidth - 250), y: r.bottom + 4 }); setQq(""); setOpen(!open); }}
+          style={{ border: "none", background: on ? M : "transparent", color: on ? "#fff" : T2, borderRadius: 4, fontSize: 9, lineHeight: 1, padding: "2px 3px", cursor: "pointer" }}>▾</button>
+      </div>
+      {open && pos && (
+        <div data-fpop="1" style={{ position: "fixed", left: pos.x, top: pos.y, width: 240, zIndex: 80, background: S0, border: `1px solid ${BRD2}`, borderRadius: 12, boxShadow: "0 12px 32px rgba(11,18,32,0.18)", padding: 8, textAlign: "left", fontFamily: FONT, fontWeight: 600, textTransform: "none", letterSpacing: 0, color: TXT }}>
+          <input autoFocus value={qq} onChange={(e) => setQq(e.target.value)} placeholder="Cerca…" style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${BRD2}`, borderRadius: 8, padding: "6px 8px", fontSize: 12, fontFamily: FONT, outline: "none" }} />
+          <div style={{ display: "flex", gap: 6, margin: "6px 0" }}>
+            <button onClick={() => onChange(list.map((v) => v.key))} style={{ flex: 1, fontSize: 11, border: `1px solid ${BRD2}`, background: S1, borderRadius: 6, padding: "4px 0", cursor: "pointer", fontFamily: FONT }}>Seleziona tutti</button>
+            <button onClick={() => onChange([])} style={{ flex: 1, fontSize: 11, border: `1px solid ${BRD2}`, background: S1, borderRadius: 6, padding: "4px 0", cursor: "pointer", fontFamily: FONT }}>Cancella filtro</button>
+          </div>
+          <div style={{ maxHeight: 260, overflowY: "auto" }}>
+            {list.map((v) => (
+              <label key={v.key} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 4px", fontSize: 12, cursor: "pointer", borderRadius: 6 }}>
+                <input type="checkbox" checked={selected.includes(v.key)} onChange={() => toggle(v.key)} />
+                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.label}</span>
+                <span style={{ color: T3, fontSize: 10 }}>{v.n}</span>
+              </label>
+            ))}
+            {list.length === 0 && <div style={{ fontSize: 11, color: T3, padding: 6 }}>Nessun valore</div>}
+          </div>
+        </div>
+      )}
+    </th>
+  );
+}
+
+const cfKey = (f, r) => (f === "a" ? [r.a, r.k].filter(Boolean).join(" · ") : String(r[f] ?? ""));
 function PianoTab({ pia, vers, wide }) {
   const [view, setView] = useState(null);   // versione aperta in sola lettura (non tocca il piano di lavoro)
   const ro = !!view;
@@ -3495,6 +3543,7 @@ function PianoTab({ pia, vers, wide }) {
   const meta = view ? { name: view.name, week: view.week } : liveMeta;
   const cfg = pia.cfg || {};
   const [q, setQ] = useState("");
+  const [cf, setCf] = useState({ b: [], a: [], d: [], bl: [] });   // filtri a tendina per colonna
   const [onlyMiss, setOnlyMiss] = useState(false);
   const [sel, setSel] = useState({});
   const [edit, setEdit] = useState(null);      // riga in modifica / nuova ({} = nuova)
@@ -3567,8 +3616,11 @@ function PianoTab({ pia, vers, wide }) {
   const shown = rows.filter((r) => {
     if (onlyMiss && !(info.get(r.id).plan > 0 && info.get(r.id).miss > 0)) return false;
     if (ql && ![r.b, r.c, r.a, r.k, r.bl].some((x) => String(x || "").toUpperCase().includes(ql))) return false;
+    for (const f of ["b", "a", "d", "bl"]) if (cf[f].length && !cf[f].includes(cfKey(f, r))) return false;
     return true;
   });
+  const cfOpts = (f) => { const m = new Map(); rows.forEach((r) => { const k = cfKey(f, r); m.set(k, (m.get(k) || 0) + 1); }); return [...m.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0]), "it", { numeric: true })).map(([k, n]) => ({ key: k, label: k === "" ? "(vuoto)" : f === "d" && /^\d{4}-\d\d-\d\d$/.test(k) ? k.slice(8) + "/" + k.slice(5, 7) + "/" + k.slice(0, 4) : k, n })); };
+  const cfActive = Object.values(cf).some((a) => a.length);
   const calzs = [...new Set(rows.map((r) => r.c))].sort(piSort);
 
   // totali per settimana: tutti i calzaturifici (anche con filtro attivo: i totali sono del piano intero)
@@ -3671,6 +3723,7 @@ function PianoTab({ pia, vers, wide }) {
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px", marginBottom: 10 }}>
             <input type="text" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca marchio, articolo, colore o blocco" aria-label="Cerca nel piano"
               style={{ flex: "1 1 220px", maxWidth: 360, boxSizing: "border-box", background: S0, border: `1.5px solid ${BRD2}`, borderRadius: 12, padding: "0 12px", minHeight: 28, fontFamily: FONT, fontSize: 14, color: TXT, outline: "none" }} />
+            {cfActive && <button onClick={() => setCf({ b: [], a: [], d: [], bl: [] })} style={{ background: M, color: "#fff", border: "none", borderRadius: 9, padding: "0 10px", minHeight: 28, fontFamily: FONT, fontWeight: 800, fontSize: 11, cursor: "pointer" }}>Azzera filtri colonna ({shown.length} righe)</button>}
             <button onClick={() => setOnlyMiss((v) => !v)} style={{ background: onlyMiss ? ACC : "#FFF7E0", color: onlyMiss ? "#fff" : "#854D0E", border: "1.5px solid #E8D9A8", borderRadius: 9, padding: "0 10px", minHeight: 28, fontFamily: FONT, fontWeight: 800, fontSize: 11, cursor: "pointer" }}>
               {onlyMiss ? "Mostra tutte le righe" : "Solo righe con materiali mancanti"}
             </button>
@@ -3719,10 +3772,10 @@ function PianoTab({ pia, vers, wide }) {
                 </tr>
                 <tr>
                   <th style={{ ...th, width: 26 }} />
-                  <th style={{ ...th, textAlign: "left", minWidth: 62 }}>Marchio</th>
-                  <th style={{ ...th, textAlign: "left", minWidth: 160 }}>Articolo · colore</th>
-                  <th style={{ ...th, minWidth: 48 }}>Consegna</th>
-                  <th style={{ ...th, minWidth: 64 }}>Blocco ordine</th>
+                  <FilterTh label="Marchio" style={{ ...th, textAlign: "left", minWidth: 62 }} values={cfOpts("b")} selected={cf.b} onChange={(v) => setCf((c) => ({ ...c, b: v }))} />
+                  <FilterTh label="Articolo · colore" style={{ ...th, textAlign: "left", minWidth: 160 }} values={cfOpts("a")} selected={cf.a} onChange={(v) => setCf((c) => ({ ...c, a: v }))} />
+                  <FilterTh label="Consegna" style={{ ...th, minWidth: 48 }} values={cfOpts("d")} selected={cf.d} onChange={(v) => setCf((c) => ({ ...c, d: v }))} />
+                  <FilterTh label="Blocco ordine" style={{ ...th, minWidth: 64 }} values={cfOpts("bl")} selected={cf.bl} onChange={(v) => setCf((c) => ({ ...c, bl: v }))} />
                   <th style={{ ...th, minWidth: 24 }}>R</th>
                   {PI_MAT.map(([k, l]) => <th key={k} style={{ ...thWrap, background: "#FFF7E0", color: "#854D0E", minWidth: k === "fm" ? 46 : 48 }}>{l}</th>)}
                   <th style={{ ...thWrap, background: "#FFF7E0", color: "#854D0E", minWidth: 52 }}>Materiali</th>
