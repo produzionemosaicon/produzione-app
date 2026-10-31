@@ -1555,6 +1555,97 @@ function PrintAnalysisDoc({ anRes }) {
 }
 
 /* ═══ MODAL ═══ */
+/* ═══ GRAFICO MEDIE TAGLIO / GIUNTERIA ═══ */
+function TaglioChart({ tg, wide }) {
+  const today = todayStr();
+  const addDays = (iso, n) => { const t = new Date(iso + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+  const [from, setFrom] = useState(() => addDays(today, -29));
+  const [to, setTo] = useState(today);
+  const [group, setGroup] = useState("day"); // day | week | month
+  const [preset, setPreset] = useState("30");
+  const all = Object.keys(tg).sort();
+  const pick = (id) => {
+    setPreset(id);
+    if (id === "7" || id === "14" || id === "30" || id === "60" || id === "90") { setFrom(addDays(today, -(+id - 1))); setTo(today); setGroup(+id > 60 ? "week" : "day"); }
+    else if (id === "mese") { setFrom(today.slice(0, 8) + "01"); setTo(today); setGroup("day"); }
+    else if (id === "anno") { setFrom(today.slice(0, 4) + "-01-01"); setTo(today); setGroup("month"); }
+    else if (id === "tutto") { setFrom(all[0] || today); setTo(all[all.length - 1] || today); setGroup("week"); }
+  };
+  const inRange = all.filter((d) => d >= from && d <= to && (tg[d].taglio != null || tg[d].giunteria != null));
+  const avg = (k) => { const v = inRange.map((d) => tg[d][k]).filter((x) => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+  const aT = avg("taglio"), aG = avg("giunteria");
+  const nT = inRange.filter((d) => tg[d].taglio != null).length, nG = inRange.filter((d) => tg[d].giunteria != null).length;
+  const MESI = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
+  const keyOf = (d) => group === "month" ? d.slice(0, 7) : group === "week" ? piKey(new Date(d + "T00:00:00Z")) : d;
+  const labelOf = (k) => group === "month" ? MESI[+k.slice(5, 7) - 1] + " " + k.slice(2, 4) : group === "week" ? "S" + (+k.split("-")[1]) : k.slice(8, 10) + "/" + k.slice(5, 7);
+  const buckets = [];
+  inRange.forEach((d) => {
+    const k = keyOf(d); let b = buckets[buckets.length - 1];
+    if (!b || b.k !== k) { b = { k, t: [], g: [] }; buckets.push(b); }
+    if (tg[d].taglio != null) b.t.push(tg[d].taglio);
+    if (tg[d].giunteria != null) b.g.push(tg[d].giunteria);
+  });
+  const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+  const data = buckets.map((b) => ({ k: b.k, t: mean(b.t), g: mean(b.g) }));
+  const W = 900, H = 230, L = 40, R = 122, T = 14, B = 28;
+  const maxV = Math.max(10, ...data.map((d) => Math.max(d.t || 0, d.g || 0)), aT || 0, aG || 0);
+  const step = (() => { const raw = maxV / 4, mag = Math.pow(10, Math.floor(Math.log10(raw))); const n = raw / mag; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag; })();
+  const top = Math.ceil(maxV / step) * step;
+  const y = (v) => T + (H - T - B) * (1 - v / top);
+  const slot = data.length ? (W - L - R) / data.length : 0;
+  const bw = Math.max(2, Math.min(22, slot * 0.38));
+  const every = Math.max(1, Math.ceil(data.length / 14));
+  const fmtN = (v) => (v == null ? "–" : Math.round(v).toLocaleString("it-IT"));
+  const chip = (id, l) => <button key={id} onClick={() => pick(id)} style={{ background: preset === id ? M : S0, color: preset === id ? "#fff" : M, border: `1.5px solid ${BRD2}`, borderRadius: 10, padding: "0 11px", minHeight: 34, fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>{l}</button>;
+  const dateIn = { background: S0, border: `1.5px solid ${BRD2}`, borderRadius: 10, padding: "0 8px", minHeight: 34, fontFamily: MONO, fontSize: 12, color: TXT };
+  return (
+    <div style={{ background: S0, border: `1px solid ${BRD}`, borderRadius: 14, padding: "14px 14px 10px", marginBottom: 18 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 14px", marginBottom: 10 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: T2, letterSpacing: "0.1em", textTransform: "uppercase", flex: "1 1 160px" }}>Medie paia al giorno</div>
+        <div style={{ display: "flex", gap: 14 }}>
+          <div><div style={{ fontSize: 9, fontWeight: 700, color: M, letterSpacing: "0.08em" }}>TAGLIO · MEDIA</div><div style={{ fontFamily: MONO, fontSize: 24, fontWeight: 700, color: M, lineHeight: 1.1 }}>{fmtN(aT)}</div><div style={{ fontSize: 10, color: T2 }}>{nT} giorni con dati</div></div>
+          <div><div style={{ fontSize: 9, fontWeight: 700, color: E, letterSpacing: "0.08em" }}>GIUNTERIA · MEDIA</div><div style={{ fontFamily: MONO, fontSize: 24, fontWeight: 700, color: E, lineHeight: 1.1 }}>{fmtN(aG)}</div><div style={{ fontSize: 10, color: T2 }}>{nG} giorni con dati</div></div>
+        </div>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 6px", marginBottom: 10 }}>
+        {[["7", "7 gg"], ["14", "14 gg"], ["30", "30 gg"], ["60", "60 gg"], ["90", "90 gg"], ["mese", "Mese in corso"], ["anno", "Anno"], ["tutto", "Tutto"]].map(([id, l]) => chip(id, l))}
+        <span style={{ fontSize: 11, color: T2, marginLeft: 6 }}>dal</span>
+        <input type="date" value={from} max={to} onChange={(e) => { if (e.target.value) { setFrom(e.target.value); setPreset("custom"); } }} style={dateIn} />
+        <span style={{ fontSize: 11, color: T2 }}>al</span>
+        <input type="date" value={to} min={from} onChange={(e) => { if (e.target.value) { setTo(e.target.value); setPreset("custom"); } }} style={dateIn} />
+        <span style={{ fontSize: 11, color: T2, marginLeft: 6 }}>Barre per</span>
+        {[["day", "giorno"], ["week", "settimana"], ["month", "mese"]].map(([id, l]) => <button key={id} onClick={() => setGroup(id)} style={{ background: group === id ? TXT : S0, color: group === id ? "#fff" : TXT, border: `1.5px solid ${BRD2}`, borderRadius: 10, padding: "0 10px", minHeight: 34, fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>{l}</button>)}
+      </div>
+      {data.length === 0 ? (
+        <div style={{ padding: "26px 0", textAlign: "center", fontSize: 13, color: T3 }}>Nessun dato nel periodo scelto.</div>
+      ) : (
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", maxWidth: 1000, height: "auto", display: "block" }} role="img" aria-label="Grafico delle paia di taglio e giunteria con le medie del periodo">
+          {Array.from({ length: Math.round(top / step) + 1 }, (_, i) => i * step).map((v) => (
+            <g key={v}><line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke={BRD} strokeWidth="1" /><text x={L - 6} y={y(v) + 3.5} textAnchor="end" fontSize="10" fontFamily={MONO} fill={T2}>{v.toLocaleString("it-IT")}</text></g>
+          ))}
+          {data.map((d, i) => {
+            const cx = L + slot * (i + 0.5);
+            return (
+              <g key={d.k}>
+                {d.t != null && <rect x={cx - bw - 1} y={y(d.t)} width={bw} height={Math.max(0, y(0) - y(d.t))} fill={M} rx="2"><title>{`${labelOf(d.k)} · taglio ${fmtN(d.t)}`}</title></rect>}
+                {d.g != null && <rect x={cx + 1} y={y(d.g)} width={bw} height={Math.max(0, y(0) - y(d.g))} fill={E} rx="2"><title>{`${labelOf(d.k)} · giunteria ${fmtN(d.g)}`}</title></rect>}
+                {i % every === 0 && <text x={cx} y={H - 10} textAnchor="middle" fontSize="10" fontFamily={MONO} fill={T2}>{labelOf(d.k)}</text>}
+              </g>
+            );
+          })}
+          {aT != null && <g><line x1={L} x2={W - R} y1={y(aT)} y2={y(aT)} stroke={M} strokeWidth="1.8" strokeDasharray="6 4" /><text x={W - R + 6} y={y(aT) + 4} textAnchor="start" fontSize="11" fontWeight="700" fontFamily={MONO} fill={M}>{`media ${fmtN(aT)}`}</text></g>}
+          {aG != null && <g><line x1={L} x2={W - R} y1={y(aG)} y2={y(aG)} stroke={E} strokeWidth="1.8" strokeDasharray="6 4" /><text x={W - R + 6} y={y(aG) + 4 + (aT != null && Math.abs(y(aT) - y(aG)) < 13 ? 12 : 0)} textAnchor="start" fontSize="11" fontWeight="700" fontFamily={MONO} fill={E}>{`media ${fmtN(aG)}`}</text></g>}
+        </svg>
+      )}
+      <div style={{ display: "flex", gap: 14, fontSize: 11, color: T2, marginTop: 4 }}>
+        <span><span style={{ display: "inline-block", width: 10, height: 10, background: M, borderRadius: 2, marginRight: 5 }} />Taglio</span>
+        <span><span style={{ display: "inline-block", width: 10, height: 10, background: E, borderRadius: 2, marginRight: 5 }} />Giunteria</span>
+        <span>{group === "day" ? "una barra per giorno" : "ogni barra è la media al giorno del " + (group === "week" ? "la settimana" : "mese")} · le linee tratteggiate sono la media del periodo</span>
+      </div>
+    </div>
+  );
+}
+
 function TaglioTab({ wide, date, tg, saveTg, onOpen }) {
   const cur = tg[date] || {};
   const [taglio, setTaglio] = useState("");
@@ -1609,6 +1700,8 @@ function TaglioTab({ wide, date, tg, saveTg, onOpen }) {
     <div style={{ padding:16 }}>
       <div style={{ fontSize:18, fontWeight:800, color:TXT }}>Taglio e giunteria</div>
       <div style={{ fontSize:12, color:T2, marginBottom:16 }}>Paia del giorno {fmtD(date)}. Cambia la data in alto per correggere un altro giorno.</div>
+
+      <TaglioChart tg={tg} wide={wide} />
 
       <div style={wide ? { display:"grid", gridTemplateColumns:"minmax(0, 520px) minmax(0, 1fr)", gap:32, alignItems:"start" } : undefined}>
       <div>
