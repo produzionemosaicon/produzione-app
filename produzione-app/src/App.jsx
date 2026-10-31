@@ -7,31 +7,32 @@ import {
 import { db, ref, set, get, onValue, update } from "./firebase.js";
 import { remove } from "firebase/database";
 /* ═══ COLORI ═══ */
-const M = "#1A5CFF", ML = "#EBF0FF";
-const E = "#00A896", EL = "#E6FAF8";
+const M = "#2F5BFF", ML = "#EEF3FF";
+const E = "#0E7490", EL = "#E6F6FA";
 const ACC = "#FF5200", ACL = "#FFF0EA";
-const BG = "#EDF2F7";
-const S0 = "#fff", S1 = "#F7F9FC", S2 = "#EEF2F8";
-const BRD = "#DDE4EF", BRD2 = "#C8D4E4";
-const TXT = "#0D1B2A", T2 = "#5A7494", T3 = "#9BB0C8";
+const BG = "#FFFFFF";
+const S0 = "#fff", S1 = "#F8FAFC", S2 = "#F1F5F9";
+const BRD = "#E2E8F0", BRD2 = "#CBD5E1";
+const TXT = "#0B1220", T2 = "#475569", T3 = "#64748B";
 const GRN = "#00B87A", RED = "#E53E3E";
-const FONT = "'Outfit', sans-serif";
+const FONT = "'Inter', sans-serif";
+const HFONT = "'Sora', sans-serif";
 const MONO = "'JetBrains Mono', monospace";
 const TIMES = ["10:00", "12:00", "15:00", "17:00"];
 
 /* Voci di navigazione (in alto, 4 per riga): per aggiungere un bottone basta una riga qui
    e il relativo blocco {tab === "id" && ...} nel render. */
 const TABS = [
-  { id: "home",     icon: "🏠", label: "Home" },
-  { id: "foglio",   icon: "📋", label: "Foglio" },
-  { id: "storico",  icon: "📁", label: "Storico" },
-  { id: "analisi",  icon: "📊", label: "Analisi" },
-  { id: "taglio",   icon: "✂️", label: "Taglio" },
-  { id: "giacenza", icon: "📦", label: "Giacenza" },
-  { id: "manovia",  icon: "🔄", label: "Manovia" },
-  { id: "piano",    icon: "🗓️", label: "Piano" },
-  { id: "rientri",  icon: "↩️", label: "Rientri" },
-  { id: "setting",  icon: "⚙️", label: "Setting" },
+  { id: "home",     icon: "M3 11 12 3l9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z", label: "Home" },
+  { id: "foglio",   icon: "M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM9 8h6M9 12h6M9 16h4", label: "Foglio" },
+  { id: "storico",  icon: "M3 12a9 9 0 1 0 3-6.7M3 4v5h5M12 7v5l3 2", label: "Storico" },
+  { id: "analisi",  icon: "M4 20V10M10 20V4M16 20v-7M22 20H2", label: "Analisi" },
+  { id: "taglio",   icon: "M6 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12", label: "Taglio" },
+  { id: "giacenza", icon: "M21 8 12 3 3 8v8l9 5 9-5zM3 8l9 5 9-5M12 13v8", label: "Giacenza" },
+  { id: "manovia",  icon: "M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5", label: "Manovia" },
+  { id: "piano",    icon: "M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM4 10h16M8 2v4M16 2v4", label: "Piano" },
+  { id: "rientri",  icon: "M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3", label: "Rientri" },
+  { id: "setting",  icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12h2M3 12h2M12 3v2M12 19v2M17 7l1.5-1.5M5.5 18.5 7 17M17 17l1.5 1.5M5.5 5.5 7 7", label: "Setting" },
 ];
 
 /* Schermo largo (PC): l'app usa tutta la larghezza invece della colonna da telefono */
@@ -767,7 +768,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ maxWidth: wide ? Math.floor(window.innerWidth / zoom) : 900, zoom: zoom > 1 ? zoom : undefined, margin:"0 auto", minHeight: zoom > 1 ? `${100 / zoom}dvh` : "100dvh", display:"flex", flexDirection:"column", background:BG, fontFamily:FONT }}>
+    <div style={{ maxWidth: wide ? Math.floor(window.innerWidth / zoom) : 900, zoom: zoom > 1 ? zoom : undefined, margin:"0 auto", minHeight: zoom > 1 ? `${100 / zoom}dvh` : "100dvh", display:"flex", flexDirection:"column", background:BG, fontFamily:FONT, paddingLeft: wide ? 92 : 0 }}>
       <style>{`
         @keyframes cellFlash { 0%{background:rgba(0,184,122,0)} 30%{background:rgba(0,184,122,0.25)} 100%{background:rgba(0,184,122,0)} }
         .cell-flash { animation: cellFlash 1.5s ease-out forwards; }
@@ -777,53 +778,47 @@ export default function App() {
         .print-only{display:none}
       `}</style>
 
-      <div className="no-print" style={{ background:"linear-gradient(135deg,#0A3D9C 0%,#1A5CFF 55%,#0099CC 100%)", padding: tab === "piano" ? "3px 12px" : "12px 16px", flexShrink:0, boxShadow:"0 3px 18px rgba(26,92,255,0.28)" }}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            <span style={{ fontSize: tab === "piano" ? 14 : 24 }}>🏭</span>
-            <div>
-              <div style={{ fontSize: tab === "piano" ? 11 : 14, fontWeight:900, color:"#fff", letterSpacing:"0.04em" }}>MOSAICON · EMOS{tab === "piano" ? <span style={{ fontSize:8, color:"rgba(255,255,255,0.7)", fontWeight:600, marginLeft:8 }}>{online ? "● in linea" : "● offline"}{saving ? " · salvataggio…" : ""}</span> : null}</div>
-              <div style={{ display: tab === "piano" ? "none" : "flex", alignItems:"center", gap:5, marginTop:1 }}>
-                <div style={{ width:5, height:5, borderRadius:"50%", background: online ? GRN : RED }} />
-                <span style={{ fontSize:8, color:"rgba(255,255,255,0.65)", fontWeight:600 }}>
-                  {online ? "In linea" : "Offline"}{saving ? " · salvataggio…" : ""}
-                </span>
-              </div>
-            </div>
+      {wide && (
+        <nav className="no-print" aria-label="Sezioni" style={{ position:"fixed", left:0, top:0, bottom:0, width:92, background:S0, borderRight:`1px solid ${BRD}`, padding:"16px 0", display:"flex", flexDirection:"column", alignItems:"center", gap:6, zIndex:30, overflowY:"auto" }}>
+          <div style={{ width:44, height:44, borderRadius:12, background:TXT, display:"flex", alignItems:"center", justifyContent:"center", marginBottom:12, flexShrink:0 }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true"><path d="M12 2.8 20 7.4v9.2l-8 4.6-8-4.6V7.4z"/><path d="M12 12 20 7.4M12 12v9.2M12 12 4 7.4" stroke="#7FA0FF"/></svg>
           </div>
-          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              style={{ border:"none", background:"rgba(255,255,255,0.18)", fontFamily:MONO, fontSize:13, fontWeight:700, color:"#fff", cursor:"pointer", outline:"none", padding: tab === "piano" ? "2px 8px" : "5px 10px", borderRadius:8 }}
-            />
-            <button
-              onClick={tab === "analisi" ? shareAnalysisPdf : shareWA}
-              style={{ background:"#25D366", color:"#fff", border:"none", borderRadius:8, padding: tab === "piano" ? "3px 10px" : "7px 13px", fontSize:11, fontWeight:800, cursor:"pointer", fontFamily:FONT }}
-            >
-              📤 PDF
-            </button>
-          </div>
+          {TABS.map(({ id, icon, label }) => {
+            const on = tab === id;
+            return (
+              <button key={id} onClick={() => setTab(id)} aria-current={on ? "page" : undefined} aria-label={label}
+                style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:3, width:68, minHeight:52, borderRadius:12, cursor:"pointer", fontFamily:FONT, fontSize:10, fontWeight:600, border:"none", background: on ? ML : "transparent", color: on ? M : T2, boxShadow: on ? `inset 0 0 0 1px #C9D7FF` : "none", flexShrink:0 }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icon} /></svg>
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </nav>
+      )}
+
+      <div className="no-print" style={{ position:"sticky", top:0, zIndex:20, background:S0, borderBottom:`1px solid ${BRD}`, padding:"8px 20px", flexShrink:0, display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+        <div style={{ flex:"1 1 200px", minWidth:0 }}>
+          <div style={{ fontSize:10, fontWeight:600, letterSpacing:"0.14em", color:M }}>MOSAICON · EMOS / {(TABS.find((t) => t.id === tab) || {}).label?.toUpperCase()}</div>
         </div>
+        <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:11, fontWeight:600, color: online ? "#047857" : RED, background: online ? "#E7F8EF" : "#FEE2E2", borderRadius:20, padding:"4px 10px" }}>
+          <span style={{ width:7, height:7, borderRadius:"50%", background: online ? "#10B981" : RED }} />
+          {online ? "In linea" : "Offline"}{saving ? " · salvataggio…" : ""}
+        </span>
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          aria-label="Data"
+          style={{ border:`1px solid ${BRD2}`, background:S0, fontFamily:MONO, fontSize:13, fontWeight:600, color:TXT, cursor:"pointer", outline:"none", padding:"6px 10px", borderRadius:10 }}
+        />
+        <button
+          onClick={tab === "analisi" ? shareAnalysisPdf : shareWA}
+          style={{ background:TXT, color:"#fff", border:"none", borderRadius:10, padding:"8px 14px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:FONT }}
+        >
+          PDF
+        </button>
       </div>
 
-      <div className="no-print" style={{ background:S0, borderBottom:`1px solid ${BRD}`, padding: tab === "piano" ? "3px 10px" : "8px 10px", display:"grid", gridTemplateColumns: wide ? `repeat(${TABS.length}, minmax(0, 1fr))` : "repeat(4, minmax(0, 1fr))", gap:6, flexShrink:0, boxShadow:"0 2px 10px rgba(13,27,42,0.05)" }}>
-        {TABS.map(({ id, icon, label }) => {
-          const on = tab === id;
-          return (
-            <button
-              key={id}
-              onClick={() => setTab(id)}
-              aria-current={on ? "page" : undefined}
-              style={{ height: tab === "piano" ? 26 : 40, display:"flex", alignItems:"center", justifyContent:"center", gap:5, padding:"0 2px", minWidth:0, overflow:"hidden", borderRadius:12, cursor:"pointer", fontFamily:FONT, fontSize:12, fontWeight:800, whiteSpace:"nowrap", border:`1px solid ${on ? M : BRD}`, background: on ? M : S1, color: on ? "#fff" : T2, boxShadow: on ? "0 3px 10px rgba(26,92,255,0.25)" : "none" }}
-            >
-              <span style={{ fontSize:15, lineHeight:1 }}>{icon}</span>
-              <span>{label}</span>
-            </button>
-          );
-        })}
-      </div>
       <div className="no-print" style={{ flex:1, overflowY:"auto" }}>
         {tab === "home" && (
           <HomeTab date={date} reports={reports} stations={stations} onGoFoglio={() => setTab("foglio")} wide={wide} />
@@ -862,6 +857,21 @@ export default function App() {
         {tab === "rientri" && <RientriTab rie={rie} wide={wide} />}
       </div>
 
+      {!wide && (
+        <nav className="no-print" aria-label="Sezioni" style={{ position:"fixed", left:0, right:0, bottom:0, background:S0, borderTop:`1px solid ${BRD}`, display:"flex", gap:2, overflowX:"auto", padding:"6px 8px calc(8px + env(safe-area-inset-bottom, 0px))", zIndex:30 }}>
+          {TABS.map(({ id, icon, label }) => {
+            const on = tab === id;
+            return (
+              <button key={id} onClick={() => setTab(id)} aria-current={on ? "page" : undefined} aria-label={label}
+                style={{ flex:"0 0 auto", minWidth:62, minHeight:52, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:3, borderRadius:12, border:"none", background: on ? ML : "transparent", color: on ? M : T2, fontFamily:FONT, fontSize:10, fontWeight:600, cursor:"pointer" }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icon} /></svg>
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </nav>
+      )}
+      {!wide && <div className="no-print" style={{ height:76, flexShrink:0 }} />}
       <div id="print-doc" style={{ display:"none", padding:"30px", background:"#fff" }}>
         <PrintDoc date={date} stations={stations} getV={getV} getN={getN} goals={goals} />
       </div>
@@ -995,7 +1005,7 @@ function HomeTab({ date, reports, stations, onGoFoglio, wide }) {
   const eShare = combined > 0 ? 100 - mShare : 0;
   const grow = "width 900ms cubic-bezier(0.2,0.7,0.2,1)";
   const num = { fontWeight: 800, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.02em" };
-  const card = { background: S0, borderRadius: 20, border: `1px solid ${BRD}`, boxShadow: "0 2px 12px rgba(13,27,42,0.05)" };
+  const card = { background: S0, borderRadius: 16, border: `1px solid ${BRD}`, boxShadow: "none" };
 
   const chip = (p) => p === null ? null : (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: p >= 0 ? "#DCFCE7" : "#FEE2E2", color: p >= 0 ? GRN : RED, borderRadius: 8, padding: "3px 8px", fontSize: 12, fontWeight: 800 }}>
@@ -1086,7 +1096,7 @@ function HomeTab({ date, reports, stations, onGoFoglio, wide }) {
 
       <button
         onClick={onGoFoglio}
-        style={{ width: "100%", background: ACC, color: "#fff", border: "none", borderRadius: 16, padding: "17px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", fontFamily: FONT, fontSize: 16, fontWeight: 800, boxShadow: "0 8px 20px rgba(255,82,0,0.28)" }}
+        style={{ width: "100%", background: M, color: "#fff", border: "none", borderRadius: 14, padding: "17px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", fontFamily: FONT, fontSize: 16, fontWeight: 800, boxShadow: "none" }}
       >
         <span>{date === todayStr() ? "Inserisci i dati di oggi" : `Inserisci i dati del ${fmtD(date)}`}</span>
         <span style={{ fontSize: 24, lineHeight: 1 }}>›</span>
@@ -1213,7 +1223,7 @@ function AnalisiTab({ wide, stations, anBrands, toggleBrand, anSids, toggleStati
   const activeBrands = Object.entries(anBrands).filter(([, ok]) => ok).map(([b]) => b);
   return (
     <div style={wide ? { fontFamily:FONT, display:"grid", gridTemplateColumns:"minmax(380px, 480px) minmax(0, 1fr)", alignItems:"start", gap:0 } : { fontFamily:FONT }}>
-      <div style={{ background:S0, borderBottom:`1px solid ${BRD}`, padding:"14px 14px 16px", ...(wide ? { borderRight:`1px solid ${BRD}`, minHeight:"calc(100dvh - 110px)" } : null) }}>
+      <div style={{ background:S0, borderBottom:`1px solid ${BRD}`, padding:"14px 14px 16px", ...(wide ? { borderRight:`1px solid ${BRD}`, minHeight:"calc(100dvh - 60px)" } : null) }}>
         <div style={{ fontSize:10, fontWeight:700, color:T3, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:12 }}>Filtri analisi</div>
         <div style={{ marginBottom:12 }}>
           <div style={{ fontSize:9, fontWeight:700, color:T2, marginBottom:8, letterSpacing:"0.08em", textTransform:"uppercase" }}>Brand</div>
@@ -1360,7 +1370,7 @@ function PrintDoc({ date, stations, getV, getN, goals = {} }) {
   };
   return (
     <div style={{ fontFamily: FONT, background: "#EAF0F8", padding: 18 }}>
-      <div data-print-row="true" style={{ background: "linear-gradient(135deg,#0A3D9C 0%,#1A5CFF 58%,#00A0D6 100%)", borderRadius: 22, padding: "22px 26px", marginBottom: 18, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 10px 24px rgba(26,92,255,0.18)" }}>
+      <div data-print-row="true" style={{ background: "linear-gradient(135deg,#0B1220 0%,#2F5BFF 100%)", borderRadius: 22, padding: "22px 26px", marginBottom: 18, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 10px 24px rgba(26,92,255,0.18)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ width: 52, height: 52, borderRadius: 14, background: "rgba(255,255,255,0.16)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26 }}>🏭</div>
           <div>
@@ -1445,7 +1455,7 @@ function PrintAnalysisDoc({ anRes }) {
       {/* HEADER */}
       <div
         data-print-row="true"
-        style={{ background: "linear-gradient(135deg,#0A3D9C 0%,#1A5CFF 58%,#00A0D6 100%)", borderRadius: 18, padding: "18px 20px", marginBottom: 12 }}
+        style={{ background: "linear-gradient(135deg,#0B1220 0%,#2F5BFF 100%)", borderRadius: 18, padding: "18px 20px", marginBottom: 12 }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
           <div style={{ width: 48, height: 48, borderRadius: 13, background: "rgba(255,255,255,0.16)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0 }}>📊</div>
@@ -1717,7 +1727,7 @@ function TaglioTab({ wide, date, tg, saveTg, onOpen }) {
         />
       </div>
 
-      <Btn color={ACC} onClick={doSave} style={{ width:"100%", padding:"16px 0", fontSize:16 }}>
+      <Btn color={M} onClick={doSave} style={{ width:"100%", padding:"16px 0", fontSize:16 }}>
         {state === "saving" ? "Salvataggio…" : "Salva giornata"}
       </Btn>
       {state === "ok" && <div style={{ marginTop:8, fontSize:13, fontWeight:700, color:GRN }}>Salvato.</div>}
@@ -1918,7 +1928,7 @@ function GiacenzaTab({ giac, saveGiacDay, wide }) {
         {!isFriday && <div style={{ fontSize: 11, color: ACC, marginTop: 6, fontWeight: 600 }}>Attenzione: la data scelta non è un venerdì.</div>}
       </div>
 
-      <div style={{ background: S0, border: `1px solid ${BRD}`, borderRadius: 16, padding: 14, marginBottom: 16, boxShadow: "0 2px 10px rgba(13,27,42,0.05)" }}>
+      <div style={{ background: S0, border: `1px solid ${BRD}`, borderRadius: 16, padding: 14, marginBottom: 16, boxShadow: "none" }}>
         <div style={{ fontSize: 12, fontWeight: 800, color: editId ? ACC : M, marginBottom: 12 }}>{editId ? "Modifica riga" : "Nuova riga"}</div>
         <div style={{ marginBottom: 12 }}>
           {label("Articolo")}
@@ -2519,7 +2529,7 @@ function SettingsTab({ wide, stations, goals, saveGoal }) {
 
       <div style={wide ? { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 20, alignItems: "start" } : undefined}>
       {["MOSAICON", "EMOS"].map((brand) => (
-        <div key={brand} style={{ marginBottom: 20, background: S0, borderRadius: 16, border: `1px solid ${BRD}`, overflow: "hidden", boxShadow: "0 2px 10px rgba(13,27,42,0.05)" }}>
+        <div key={brand} style={{ marginBottom: 20, background: S0, borderRadius: 16, border: `1px solid ${BRD}`, overflow: "hidden", boxShadow: "none" }}>
           <div style={{ padding: "12px 16px", background: bl(brand), borderBottom: `2px solid ${bc(brand)}`, borderLeft: `5px solid ${bc(brand)}` }}>
             <span style={{ fontSize: 14, fontWeight: 900, color: bc(brand), letterSpacing: "0.1em" }}>{brand}</span>
           </div>
