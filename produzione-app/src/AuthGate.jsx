@@ -49,13 +49,6 @@ export default function AuthGate({ children }) {
     return (
       <>
         {children}
-        <button
-          onClick={() => signOut(auth)}
-          title={user.email || "Esci"}
-          style={stile.esci}
-        >
-          Esci
-        </button>
       </>
     );
   }

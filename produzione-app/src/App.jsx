@@ -4,7 +4,8 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, Cell,
 } from "recharts";
-import { db, ref, set, get, onValue, update } from "./firebase.js";
+import { db, auth, ref, set, get, onValue, update } from "./firebase.js";
+import { signOut } from "firebase/auth";
 import { remove } from "firebase/database";
 /* ═══ COLORI ═══ */
 const M = "#2F5BFF", ML = "#EEF3FF";
@@ -2563,6 +2564,9 @@ function SettingsTab({ wide, stations, goals, saveGoal }) {
           })}
         </div>
       ))}
+      </div>
+      <div style={{ marginTop: 28, paddingTop: 16, borderTop: `1px solid ${BRD}` }}>
+        <button onClick={() => signOut(auth)} style={{ background: S0, color: T2, border: `1px solid ${BRD2}`, borderRadius: 10, padding: "9px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>Esci dall'account</button>
       </div>
     </div>
   );
