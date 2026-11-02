@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from "react";
+import { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback, cloneElement } from "react";
 import { db, ref, set, update } from "./firebase.js";
 
 /* ═══ Foglio SBLOCCHI: componenti, conformità, taglio e giunteria ═══
@@ -44,7 +44,7 @@ const COLS = (() => {
   const c = [
     ["sel", "", "x", 38, 0, 0, "f0"], ["cliente", "CLIENTE", "t", 100, 0, 0, "f1"], ["modello", "MODELLO", "t", 170, 0, 0, "f2"],
     ["stag", "STAG.", "t", 34, 0, 1, "n"], ["calz", "CALZ.", "t", 34, 0, 1, "n"], ["foto", "FOTO", "p", 84, 0, 0, ""],
-    ["forma", "FORMA", "t", 110, 0, 0, ""], ["paia", "PAIA", "t", 56, 0, 0, ""], ["stato", "STATO GENERALE", "t", 230, 0, 0, ""],
+    ["forma", "FORMA", "t", 110, 0, 0, ""], ["paia", "PAIA", "t", 56, 0, 0, ""], ["stato", "STATO GENERALE", "t", 200, 0, 0, ""],
     ["pc", "PROVA CALZATA", "s", 130, 1, 0, ""], ["pm", "PROVA MODELLO", "s", 130, 1, 0, ""], ["ps", "PROVA STRUTTURA", "s", 170, 1, 0, ""],
     ["sblocco", "SBLOCCO", "s", 34, 1, 1, "n"],
   ];
@@ -63,13 +63,14 @@ const COLS = (() => {
 })();
 const OPT = [["OK", "OK", "#1f8f6b"], ["ESISTE", "ESISTE", "#3f6fd1"], ["DA FARE", "DA FARE", "#d9482b"], ["IN ATTESA", "IN ATTESA", "#f2b134"], ["—", "NON SERVE", "#b3bbcb"], ["", "svuota", "#e2e6ee"]];
 
+const OPTD = [["—", "—  (non serve)", "#b3bbcb"], ["", "svuota", "#e2e6ee"]];
 const lsGet = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d; } catch { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignora */ } };
 const fmtDate = (ts) => { if (!ts) return ""; const d = new Date(ts); return `${d.getDate()}/${d.getMonth() + 1}`; };
 const dbSet = (path, v) => set(ref(db, path), v === undefined || v === "" ? null : v);
 
 /* cella di testo modificabile: salva quando si esce dalla cella */
-function Ce({ value, onCommit, editable, status, onMenu, onMenuClose }) {
+function Ce({ value, onCommit, editable, status, dash, onMenu, onMenuClose }) {
   const el = useRef(null);
   useLayoutEffect(() => {
     const e = el.current;
@@ -82,8 +83,8 @@ function Ce({ value, onCommit, editable, status, onMenu, onMenuClose }) {
       contentEditable={editable ? "plaintext-only" : false}
       suppressContentEditableWarning
       data-s={status ? 1 : undefined}
-      onFocus={status && editable ? () => onMenu(el.current) : undefined}
-      onBlur={(e) => { if (status && onMenuClose) onMenuClose(); const v = e.currentTarget.textContent; if (v !== String(value)) onCommit(v); }}
+      onFocus={(status || dash) && editable ? () => onMenu(el.current, dash ? "d" : "s") : undefined}
+      onBlur={(e) => { if ((status || dash) && onMenuClose) onMenuClose(); const v = e.currentTarget.textContent; if (v !== String(value)) onCommit(v); }}
     />
   );
 }
@@ -128,6 +129,10 @@ export default function SbloccoTab({ sbl, foto }) {
   const [fix, setFix] = useState(null);
   const [busy, setBusy] = useState("");
   const wrapRef = useRef(null);
+  const topRef = useRef(null);
+  const syncing = useRef(false);
+  const [vw, setVw] = useState(() => window.innerWidth);
+  useEffect(() => { const f = () => setVw(window.innerWidth); window.addEventListener("resize", f); return () => window.removeEventListener("resize", f); }, []);
   const tableRef = useRef(null);
   const drag = useRef(null);
   const phRow = useRef(null);
@@ -156,6 +161,8 @@ export default function SbloccoTab({ sbl, foto }) {
 
   const W = COLS.map((c, i) => manual[c[0]] ?? auto[c[0]] ?? c[3]);
   const o1 = W[0], o2 = W[0] + W[1];
+  const NF = vw >= 1000 ? 9 : 3; // colonne bloccate: fino a STATO GENERALE (su telefono solo cliente e modello)
+  const lefts = []; W.reduce((a, w, i) => { lefts[i] = a; return a + w; }, 0);
   const totalW = W.reduce((a, b) => a + b, 0);
 
   /* adatta la larghezza delle colonne verticali al loro testo */
@@ -177,10 +184,10 @@ export default function SbloccoTab({ sbl, foto }) {
   const commit = (id, key, v) => { if (!canEdit) return; dbSet(`sblocchi/${id}/${key.startsWith("c.") ? key.replace(/\./g, "/") : key}`, key === "paia" ? (v === "" ? "" : (Number.isFinite(+v) ? +v : v)) : v); };
 
   /* menu a tendina per le celle di stato */
-  const openMenu = useCallback((el) => {
+  const openMenu = useCallback((el, kind) => {
     const r = el.getBoundingClientRect();
-    const h = 6 * 38 + 16;
-    setMenu({ el, x: Math.min(Math.max(8, r.left + r.width / 2 - 80), window.innerWidth - 168), y: r.bottom + h + 8 > window.innerHeight ? Math.max(8, r.top - h - 4) : r.bottom + 4 });
+    const h = (kind === "d" ? 2 : 6) * 38 + 16;
+    setMenu({ el, kind, x: Math.min(Math.max(8, r.left + r.width / 2 - 80), window.innerWidth - 168), y: r.bottom + h + 8 > window.innerHeight ? Math.max(8, r.top - h - 4) : r.bottom + 4 });
   }, []);
   useEffect(() => {
     const off = () => setMenu(null);
@@ -324,7 +331,7 @@ export default function SbloccoTab({ sbl, foto }) {
       <thead>
         <tr className="h">
           {COLS.map((c, i) => (
-            <th key={c[0]} data-ci={i} className={`g${c[4]} ${c[6].split(" ").filter((x) => x.length === 2 && x[0] === "f").join(" ")}${c[5] ? " rot" : ""}`}>
+            <th key={c[0]} data-ci={i} style={i < NF ? { left: lefts[i] } : undefined} className={`g${c[4]} ${c[6].split(" ").filter((x) => x.length === 2 && x[0] === "f").join(" ")}${c[5] ? " rot" : ""}${i < NF ? " fz" + (i === NF - 1 ? " fzl" : "") : ""}`}>
               {c[2] === "x" ? (canEdit ? <input type="checkbox" checked={shown.length > 0 && shown.every((r) => sel.has(r.id))} onChange={(e) => toggleAll(e.target.checked)} aria-label="Seleziona tutti" /> : null) : c[5] ? <span className="v">{c[1]}</span> : c[1]}
               <span className="rz" onMouseDown={(e) => startCol(e, i)} onTouchStart={(e) => startCol(e, i)} />
             </th>
@@ -358,7 +365,7 @@ export default function SbloccoTab({ sbl, foto }) {
     const st = type === "s";
     return (
       <td key={key} className={`${st ? "s " + norm(v) : ""} ${rot ? "vt" : ""} ${cls}`.trim()} onClick={rot && canEdit ? (e) => { const ce = e.currentTarget.querySelector(".ce"); if (ce && e.target !== ce) ce.focus(); } : undefined}>
-        <Ce value={v} editable={canEdit} status={st} onMenu={openMenu} onMenuClose={() => setMenu(null)} onCommit={(nv) => commit(r.id, key, nv)} />
+        <Ce value={v} editable={canEdit} status={st} dash={!st && key.startsWith("c.")} onMenu={openMenu} onMenuClose={() => setMenu(null)} onCommit={(nv) => commit(r.id, key, nv)} />
       </td>
     );
   };
@@ -409,14 +416,15 @@ export default function SbloccoTab({ sbl, foto }) {
         <div className="tip">Trascina il bordo di un'intestazione per allargare la colonna · clic su una cella di stato per il menu, o scrivi liberamente (anche a capo){canEdit ? " · trascina il bordo in basso della casella a sinistra per l'altezza di una riga" : ""}</div>
       </div>
 
-      <div className="wrap" ref={wrapRef} onScroll={(e) => { const w = e.currentTarget; if (list.length > limit && w.scrollTop + w.clientHeight > w.scrollHeight - 500) setLimit((l) => l + PAGE); }}>
+      <div className="topscroll" ref={topRef} onScroll={(e) => { if (syncing.current) { syncing.current = false; return; } if (wrapRef.current && wrapRef.current.scrollLeft !== e.currentTarget.scrollLeft) { syncing.current = true; wrapRef.current.scrollLeft = e.currentTarget.scrollLeft; } }}><div style={{ width: Math.ceil(totalW * zoom / 100), height: 1 }} /></div>
+      <div className="wrap" ref={wrapRef} onScroll={(e) => { const w = e.currentTarget; if (topRef.current && topRef.current.scrollLeft !== w.scrollLeft) { if (syncing.current) { syncing.current = false; } else { syncing.current = true; topRef.current.scrollLeft = w.scrollLeft; } } if (list.length > limit && w.scrollTop + w.clientHeight > w.scrollHeight - 500) setLimit((l) => l + PAGE); }}>
         <table ref={tableRef} style={{ width: totalW, zoom: zoom / 100 }}>
           <colgroup>{W.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
           {head()}
           <tbody>
             {shown.map((r) => (
               <tr key={r.id} data-id={r.id} className={r.id === newId ? "newrow" : ""} style={r.h ? { ["--rh"]: r.h + "px" } : undefined}>
-                {COLS.map((c) => cell(r, c))}
+                {COLS.map((c, i) => { const el = cell(r, c); return i < NF ? cloneElement(el, { className: (el.props.className || "") + " fz" + (i === NF - 1 ? " fzl" : ""), style: { left: lefts[i] } }) : el; })}
               </tr>
             ))}
           </tbody>
@@ -427,7 +435,7 @@ export default function SbloccoTab({ sbl, foto }) {
 
       {menu && (
         <div className="smenu" style={{ left: menu.x, top: menu.y }} onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()}>
-          {OPT.map((o) => <button key={o[1]} onClick={() => pickMenu(o[0])}><i style={{ background: o[2] }} />{o[1]}</button>)}
+          {(menu.kind === "d" ? OPTD : OPT).map((o) => <button key={o[1]} onClick={() => pickMenu(o[0])}><i style={{ background: o[2] }} />{o[1]}</button>)}
         </div>
       )}
       {fmenu && <div className="smask" onMouseDown={() => setFmenu(null)} />}
@@ -476,21 +484,21 @@ const CSS = `
 --ok:#1f8f6b;--okt:#fff;--da:#d9482b;--dat:#fff;--att:#f2b134;--attt:#3b2a00;--ex:#3f6fd1;--ext:#fff;--ns:#e7eaf0;--nst:#8a94a8;
 font:13px/1.35 'Inter',-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink);background:var(--bg);padding-bottom:90px;min-height:100%}
 .sbl *{box-sizing:border-box}
-.sbl .panel{background:#fff;margin:12px 14px 0;border:1px solid var(--line);border-radius:14px}
-.sbl .bar{display:flex;flex-wrap:wrap;gap:8px;padding:10px 12px;align-items:center}
-@media(min-width:1100px){.sbl .bar{flex-wrap:nowrap}.sbl .bar>*{flex:none}.sbl .bar .srch{flex:1 1 120px!important;min-width:110px}.sbl .bar select{max-width:150px;padding:9px 8px}.sbl .hs input{width:70px}.sbl .hs{font-size:12px;white-space:nowrap}.sbl .btn{white-space:nowrap}}
+.sbl .panel{background:#fff;margin:8px 14px 6px;border:1px solid var(--line);border-radius:14px}
+.sbl .bar{display:flex;flex-wrap:wrap;gap:8px;padding:6px 10px;align-items:center}
+@media(min-width:1100px){.sbl .bar{flex-wrap:nowrap}.sbl .bar>*{flex:none}.sbl .bar .srch{flex:1 1 120px!important;min-width:110px}.sbl .bar select{max-width:150px;padding:6px 6px}.sbl .hs input{width:70px}.sbl .hs{font-size:12px;white-space:nowrap}.sbl .btn{white-space:nowrap}}
 .sbl .zv{min-width:34px;font-variant-numeric:tabular-nums;color:var(--ink)}
-.sbl .bar input.srch,.sbl .bar select{padding:9px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;min-width:0;background:#fff;color:var(--ink)}
+.sbl .bar input.srch,.sbl .bar select{padding:6px 10px;border:1px solid var(--line);border-radius:10px;font:inherit;min-width:0;background:#fff;color:var(--ink)}
 .sbl .bar input.srch{flex:1 1 200px}
-.sbl .seg{display:flex;background:#eef1f7;border-radius:10px;padding:3px}.sbl .seg button{border:0;background:transparent;padding:7px 16px;font:inherit;cursor:pointer;border-radius:8px;color:var(--mut);font-weight:600}.sbl .seg button.on{background:#fff;color:var(--navy);box-shadow:0 1px 3px rgba(20,30,60,.12)}
+.sbl .seg{display:flex;background:#eef1f7;border-radius:10px;padding:2px}.sbl .seg button{border:0;background:transparent;padding:4px 14px;font:inherit;cursor:pointer;border-radius:8px;color:var(--mut);font-weight:600}.sbl .seg button.on{background:#fff;color:var(--navy);box-shadow:0 1px 3px rgba(20,30,60,.12)}
 .sbl .chips{display:flex;gap:6px;padding:2px 12px 12px;overflow-x:auto}
 .sbl .chips button{flex:none;border:1px solid var(--line);background:#fff;border-radius:99px;padding:6px 13px;font:inherit;cursor:pointer;color:var(--ink);font-weight:500}.sbl .chips button.on{background:var(--navy);color:#fff;border-color:var(--navy)}.sbl .chips small{opacity:.6;margin-left:6px;font-weight:600}
-.sbl .meta{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 16px 6px;color:var(--mut)}.sbl .meta b{color:var(--ink)}.sbl .tip{font-size:12px}
-.sbl .btn{border:1px solid var(--line);background:#fff;border-radius:10px;padding:9px 14px;font:inherit;font-weight:600;cursor:pointer;color:var(--ink)}.sbl .btn:hover{border-color:#aab6d0}.sbl .btn.pri{background:var(--acc);border-color:var(--acc);color:#fff}.sbl .btn.ok{background:#1f9d5a;border-color:#1f9d5a;color:#fff}.sbl .btn:disabled{opacity:.5;cursor:default}
+.sbl .meta{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:2px 16px 4px;color:var(--mut)}.sbl .meta b{color:var(--ink)}.sbl .tip{font-size:12px}
+.sbl .btn{border:1px solid var(--line);background:#fff;border-radius:10px;padding:6px 12px;font:inherit;font-weight:600;cursor:pointer;color:var(--ink)}.sbl .btn:hover{border-color:#aab6d0}.sbl .btn.pri{background:var(--acc);border-color:var(--acc);color:#fff}.sbl .btn.ok{background:#1f9d5a;border-color:#1f9d5a;color:#fff}.sbl .btn:disabled{opacity:.5;cursor:default}
 .sbl .hs{display:flex;align-items:center;gap:8px;color:var(--mut);font-weight:600}.sbl .hs input{width:100px;accent-color:#3556a8}
 .sbl .bulk{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 14px 0;padding:10px 14px;background:#fff8e1;border:1px solid #f2dc8b;border-radius:12px}.sbl .bulk b{color:#6b4e00}
 .sbl .ro{margin:10px 14px 0;padding:10px 14px;background:#fff;border:1px solid var(--line);border-radius:12px;color:var(--mut)}.sbl .ro.imp{background:#fff0ea;border-color:#ffd2bf;color:var(--ink)}
-.sbl .wrap{overflow:auto;max-height:calc(100vh - 235px);margin:0 14px 14px;border:1px solid var(--line);border-radius:14px;background:#fff}
+.sbl .wrap{overflow:auto;max-height:calc(100vh - 140px);margin:0 14px 14px;border:1px solid var(--line);border-radius:14px;background:#fff}
 .sbl table{border-collapse:separate;border-spacing:0;table-layout:fixed}
 .sbl th,.sbl td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:0;background:#fff;overflow:hidden}
 .sbl tbody tr:nth-child(even) td{background:#f6f7fb}
@@ -512,9 +520,9 @@ font:13px/1.35 'Inter',-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink)
 .sbl td.s .ce{font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.02em}
 .sbl td.s.vt .ce{font-size:11px;min-height:44px}
 .sbl td.OK{background:var(--ok)!important;color:var(--okt)}.sbl td.DA{background:var(--da)!important;color:var(--dat)}.sbl td.ATT{background:var(--att)!important;color:var(--attt)}.sbl td.EX{background:var(--ex)!important;color:var(--ext)}.sbl td.NS{background:var(--ns)!important;color:var(--nst)}
-.sbl .f0,.sbl .f1,.sbl .f2{position:sticky;z-index:2}.sbl .f0{left:0}.sbl .f1{left:var(--o1)}.sbl .f2{left:var(--o2);box-shadow:3px 0 6px -3px rgba(20,30,60,.25)}
-.sbl tbody td.f0,.sbl tbody td.f1,.sbl tbody td.f2{background:#fff}.sbl tbody tr:nth-child(even) td.f0,.sbl tbody tr:nth-child(even) td.f1,.sbl tbody tr:nth-child(even) td.f2{background:#f6f7fb}
-.sbl thead .f0,.sbl thead .f1,.sbl thead .f2{z-index:5}
+.sbl .fz{position:sticky;z-index:2}.sbl thead .fz{z-index:6}.sbl .fzl{box-shadow:4px 0 6px -3px rgba(20,30,60,.3)}
+.sbl .topscroll{overflow-x:auto;overflow-y:hidden;height:16px;margin:0 14px;border-radius:8px}.sbl .topscroll::-webkit-scrollbar{height:12px}.sbl .topscroll::-webkit-scrollbar-track{background:#dfe4ee;border-radius:8px}.sbl .topscroll::-webkit-scrollbar-thumb{background:#7d8db3;border-radius:8px}.sbl .topscroll::-webkit-scrollbar-thumb:hover{background:#4f6296}
+.sbl tbody td.fz{background:#fff}.sbl tbody tr:nth-child(even) td.fz{background:#f6f7fb}
 .sbl .f1 .ce,.sbl .f2 .ce{font-weight:700}
 .sbl td.calc{font-weight:700;font-size:11px;padding:0 2px}
 .sbl td.orig{color:#6b7488;font-size:11.5px}.sbl td.orig b{color:#1f9d5a}
