@@ -116,6 +116,7 @@ export default function SbloccoTab({ sbl, foto }) {
   const [limit, setLimit] = useState(PAGE);
   const [sel, setSel] = useState(() => new Set());
   const [rh, setRh] = useState(() => lsGet("sblRh", 72));
+  const [zoom, setZoom] = useState(() => lsGet("sblZoom", 100));
   const [manual, setManual] = useState(() => lsGet("sblW", {}));
   const [auto, setAuto] = useState({});
   const [menu, setMenu] = useState(null); // { el, x, y }
@@ -146,6 +147,8 @@ export default function SbloccoTab({ sbl, foto }) {
   useEffect(() => { if (fc && !clients[fc]) setFc(""); }, [clients, fc]);
   useEffect(() => { setSel(new Set()); setLimit(PAGE); setFc(""); }, [mode]);
   useEffect(() => { lsSet("sblRh", rh); }, [rh]);
+  useEffect(() => { lsSet("sblZoom", zoom); }, [zoom]);
+  const zRef = useRef(1); zRef.current = zoom / 100;
 
   const W = COLS.map((c, i) => manual[c[0]] ?? auto[c[0]] ?? c[3]);
   const o1 = W[0], o2 = W[0] + W[1];
@@ -192,10 +195,10 @@ export default function SbloccoTab({ sbl, foto }) {
       const d = drag.current; if (!d) return;
       const p = e.touches ? e.touches[0] : e;
       if (d.kind === "col") {
-        const w = Math.max(24, Math.round(d.w0 + p.clientX - d.x));
+        const w = Math.max(24, Math.round(d.w0 + (p.clientX - d.x) / zRef.current));
         setManual((m) => ({ ...m, [d.key]: w }));
       } else {
-        const h = Math.max(36, Math.round(d.h0 + p.clientY - d.y - 2));
+        const h = Math.max(36, Math.round(d.h0 + (p.clientY - d.y) / zRef.current - 2));
         d.tr.style.setProperty("--rh", h + "px"); d.h = h;
       }
       if (e.cancelable && e.touches) e.preventDefault();
@@ -211,7 +214,7 @@ export default function SbloccoTab({ sbl, foto }) {
     return () => { window.removeEventListener("mousemove", mv); window.removeEventListener("mouseup", up); window.removeEventListener("touchmove", mv); window.removeEventListener("touchend", up); };
   }, [canEdit]);
   const startCol = (e, i) => { e.preventDefault(); const p = e.touches ? e.touches[0] : e; drag.current = { kind: "col", key: COLS[i][0], x: p.clientX, w0: W[i], el: e.currentTarget }; e.currentTarget.classList.add("dr"); };
-  const startRow = (e, id) => { e.preventDefault(); const tr = e.currentTarget.closest("tr"), p = e.touches ? e.touches[0] : e; drag.current = { kind: "row", tr, id, y: p.clientY, h0: tr.getBoundingClientRect().height, el: e.currentTarget }; e.currentTarget.classList.add("dr"); };
+  const startRow = (e, id) => { e.preventDefault(); const tr = e.currentTarget.closest("tr"), p = e.touches ? e.touches[0] : e; drag.current = { kind: "row", tr, id, y: p.clientY, h0: tr.getBoundingClientRect().height / zRef.current, el: e.currentTarget }; e.currentTarget.classList.add("dr"); };
 
   /* selezione, sblocco → storico */
   const toggleSel = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -320,15 +323,13 @@ export default function SbloccoTab({ sbl, foto }) {
             <button className={!mode ? "on" : ""} onClick={() => setMode(false)}>Attivi</button>
             <button className={mode ? "on" : ""} onClick={() => setMode(true)}>Storico</button>
           </div>
-          <input value={q} onChange={(e) => { setQ(e.target.value); setLimit(PAGE); }} placeholder="Cerca modello, note…" />
-          {canEdit && <button className="btn pri" onClick={() => setModal("add")}>+ Aggiungi articolo</button>}
+          <input className="srch" value={q} onChange={(e) => { setQ(e.target.value); setLimit(PAGE); }} placeholder="Cerca modello, note…" />
+          <button className="btn pri" onClick={() => setModal("add")}>+ Aggiungi articolo</button>
           <label className="hs">Altezza righe <input type="range" min="44" max="200" value={rh} onChange={(e) => setRh(+e.target.value)} /></label>
+          <label className="hs">Zoom <input type="range" min="40" max="160" value={zoom} onChange={(e) => setZoom(+e.target.value)} /><span className="zv">{zoom}%</span></label>
           <select value={fs} onChange={(e) => { setFs(e.target.value); setLimit(PAGE); }}><option value="">Tutte le stagioni</option>{stags.map((s) => <option key={s}>{s}</option>)}</select>
           <select value={fz} onChange={(e) => { setFz(e.target.value); setLimit(PAGE); }}><option value="">Tutti i calzaturifici</option>{calzs.map((s) => <option key={s}>{s}</option>)}</select>
-        </div>
-        <div className="chips">
-          <button className={fc ? "" : "on"} onClick={() => { setFc(""); setLimit(PAGE); }}>Tutti<small>{base.length}</small></button>
-          {Object.keys(clients).sort().map((c) => <button key={c} className={fc === c ? "on" : ""} onClick={() => { setFc(c); setLimit(PAGE); }}>{c}<small>{clients[c]}</small></button>)}
+          <select value={fc} onChange={(e) => { setFc(e.target.value); setLimit(PAGE); }}><option value="">Tutti i clienti ({base.length})</option>{Object.keys(clients).sort().map((c) => <option key={c} value={c}>{c} ({clients[c]})</option>)}</select>
         </div>
       </div>
 
@@ -351,7 +352,7 @@ export default function SbloccoTab({ sbl, foto }) {
       </div>
 
       <div className="wrap" ref={wrapRef}>
-        <table ref={tableRef} style={{ width: totalW }}>
+        <table ref={tableRef} style={{ width: totalW, zoom: zoom / 100 }}>
           <colgroup>{W.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
           {head()}
           <tbody>
@@ -410,8 +411,10 @@ font:13px/1.35 'Inter',-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink)
 .sbl *{box-sizing:border-box}
 .sbl .panel{background:#fff;margin:12px 14px 0;border:1px solid var(--line);border-radius:14px}
 .sbl .bar{display:flex;flex-wrap:wrap;gap:8px;padding:10px 12px;align-items:center}
-.sbl .bar input[type=text],.sbl .bar input:not([type]),.sbl .bar select{padding:9px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;min-width:0;background:#fff;color:var(--ink)}
-.sbl .bar input:not([type]){flex:1 1 200px}
+@media(min-width:1100px){.sbl .bar{flex-wrap:nowrap}.sbl .bar>*{flex:none}.sbl .bar .srch{flex:1 1 120px!important;min-width:110px}.sbl .bar select{max-width:150px;padding:9px 8px}.sbl .hs input{width:70px}.sbl .hs{font-size:12px;white-space:nowrap}.sbl .btn{white-space:nowrap}}
+.sbl .zv{min-width:34px;font-variant-numeric:tabular-nums;color:var(--ink)}
+.sbl .bar input.srch,.sbl .bar select{padding:9px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;min-width:0;background:#fff;color:var(--ink)}
+.sbl .bar input.srch{flex:1 1 200px}
 .sbl .seg{display:flex;background:#eef1f7;border-radius:10px;padding:3px}.sbl .seg button{border:0;background:transparent;padding:7px 16px;font:inherit;cursor:pointer;border-radius:8px;color:var(--mut);font-weight:600}.sbl .seg button.on{background:#fff;color:var(--navy);box-shadow:0 1px 3px rgba(20,30,60,.12)}
 .sbl .chips{display:flex;gap:6px;padding:2px 12px 12px;overflow-x:auto}
 .sbl .chips button{flex:none;border:1px solid var(--line);background:#fff;border-radius:99px;padding:6px 13px;font:inherit;cursor:pointer;color:var(--ink);font-weight:500}.sbl .chips button.on{background:var(--navy);color:#fff;border-color:var(--navy)}.sbl .chips small{opacity:.6;margin-left:6px;font-weight:600}
