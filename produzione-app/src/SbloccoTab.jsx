@@ -50,17 +50,18 @@ const COLS = (() => {
   ];
   COMP.forEach((k, i) => {
     const g = 2 + (i % 2);
-    c.push([`c.${k}.k`, k === "FORMA" ? "FORMA (COD.)" : k, "t", k === "FORMA" ? 110 : 50, g, k === "FORMA" ? 0 : 1, k === "FORMA" ? "" : "n"]);
-    c.push([`c.${k}.f`, `FORN. ${k}`, "t", 38, g, 1, "n fv"]);
-    c.push([`c.${k}.s`, `SBL. ${k}`, "s", 34, g, 1, "n"]);
+    const oriz = k === "FORMA" || k === "SOTTOPIEDE" || k === "TACCO" || k === "SUOLA"; // queste colonne sono in orizzontale
+    const ab = k === "SOTTOPIEDE" ? "SOTTOP." : k;
+    c.push([`c.${k}.k`, k === "FORMA" ? "FORMA (COD.)" : k, "t", oriz ? (k === "FORMA" ? 110 : 96) : 50, g, oriz ? 0 : 1, oriz ? "" : "n"]);
+    c.push([`c.${k}.f`, `FORN. ${ab}`, "t", 38, g, 1, "n fv"]);
+    c.push([`c.${k}.s`, `SBL. ${ab}`, "s", 34, g, 1, "n"]);
   });
-  c.push(["conf", "CONFORMITÀ", "s", 34, 4, 1, "n"], ["taglio", "TAGLIO E TG.GIU.", "s", 34, 4, 1, "n"],
+  c.push(["conf", "CONFORMITÀ", "s", 96, 4, 0, ""], ["taglio", "TAGLIO E TG.GIU.", "s", 96, 4, 0, ""],
     ["pct", "% SBLOCCHI", "k", 58, 5, 1, "n"], ["av", "AVANZAMENTO", "k", 64, 5, 1, "n"],
     ["note", "NOTE", "t", 300, 5, 0, ""], ["orig", "ORIGINE", "r", 90, 5, 0, ""]);
   return c;
 })();
-const GNAME = ["Modello", "Prove", "Componenti", "Componenti", "Conformità e taglio", "Riepilogo"];
-const OPT = [["OK", "OK", "#2fa866"], ["ESISTE", "ESISTE", "#3b7fd4"], ["DA FARE", "DA FARE", "#d9363e"], ["IN ATTESA", "IN ATTESA", "#d99a00"], ["—", "NON SERVE", "#9aa3b5"], ["", "svuota", "#d0d5e0"]];
+const OPT = [["OK", "OK", "#1f8f6b"], ["ESISTE", "ESISTE", "#3f6fd1"], ["DA FARE", "DA FARE", "#d9482b"], ["IN ATTESA", "IN ATTESA", "#f2b134"], ["—", "NON SERVE", "#b3bbcb"], ["", "svuota", "#e2e6ee"]];
 
 const lsGet = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d; } catch { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignora */ } };
@@ -319,11 +320,8 @@ export default function SbloccoTab({ sbl, foto }) {
   };
 
   const head = () => {
-    const groups = []; let last = -1;
-    COLS.forEach((c) => { if (c[4] !== last) { groups.push([c[4], 1]); last = c[4]; } else groups[groups.length - 1][1]++; });
     return (
       <thead>
-        <tr className="g">{groups.map((g, i) => <th key={i} colSpan={g[1]} className={`g${g[0]}`}>{GNAME[g[0]]}</th>)}</tr>
         <tr className="h">
           {COLS.map((c, i) => (
             <th key={c[0]} data-ci={i} className={`g${c[4]} ${c[6].split(" ").filter((x) => x.length === 2 && x[0] === "f").join(" ")}${c[5] ? " rot" : ""}`}>
@@ -475,7 +473,7 @@ function AddModal({ rows, onClose, onSave }) {
 
 const CSS = `
 .sbl{--ink:#18213a;--mut:#6b7691;--line:#e1e6f0;--rowline:#b9c3da;--bg:#eef1f8;--navy:#1b2748;--acc:#3556a8;
---ok:#c6efd6;--okt:#0b6636;--da:#ffd3d7;--dat:#a30f1b;--att:#ffe6a8;--attt:#7c5200;--ex:#cde1fa;--ext:#174a8c;--ns:#e9edf3;--nst:#97a1b6;
+--ok:#1f8f6b;--okt:#fff;--da:#d9482b;--dat:#fff;--att:#f2b134;--attt:#3b2a00;--ex:#3f6fd1;--ext:#fff;--ns:#e7eaf0;--nst:#8a94a8;
 font:13px/1.35 'Inter',-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink);background:var(--bg);padding-bottom:90px;min-height:100%}
 .sbl *{box-sizing:border-box}
 .sbl .panel{background:#fff;margin:12px 14px 0;border:1px solid var(--line);border-radius:14px}
@@ -495,16 +493,15 @@ font:13px/1.35 'Inter',-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink)
 .sbl .wrap{overflow:auto;max-height:calc(100vh - 235px);margin:0 14px 14px;border:1px solid var(--line);border-radius:14px;background:#fff}
 .sbl table{border-collapse:separate;border-spacing:0;table-layout:fixed}
 .sbl th,.sbl td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:0;background:#fff;overflow:hidden}
-.sbl tbody tr:nth-child(even) td{background:#f4f6fc}
+.sbl tbody tr:nth-child(even) td{background:#f6f7fb}
 .sbl tbody td{border-bottom:2px solid var(--rowline)}
 .sbl tbody tr:last-child td{border-bottom:0}
 .sbl thead th{position:sticky;top:0;z-index:3;color:#fff;font-size:10.5px;font-weight:700;letter-spacing:.05em;padding:6px 4px;text-align:center;vertical-align:middle;border-right:1px solid rgba(255,255,255,.18);border-bottom:0}
-.sbl thead tr.g th{font-size:10px;text-transform:uppercase;letter-spacing:.14em;padding:7px 4px}
-.sbl thead tr.h th{top:30px}
-.sbl .g0{background:#1b2748!important}.sbl .g1{background:#3556a8!important}.sbl .g2{background:#1f8a80!important}.sbl .g3{background:#5b4bb0!important}.sbl .g4{background:#c2691d!important}.sbl .g5{background:#475167!important}
+.sbl thead tr.h th{top:0}
+.sbl .g0,.sbl .g1,.sbl .g2,.sbl .g3,.sbl .g4,.sbl .g5{background:#1f2a4d!important}
 .sbl th .rz{position:absolute;right:0;top:0;bottom:0;width:8px;cursor:col-resize;z-index:6}.sbl th .rz:hover,.sbl th .rz.dr{background:rgba(255,255,255,.5)}
 .sbl th{position:sticky}
-.sbl th.rot{height:132px;padding:8px 0}.sbl th.rot .v{display:inline-block;writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap}
+.sbl th.rot{height:96px;padding:6px 0;font-size:9.5px;letter-spacing:.03em}.sbl thead th{white-space:normal;line-height:1.2}.sbl th.rot .v{display:inline-block;writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap}
 .sbl td{text-align:center;vertical-align:middle}
 .sbl .ce{display:flex;align-items:center;justify-content:center;text-align:center;min-height:var(--rh);padding:6px 8px;white-space:pre-wrap;overflow-wrap:anywhere;outline:0;font:inherit;line-height:1.3;cursor:text}
 .sbl .ce:focus{box-shadow:inset 0 0 0 2px #3b6fd4;background:#fff!important;color:var(--ink)!important;position:relative;z-index:1}
@@ -516,7 +513,7 @@ font:13px/1.35 'Inter',-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink)
 .sbl td.s.vt .ce{font-size:11px;min-height:44px}
 .sbl td.OK{background:var(--ok)!important;color:var(--okt)}.sbl td.DA{background:var(--da)!important;color:var(--dat)}.sbl td.ATT{background:var(--att)!important;color:var(--attt)}.sbl td.EX{background:var(--ex)!important;color:var(--ext)}.sbl td.NS{background:var(--ns)!important;color:var(--nst)}
 .sbl .f0,.sbl .f1,.sbl .f2{position:sticky;z-index:2}.sbl .f0{left:0}.sbl .f1{left:var(--o1)}.sbl .f2{left:var(--o2);box-shadow:3px 0 6px -3px rgba(20,30,60,.25)}
-.sbl tbody td.f0,.sbl tbody td.f1,.sbl tbody td.f2{background:#fff}.sbl tbody tr:nth-child(even) td.f0,.sbl tbody tr:nth-child(even) td.f1,.sbl tbody tr:nth-child(even) td.f2{background:#f4f6fc}
+.sbl tbody td.f0,.sbl tbody td.f1,.sbl tbody td.f2{background:#fff}.sbl tbody tr:nth-child(even) td.f0,.sbl tbody tr:nth-child(even) td.f1,.sbl tbody tr:nth-child(even) td.f2{background:#f6f7fb}
 .sbl thead .f0,.sbl thead .f1,.sbl thead .f2{z-index:5}
 .sbl .f1 .ce,.sbl .f2 .ce{font-weight:700}
 .sbl td.calc{font-weight:700;font-size:11px;padding:0 2px}
@@ -524,7 +521,7 @@ font:13px/1.35 'Inter',-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink)
 .sbl td.ph{cursor:pointer;padding:4px}.sbl td.ph img{display:block;margin:auto;max-width:100%;max-height:calc(var(--rh) - 8px);object-fit:contain;border-radius:6px}.sbl td.ph span{color:var(--mut);font-size:11px}
 .sbl td.sel{position:relative}.sbl td.sel input,.sbl th input[type=checkbox]{width:18px;height:18px;margin:0;cursor:pointer;accent-color:#3556a8}
 .sbl td.sel .rh{position:absolute;left:0;right:0;bottom:0;height:9px;cursor:row-resize;z-index:4}.sbl td.sel .rh:hover,.sbl td.sel .rh.dr{background:linear-gradient(transparent,rgba(53,86,168,.5))}
-.sbl td.acc-OK{box-shadow:inset 5px 0 0 #2fa866}.sbl td.acc-ATT{box-shadow:inset 5px 0 0 #e0a100}.sbl td.acc-DA{box-shadow:inset 5px 0 0 #d9363e}.sbl td.acc-NS{box-shadow:inset 5px 0 0 #c3cad8}
+.sbl td.acc-OK{box-shadow:inset 5px 0 0 #1f8f6b}.sbl td.acc-ATT{box-shadow:inset 5px 0 0 #f2b134}.sbl td.acc-DA{box-shadow:inset 5px 0 0 #d9482b}.sbl td.acc-NS{box-shadow:inset 5px 0 0 #c3cad8}
 .sbl tr.newrow td{animation:sblfl 2.2s ease-out}@keyframes sblfl{0%{background:#fff3b0}}
 .sbl .smask{position:fixed;inset:0;z-index:48}
 .sbl .smenu{position:fixed;z-index:50;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px rgba(20,30,60,.22);padding:6px;min-width:150px}
