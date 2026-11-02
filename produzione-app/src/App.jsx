@@ -7,6 +7,7 @@ import {
 import { db, auth, ref, set, get, onValue, update } from "./firebase.js";
 import { signOut } from "firebase/auth";
 import { remove } from "firebase/database";
+import SbloccoTab from "./SbloccoTab.jsx";
 /* ═══ COLORI ═══ */
 const M = "#2F5BFF", ML = "#EEF3FF";
 const E = "#0E7490", EL = "#E6F6FA";
@@ -32,6 +33,7 @@ const TABS = [
   { id: "giacenza", icon: "M21 8 12 3 3 8v8l9 5 9-5zM3 8l9 5 9-5M12 13v8", label: "Giacenza" },
   { id: "manovia",  icon: "M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5", label: "Manovia" },
   { id: "piano",    icon: "M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM4 10h16M8 2v4M16 2v4", label: "Piano" },
+  { id: "sblocchi",  icon: "M7 11V8a5 5 0 0 1 9.6-2M5 11h14a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1zM12 15v2", label: "Sblocchi" },
   { id: "rientri",  icon: "M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3", label: "Rientri" },
   { id: "setting",  icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12h2M3 12h2M12 3v2M12 19v2M17 7l1.5-1.5M5.5 18.5 7 17M17 17l1.5 1.5M5.5 5.5 7 7", label: "Setting" },
 ];
@@ -276,6 +278,8 @@ export default function App() {
   const [giac, setGiac] = useState({});
   const [man, setMan] = useState({});
   const [rie, setRie] = useState({});
+  const [sbl, setSbl] = useState({});
+  const [sblFoto, setSblFoto] = useState({});
   const [pia, setPia] = useState({});
   const [pvers, setPvers] = useState({});
 
@@ -323,6 +327,9 @@ export default function App() {
     node._meta = { savedAt: Date.now() };
     await set(ref(db, `manoviaSituazione/${day}`), node);
   }, []);
+
+  useEffect(() => onValue(ref(db, "sblocchi"), (snap) => setSbl(snap.exists() ? snap.val() : {})), []);
+  useEffect(() => onValue(ref(db, "sblocchiFoto"), (snap) => setSblFoto(snap.exists() ? snap.val() : {})), []);
 
   useEffect(() => {
     return onValue(ref(db, "rientri"), (snap) => {
@@ -856,6 +863,7 @@ export default function App() {
         </div>
         {tab === "piano" && <PianoTab pia={pia} vers={pvers} wide={wide} />}
         {tab === "rientri" && <RientriTab rie={rie} wide={wide} />}
+        {tab === "sblocchi" && <SbloccoTab sbl={sbl} foto={sblFoto} />}
       </div>
 
       {!wide && (
