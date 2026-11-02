@@ -3568,6 +3568,15 @@ function PianoTab({ pia, vers, wide }) {
   const nHidden = allWeeks.filter((w) => hideMap[w.k] && !usedW[w.k]).length;
   const nEmpty = weeks.filter((w) => !usedW[w.k]).length;
   const [zm, setZm] = useState(() => { try { const v = parseFloat(localStorage.getItem("piano_zoom")); return v > 0.4 && v <= 1 ? v : 0.7; } catch (e) { return 0.7; } });
+  // quando scorrendo si arriva al piano EMOS, in alto si bloccano le righe di EMOS al posto di quelle MOS
+  const [stickC, setStickC] = useState("MOS");
+  const scrollRef = useRef(null), theadRef = useRef(null), emosBarRef = useRef(null);
+  const onPianoScroll = () => {
+    const h = theadRef.current, e = emosBarRef.current;
+    if (!h || !e) { if (stickC !== "MOS") setStickC("MOS"); return; }
+    const nc = e.getBoundingClientRect().top < h.getBoundingClientRect().bottom - 1 ? "EMOS" : "MOS";
+    if (nc !== stickC) setStickC(nc);
+  };
   const setZoom = (v) => { setZm(v); try { localStorage.setItem("piano_zoom", String(v)); } catch (e) {} };
   const hideWeek = (k) => set(ref(db, `piano/cfg/hide/${k}`), true).catch((e) => window.alert("Operazione non riuscita: " + e.message));
   const hideEmptyPast = () => {
@@ -3636,6 +3645,30 @@ function PianoTab({ pia, vers, wide }) {
     if (weeks[i].k.slice(0, 4) !== weeks[i - 1].k.slice(0, 4)) return { borderLeft: `4px solid ${RED}` };
     if (weeks[i].month !== weeks[i - 1].month) return { borderLeft: "2px solid #5A7494" };
     return {};
+  };
+  // righe "PAIA SETTIMANALI / GIORNALIERE" di un calzaturificio (MOS in alto, EMOS all'inizio del suo piano)
+  const paiaRows = (c) => {
+    const t = totBy[c] || [], cap = capOf(c);
+    const lab = { background: "#EEF2F8", borderRight: `1px solid ${BRD}`, borderBottom: `1px solid ${BRD}`, padding: "4px 12px", fontSize: 11, fontWeight: 800, color: TXT, letterSpacing: "0.06em" };
+    const num = { borderRight: `1px solid ${BRD}`, borderBottom: `1px solid ${BRD}`, textAlign: "center", fontFamily: MONO, fontSize: 12, fontWeight: 800 };
+    return (
+      <Fragment key={"paia-" + c}>
+        <tr>
+          <td colSpan={COLS_L} style={lab}>PAIA SETTIMANALI · {c}</td>
+          {weeks.map((w, i) => { const v = t[i] || 0; return <td key={w.k} style={{ ...num, ...wlOf(i), background: "#EEF2F8", color: TXT }}>{v || ""}</td>; })}
+          <td style={{ background: "#EEF2F8", borderBottom: `1px solid ${BRD}` }} />
+        </tr>
+        <tr>
+          <td colSpan={COLS_L} style={lab}>PAIA GIORNALIERE · {c}{cap ? ` · limite ${cap}` : ""}</td>
+          {weeks.map((w, i) => {
+            const v = t[i] || 0, dl = v ? Math.round(v / daysOf(w)) : 0;
+            const over = cap && dl > cap, near = cap && dl >= cap - 2 && !over;
+            return <td key={w.k} style={{ ...num, ...wlOf(i), background: over ? "#FFE4D6" : near ? "#FFF6D6" : "#EEF2F8", color: over ? "#9A3412" : near ? "#854D0E" : M }}>{dl || ""}</td>;
+          })}
+          <td style={{ background: "#EEF2F8", borderBottom: `1px solid ${BRD}` }} />
+        </tr>
+      </Fragment>
+    );
   };
   const months = [];
   weeks.forEach((w, i) => {
@@ -3746,19 +3779,11 @@ function PianoTab({ pia, vers, wide }) {
             </div>
           )}
 
-          <div style={{ overflow: "auto", maxHeight: `calc((100vh - 150px) / ${zm})`, background: S0, border: `1px solid ${BRD2}`, borderRadius: 14 }}>
+          <div ref={scrollRef} onScroll={onPianoScroll} style={{ overflow: "auto", maxHeight: `calc((100vh - 150px) / ${zm})`, background: S0, border: `1px solid ${BRD2}`, borderRadius: 14 }}>
             <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 12, minWidth: "max-content", width: "100%" }}>
-              <thead style={{ position: "sticky", top: 0, zIndex: 5 }}>
-                <tr>
-                  <td colSpan={COLS_L} style={{ background: "#EEF2F8", borderRight: grid, borderBottom: grid, padding: "4px 12px", fontSize: 11, fontWeight: 800, color: TXT, letterSpacing: "0.06em" }}>PAIA SETTIMANALI · MOS</td>
-                  {weeks.map((w, i) => { const v = (totBy.MOS || [])[i] || 0; return <td key={w.k} style={{ ...wlOf(i), background: "#EEF2F8", borderRight: grid, borderBottom: grid, textAlign: "center", fontFamily: MONO, fontSize: 12, fontWeight: 800, color: TXT }}>{v || ""}</td>; })}
-                  <td style={{ background: "#EEF2F8", borderBottom: grid }} />
-                </tr>
-                <tr>
-                  <td colSpan={COLS_L} style={{ background: "#EEF2F8", borderRight: grid, borderBottom: grid, padding: "4px 12px", fontSize: 11, fontWeight: 800, color: TXT, letterSpacing: "0.06em" }}>PAIA GIORNALIERE · MOS</td>
-                  {weeks.map((w, i) => { const v = (totBy.MOS || [])[i] || 0; return <td key={w.k} style={{ ...wlOf(i), background: "#EEF2F8", borderRight: grid, borderBottom: grid, textAlign: "center", fontFamily: MONO, fontSize: 12, fontWeight: 800, color: M }}>{v ? Math.round(v / daysOf(w)) : ""}</td>; })}
-                  <td style={{ background: "#EEF2F8", borderBottom: grid }} />
-                </tr>
+              <thead ref={theadRef} style={{ position: "sticky", top: 0, zIndex: 5 }}>
+                {stickC === "EMOS" && <tr><td colSpan={COLS_L + NW + 1} style={{ background: M, color: "#fff", padding: "2px 10px", fontWeight: 800, fontSize: 11, letterSpacing: "0.04em" }}>{PI_NAMES.EMOS} · {rows.filter((r) => r.c === "EMOS").length} righe</td></tr>}
+                {paiaRows(stickC)}
                 <tr>
                   <td colSpan={COLS_L} rowSpan={2} style={{ background: "#FFF7E0", borderBottom: `2px solid ${BRD2}`, borderRight: grid, padding: "6px 12px", verticalAlign: "middle" }}>
                     <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", color: "#854D0E" }}>FATTURATO PREVISTO PER MESE</div>
@@ -3802,7 +3827,8 @@ function PianoTab({ pia, vers, wide }) {
                     const sumCell = { textAlign: "center", padding: "5px 2px", fontFamily: MONO, fontWeight: 700, fontSize: 12, borderRight: grid };
                     return (
                       <Fragment key={c}>
-                        <tr><td colSpan={COLS_L + NW + 1} style={{ background: M, color: "#fff", padding: "2px 10px", fontWeight: 800, fontSize: 11, letterSpacing: "0.04em" }}>{PI_NAMES[c] || c} · {rows.filter((r) => r.c === c).length} righe</td></tr>
+                        <tr ref={c === "EMOS" ? emosBarRef : undefined}><td colSpan={COLS_L + NW + 1} style={{ background: M, color: "#fff", padding: "2px 10px", fontWeight: 800, fontSize: 11, letterSpacing: "0.04em" }}>{PI_NAMES[c] || c} · {rows.filter((r) => r.c === c).length} righe</td></tr>
+                        {c === "EMOS" && paiaRows("EMOS")}
                         {list.map((r, zi) => {
                           const nf = info.get(r.id);
                           const rg = gi++;
@@ -3861,6 +3887,7 @@ function PianoTab({ pia, vers, wide }) {
                             </tr>
                           );
                         })}
+                        {c !== "MOS" && c !== "EMOS" && <>
                         <tr>
                           <td colSpan={COLS_L} style={{ ...sumCell, background: "#DCE5F3", textAlign: "left", padding: "6px 12px", fontFamily: FONT, borderTop: `2px solid ${BRD2}` }}>Totale paia pianificate {c}</td>
                           {tot.map((v, i) => <td key={i} style={{ ...sumCell, ...wlOf(i), background: "#DCE5F3", borderTop: `2px solid ${BRD2}` }}>{v || ""}</td>)}
@@ -3880,6 +3907,7 @@ function PianoTab({ pia, vers, wide }) {
                           {fat.map((v, i) => <td key={i} style={{ ...sumCell, ...wlOf(i), background: "#FFF7E0", color: "#854D0E", borderBottom: `2px solid ${BRD2}` }}>{piK(v)}</td>)}
                           <td style={{ background: "#FFF7E0", borderBottom: `2px solid ${BRD2}` }} />
                         </tr>
+                        </>}
                       </Fragment>
                     );
                   });
