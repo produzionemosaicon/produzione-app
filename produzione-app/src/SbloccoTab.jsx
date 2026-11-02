@@ -124,12 +124,14 @@ export default function SbloccoTab({ sbl, foto }) {
   const [modal, setModal] = useState(null);
   const [newId, setNewId] = useState("");
   const [fmenu, setFmenu] = useState(null); // { id, x, y }
+  const [fix, setFix] = useState(null);
   const [busy, setBusy] = useState("");
   const wrapRef = useRef(null);
   const tableRef = useRef(null);
   const drag = useRef(null);
   const phRow = useRef(null);
   const fileRef = useRef(null);
+  useEffect(() => { import("./sbloccoFix.json").then((m) => setFix(m.default)).catch(() => {}); }, []);
 
   const canEdit = true; // modificano tutti quelli che hanno accesso all'app
 
@@ -283,6 +285,25 @@ export default function SbloccoTab({ sbl, foto }) {
     flash("Articolo aggiunto in cima alla produzione");
   };
 
+  /* correzioni ai dati importati dall'Excel (clienti scritti male, riga mancante, foto sbagliate): toccano solo ciò che è ancora com'era all'import */
+  const hashStr = (s) => { let x = 5381; for (let i = 0; i < s.length; i++) x = ((x * 33) ^ s.charCodeAt(i)) >>> 0; return x; };
+  const pend = useMemo(() => {
+    if (!fix || !sbl || !sbl.s0000) return null;
+    const cli = Object.entries(fix.cli || {}).filter(([id, [o]]) => sbl[id] && (sbl[id].cliente || "") === o).map(([id, [, n]]) => [id, n]);
+    const extra = Object.entries(fix.extra || {}).filter(([id]) => !sbl[id]);
+    const fo = Object.entries(fix.foto || {}).filter(([id, f]) => sbl[id] && (f.h === 0 ? !(foto || {})[id] : (foto || {})[id] && hashStr((foto || {})[id]) === f.h));
+    return cli.length + extra.length + fo.length ? { cli, extra, fo } : null;
+  }, [fix, sbl, foto]);
+  const applyFix = async () => {
+    if (!pend) return;
+    const up = {};
+    pend.cli.forEach(([id, n]) => { up[`sblocchi/${id}/cliente`] = n; });
+    pend.extra.forEach(([id, r]) => { up[`sblocchi/${id}`] = r; if (fix.foto && fix.foto[id]) up[`sblocchiFoto/${id}`] = fix.foto[id].v; });
+    pend.fo.forEach(([id, f]) => { up[`sblocchiFoto/${id}`] = f.v; });
+    await update(ref(db), up);
+    flash("Correzioni applicate");
+  };
+
   /* importa lo storico dal file Excel (una volta sola) */
   const importSeed = async () => {
     if (!window.confirm("Caricare nell'app le 555 righe del file Excel «Modelleria Mosaicon» (32 attivi + storico)?")) return;
@@ -371,6 +392,13 @@ export default function SbloccoTab({ sbl, foto }) {
           <button className="btn pri" onClick={importSeed} disabled={!!busy}>{busy || "Importa dal file Excel"}</button>
         </div>
       )}
+      {pend && (
+        <div className="ro imp">
+          <b>Correzioni ai dati importati dall'Excel:</b>{" "}
+          {[pend.cli.length ? `${pend.cli.length} clienti scritti in modo diverso (GO, DONNA, DVN UOMO… → DVN, ecc.)` : "", pend.extra.length ? `${pend.extra.length} modello mancante` : "", pend.fo.length ? `${pend.fo.length} foto sbagliate o mancanti` : ""].filter(Boolean).join(" · ")}{" "}
+          <button className="btn pri" onClick={applyFix}>Applica correzioni</button>
+        </div>
+      )}
       {sel.size > 0 && canEdit && (
         <div className="bulk">
           <b>{sel.size} {sel.size === 1 ? "articolo selezionato" : "articoli selezionati"}</b>
@@ -383,7 +411,7 @@ export default function SbloccoTab({ sbl, foto }) {
         <div className="tip">Trascina il bordo di un'intestazione per allargare la colonna · clic su una cella di stato per il menu, o scrivi liberamente (anche a capo){canEdit ? " · trascina il bordo in basso della casella a sinistra per l'altezza di una riga" : ""}</div>
       </div>
 
-      <div className="wrap" ref={wrapRef}>
+      <div className="wrap" ref={wrapRef} onScroll={(e) => { const w = e.currentTarget; if (list.length > limit && w.scrollTop + w.clientHeight > w.scrollHeight - 500) setLimit((l) => l + PAGE); }}>
         <table ref={tableRef} style={{ width: totalW, zoom: zoom / 100 }}>
           <colgroup>{W.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
           {head()}
