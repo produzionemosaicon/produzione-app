@@ -803,7 +803,7 @@ export default function App() {
         </nav>
       )}
 
-      {tab !== "piano" && <div className="no-print" style={{ position:"sticky", top:0, zIndex:20, background:S0, borderBottom:`1px solid ${BRD}`, padding:"8px 20px", flexShrink:0, display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+      {tab !== "piano" && tab !== "sblocchi" && <div className="no-print" style={{ position:"sticky", top:0, zIndex:20, background:S0, borderBottom:`1px solid ${BRD}`, padding:"8px 20px", flexShrink:0, display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
         <div style={{ flex:"1 1 200px", minWidth:0 }}>
           <div style={{ fontSize:10, fontWeight:600, letterSpacing:"0.14em", color:M }}>MOSAICON · EMOS / {(TABS.find((t) => t.id === tab) || {}).label?.toUpperCase()}</div>
         </div>
