@@ -280,7 +280,6 @@ export default function App() {
   const [rie, setRie] = useState({});
   const [sbl, setSbl] = useState({});
   const [sblFoto, setSblFoto] = useState({});
-  const [sblEd, setSblEd] = useState("");
   const [pia, setPia] = useState({});
   const [pvers, setPvers] = useState({});
 
@@ -331,7 +330,6 @@ export default function App() {
 
   useEffect(() => onValue(ref(db, "sblocchi"), (snap) => setSbl(snap.exists() ? snap.val() : {})), []);
   useEffect(() => onValue(ref(db, "sblocchiFoto"), (snap) => setSblFoto(snap.exists() ? snap.val() : {})), []);
-  useEffect(() => onValue(ref(db, "sbloccoEditori"), (snap) => setSblEd(snap.exists() ? snap.val() : "")), []);
 
   useEffect(() => {
     return onValue(ref(db, "rientri"), (snap) => {
@@ -865,7 +863,7 @@ export default function App() {
         </div>
         {tab === "piano" && <PianoTab pia={pia} vers={pvers} wide={wide} />}
         {tab === "rientri" && <RientriTab rie={rie} wide={wide} />}
-        {tab === "sblocchi" && <SbloccoTab sbl={sbl} foto={sblFoto} editorsRaw={sblEd} email={(auth.currentUser && auth.currentUser.email) || ""} wide={wide} />}
+        {tab === "sblocchi" && <SbloccoTab sbl={sbl} foto={sblFoto} />}
       </div>
 
       {!wide && (

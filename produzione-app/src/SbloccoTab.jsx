@@ -5,7 +5,6 @@ import { db, ref, set, update } from "./firebase.js";
    Database:
      sblocchi/{id}      = una riga (modello) — vedi campi sotto
      sblocchiFoto/{id}  = foto in miniatura (data URL), separata per non appesantire la tabella
-     sbloccoEditori     = testo con le email di chi può modificare, separate da virgola (vuoto = tutti)
    Campi riga: o (ordine), cliente, stag, calz, modello, forma, paia, stato, pc, pm, ps (prove),
      sblocco, conf, taglio, note, orig, h (altezza riga), sb (true = totalmente sbloccato → Storico), sbAt (data),
      c/{COMPONENTE} = { k: codice, f: fornitore, s: sblocco }                                                  */
@@ -108,7 +107,7 @@ function resizeImage(file, max = 160) {
   });
 }
 
-export default function SbloccoTab({ sbl, foto, editorsRaw, email, wide }) {
+export default function SbloccoTab({ sbl, foto }) {
   const [mode, setMode] = useState(false); // false = Attivi, true = Storico
   const [q, setQ] = useState("");
   const [fc, setFc] = useState("");
@@ -130,8 +129,7 @@ export default function SbloccoTab({ sbl, foto, editorsRaw, email, wide }) {
   const phRow = useRef(null);
   const fileRef = useRef(null);
 
-  const editors = useMemo(() => String(editorsRaw || "").split(/[\s,;]+/).map((s) => s.trim().toLowerCase()).filter(Boolean), [editorsRaw]);
-  const canEdit = !editors.length || editors.includes(String(email || "").toLowerCase());
+  const canEdit = true; // modificano tutti quelli che hanno accesso all'app
 
   const all = useMemo(() => Object.entries(sbl || {}).filter(([, r]) => r && typeof r === "object").map(([id, r]) => ({ ...r, id })).sort((a, b) => (a.o || 0) - (b.o || 0)), [sbl]);
   const base = useMemo(() => all.filter((r) => !!r.sb === mode), [all, mode]);
@@ -327,7 +325,6 @@ export default function SbloccoTab({ sbl, foto, editorsRaw, email, wide }) {
           <label className="hs">Altezza righe <input type="range" min="44" max="200" value={rh} onChange={(e) => setRh(+e.target.value)} /></label>
           <select value={fs} onChange={(e) => { setFs(e.target.value); setLimit(PAGE); }}><option value="">Tutte le stagioni</option>{stags.map((s) => <option key={s}>{s}</option>)}</select>
           <select value={fz} onChange={(e) => { setFz(e.target.value); setLimit(PAGE); }}><option value="">Tutti i calzaturifici</option>{calzs.map((s) => <option key={s}>{s}</option>)}</select>
-          {canEdit && <button className="btn" onClick={() => setModal("editors")} title="Chi può modificare">⚙</button>}
         </div>
         <div className="chips">
           <button className={fc ? "" : "on"} onClick={() => { setFc(""); setLimit(PAGE); }}>Tutti<small>{base.length}</small></button>
@@ -335,7 +332,6 @@ export default function SbloccoTab({ sbl, foto, editorsRaw, email, wide }) {
         </div>
       </div>
 
-      {!canEdit && <div className="ro">Puoi consultare il foglio ma non modificarlo: la modifica è riservata a chi è nell'elenco degli editori.</div>}
       {empty && canEdit && (
         <div className="ro imp">
           <b>Il foglio è vuoto.</b> Puoi caricare i dati del file Excel «Modelleria Mosaicon» (articoli attivi, storico e foto).{" "}
@@ -377,7 +373,6 @@ export default function SbloccoTab({ sbl, foto, editorsRaw, email, wide }) {
       )}
       {toast && <div className="toast"><span>{toast.msg}</span>{toast.undo && <button onClick={() => { toast.undo(); setToast(null); }}>Annulla</button>}</div>}
       {modal === "add" && <AddModal rows={all} onClose={() => setModal(null)} onSave={addArticle} />}
-      {modal === "editors" && <EditorsModal value={editorsRaw} me={email} onClose={() => setModal(null)} />}
     </div>
   );
 }
@@ -402,26 +397,6 @@ function AddModal({ rows, onClose, onSave }) {
         <div className="acts">
           <button className="btn" onClick={onClose}>Annulla</button>
           <button className="btn pri" disabled={!f.modello.trim() && !f.cliente.trim()} onClick={() => onSave({ ...f, cliente: f.cliente.trim(), modello: f.modello.trim() })}>Aggiungi alla produzione</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function EditorsModal({ value, me, onClose }) {
-  const [t, setT] = useState(String(value || ""));
-  const list = t.split(/[\s,;]+/).map((s) => s.trim().toLowerCase()).filter(Boolean);
-  const lockout = list.length > 0 && !list.includes(String(me || "").toLowerCase());
-  return (
-    <div className="modal" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="box">
-        <h2>Chi può modificare il foglio</h2>
-        <p style={{ fontSize: 13, color: "#6b7691", margin: "0 0 10px", lineHeight: 1.5 }}>Scrivi le email di chi può modificare (separate da virgola o a capo). Tutti gli altri vedono soltanto. Se lasci vuoto, possono modificare tutti.</p>
-        <textarea rows={5} value={t} onChange={(e) => setT(e.target.value)} placeholder="nome@mosaiconshoes.it, altro@mosaiconshoes.it" style={{ width: "100%", padding: 10, border: "1px solid #e1e6f0", borderRadius: 10, font: "inherit" }} />
-        {lockout && <div style={{ color: "#a30f1b", fontSize: 13, marginTop: 8 }}>Attenzione: la tua email ({me}) non è nell'elenco, non potresti più modificare.</div>}
-        <div className="acts">
-          <button className="btn" onClick={onClose}>Annulla</button>
-          <button className="btn pri" disabled={lockout} onClick={async () => { await dbSet("sbloccoEditori", list.join(", ")); onClose(); }}>Salva</button>
         </div>
       </div>
     </div>
