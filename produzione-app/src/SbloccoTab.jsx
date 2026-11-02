@@ -123,12 +123,15 @@ export default function SbloccoTab({ sbl, foto }) {
   const [toast, setToast] = useState(null);
   const [modal, setModal] = useState(null);
   const [newId, setNewId] = useState("");
+  const [fmenu, setFmenu] = useState(null); // { id, x, y }
+  const [fix, setFix] = useState(null);
   const [busy, setBusy] = useState("");
   const wrapRef = useRef(null);
   const tableRef = useRef(null);
   const drag = useRef(null);
   const phRow = useRef(null);
   const fileRef = useRef(null);
+  useEffect(() => { import("./sbloccoFix.json").then((m) => setFix(m.default)).catch(() => {}); }, []);
 
   const canEdit = true; // modificano tutti quelli che hanno accesso all'app
 
@@ -232,10 +235,41 @@ export default function SbloccoTab({ sbl, foto }) {
   };
 
   /* foto */
-  const pickFoto = (id) => { if (!canEdit) return; phRow.current = id; if (fileRef.current) { fileRef.current.value = ""; fileRef.current.click(); } };
-  const onFoto = async (e) => {
-    const f = e.target.files && e.target.files[0]; if (!f || !phRow.current) return;
-    try { await dbSet(`sblocchiFoto/${phRow.current}`, await resizeImage(f)); } catch (err) { window.alert("Foto non caricata: " + err.message); }
+  const saveFotoBlob = async (id, blob) => {
+    try { await dbSet(`sblocchiFoto/${id}`, await resizeImage(blob)); flash("Foto aggiornata"); } catch (err) { window.alert("Foto non caricata: " + (err && err.message ? err.message : "immagine non valida")); }
+  };
+  const openFotoMenu = (e, id) => {
+    if (!canEdit) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    e.currentTarget.focus();
+    setFmenu({ id, x: Math.min(Math.max(8, r.left), window.innerWidth - 220), y: r.bottom + 190 > window.innerHeight ? Math.max(8, r.top - 190) : r.bottom + 4 });
+  };
+  const fotoFromFile = () => { if (!fmenu) return; phRow.current = fmenu.id; setFmenu(null); if (fileRef.current) { fileRef.current.value = ""; fileRef.current.click(); } };
+  const onFoto = async (e) => { const f = e.target.files && e.target.files[0]; if (f && phRow.current) await saveFotoBlob(phRow.current, f); };
+  const fotoPasteBtn = async () => {
+    const id = fmenu && fmenu.id; setFmenu(null); if (!id) return;
+    try {
+      const items = await navigator.clipboard.read();
+      for (const it of items) { const ty = it.types.find((x) => x.startsWith("image/")); if (ty) { await saveFotoBlob(id, await it.getType(ty)); return; } }
+      window.alert("Negli appunti non c'è nessuna immagine. Copia prima la foto, poi riprova.");
+    } catch { window.alert("Il browser non permette di leggere gli appunti da qui: clicca sulla foto e premi Ctrl+V (o Cmd+V)."); }
+  };
+  const onFotoPaste = async (e, id) => {
+    if (!canEdit) return;
+    const it = [...(e.clipboardData ? e.clipboardData.items : [])].find((x) => x.type.startsWith("image/"));
+    if (!it) return;
+    e.preventDefault(); setFmenu(null); await saveFotoBlob(id, it.getAsFile());
+  };
+  const onFotoDrop = async (e, id) => {
+    e.preventDefault(); if (!canEdit) return;
+    const f = [...(e.dataTransfer ? e.dataTransfer.files : [])].find((x) => x.type.startsWith("image/"));
+    if (f) await saveFotoBlob(id, f);
+  };
+  const fotoDelete = () => {
+    const id = fmenu && fmenu.id; setFmenu(null); if (!id) return;
+    const prev = (foto || {})[id]; if (!prev) return;
+    dbSet(`sblocchiFoto/${id}`, null);
+    flash("Foto eliminata", () => dbSet(`sblocchiFoto/${id}`, prev));
   };
 
   /* aggiungi articolo */
@@ -249,6 +283,25 @@ export default function SbloccoTab({ sbl, foto }) {
     setTimeout(() => setNewId(""), 2500);
     if (wrapRef.current) wrapRef.current.scrollTop = 0;
     flash("Articolo aggiunto in cima alla produzione");
+  };
+
+  /* correzioni ai dati importati dall'Excel (clienti scritti male, riga mancante, foto sbagliate): toccano solo ciò che è ancora com'era all'import */
+  const hashStr = (s) => { let x = 5381; for (let i = 0; i < s.length; i++) x = ((x * 33) ^ s.charCodeAt(i)) >>> 0; return x; };
+  const pend = useMemo(() => {
+    if (!fix || !sbl || !sbl.s0000) return null;
+    const cli = Object.entries(fix.cli || {}).filter(([id, [o]]) => sbl[id] && (sbl[id].cliente || "") === o).map(([id, [, n]]) => [id, n]);
+    const extra = Object.entries(fix.extra || {}).filter(([id]) => !sbl[id]);
+    const fo = Object.entries(fix.foto || {}).filter(([id, f]) => sbl[id] && (f.h === 0 ? !(foto || {})[id] : (foto || {})[id] && hashStr((foto || {})[id]) === f.h));
+    return cli.length + extra.length + fo.length ? { cli, extra, fo } : null;
+  }, [fix, sbl, foto]);
+  const applyFix = async () => {
+    if (!pend) return;
+    const up = {};
+    pend.cli.forEach(([id, n]) => { up[`sblocchi/${id}/cliente`] = n; });
+    pend.extra.forEach(([id, r]) => { up[`sblocchi/${id}`] = r; if (fix.foto && fix.foto[id]) up[`sblocchiFoto/${id}`] = fix.foto[id].v; });
+    pend.fo.forEach(([id, f]) => { up[`sblocchiFoto/${id}`] = f.v; });
+    await update(ref(db), up);
+    flash("Correzioni applicate");
   };
 
   /* importa lo storico dal file Excel (una volta sola) */
@@ -301,7 +354,7 @@ export default function SbloccoTab({ sbl, foto }) {
     if (type === "r") return <td key={key} className="orig">{r.orig || ""}{r.sbAt ? <><br /><b>sbloccato {fmtDate(r.sbAt)}</b></> : null}</td>;
     if (type === "p") {
       const f = (foto || {})[r.id];
-      return <td key={key} className="ph" onClick={() => pickFoto(r.id)}>{f ? <img src={f} alt="" /> : <span>{canEdit ? "+ foto" : ""}</span>}</td>;
+      return <td key={key} className="ph" tabIndex={canEdit ? 0 : undefined} onClick={(e) => openFotoMenu(e, r.id)} onPaste={(e) => onFotoPaste(e, r.id)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => onFotoDrop(e, r.id)} title={canEdit ? "Clic: cambia / incolla / elimina · oppure trascina o incolla (Ctrl+V) un'immagine" : undefined}>{f ? <img src={f} alt="" draggable={false} /> : <span>{canEdit ? "+ foto" : ""}</span>}</td>;
     }
     const v = String(getV(r, key));
     const st = type === "s";
@@ -339,6 +392,13 @@ export default function SbloccoTab({ sbl, foto }) {
           <button className="btn pri" onClick={importSeed} disabled={!!busy}>{busy || "Importa dal file Excel"}</button>
         </div>
       )}
+      {pend && (
+        <div className="ro imp">
+          <b>Correzioni ai dati importati dall'Excel:</b>{" "}
+          {[pend.cli.length ? `${pend.cli.length} clienti scritti in modo diverso (GO, DONNA, DVN UOMO… → DVN, ecc.)` : "", pend.extra.length ? `${pend.extra.length} modello mancante` : "", pend.fo.length ? `${pend.fo.length} foto sbagliate o mancanti` : ""].filter(Boolean).join(" · ")}{" "}
+          <button className="btn pri" onClick={applyFix}>Applica correzioni</button>
+        </div>
+      )}
       {sel.size > 0 && canEdit && (
         <div className="bulk">
           <b>{sel.size} {sel.size === 1 ? "articolo selezionato" : "articoli selezionati"}</b>
@@ -351,7 +411,7 @@ export default function SbloccoTab({ sbl, foto }) {
         <div className="tip">Trascina il bordo di un'intestazione per allargare la colonna · clic su una cella di stato per il menu, o scrivi liberamente (anche a capo){canEdit ? " · trascina il bordo in basso della casella a sinistra per l'altezza di una riga" : ""}</div>
       </div>
 
-      <div className="wrap" ref={wrapRef}>
+      <div className="wrap" ref={wrapRef} onScroll={(e) => { const w = e.currentTarget; if (list.length > limit && w.scrollTop + w.clientHeight > w.scrollHeight - 500) setLimit((l) => l + PAGE); }}>
         <table ref={tableRef} style={{ width: totalW, zoom: zoom / 100 }}>
           <colgroup>{W.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
           {head()}
@@ -370,6 +430,15 @@ export default function SbloccoTab({ sbl, foto }) {
       {menu && (
         <div className="smenu" style={{ left: menu.x, top: menu.y }} onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()}>
           {OPT.map((o) => <button key={o[1]} onClick={() => pickMenu(o[0])}><i style={{ background: o[2] }} />{o[1]}</button>)}
+        </div>
+      )}
+      {fmenu && <div className="smask" onMouseDown={() => setFmenu(null)} />}
+      {fmenu && (
+        <div className="smenu fmenu" style={{ left: fmenu.x, top: fmenu.y }}>
+          <button onClick={fotoFromFile}>📁 Carica da file…</button>
+          <button onClick={fotoPasteBtn}>📋 Incolla dagli appunti</button>
+          {(foto || {})[fmenu.id] && <button className="del" onClick={fotoDelete}>🗑 Elimina foto</button>}
+          <div className="hint">Oppure trascina un'immagine sulla foto, o con la foto selezionata premi Ctrl+V.</div>
         </div>
       )}
       {toast && <div className="toast"><span>{toast.msg}</span>{toast.undo && <button onClick={() => { toast.undo(); setToast(null); }}>Annulla</button>}</div>}
@@ -461,6 +530,7 @@ font:13px/1.35 'Inter',-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink)
 .sbl .smenu{position:fixed;z-index:50;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px rgba(20,30,60,.22);padding:6px;min-width:150px}
 .sbl .smenu button{display:flex;align-items:center;gap:8px;width:100%;border:0;background:transparent;padding:8px 10px;border-radius:8px;font:inherit;font-weight:600;cursor:pointer;text-align:left;color:var(--ink)}.sbl .smenu button:hover{background:#eef2fb}
 .sbl .smenu i{width:12px;height:12px;border-radius:4px;display:inline-block}
+.sbl .smask{position:fixed;inset:0;z-index:49}.sbl .fmenu{z-index:50;min-width:210px}.sbl .fmenu .del{color:#a30f1b}.sbl .fmenu .hint{font-size:11px;color:var(--mut);padding:6px 10px 4px;line-height:1.35;max-width:210px}.sbl td.ph:focus{outline:2px solid #3b6fd4;outline-offset:-2px}
 .sbl .more{padding:0 14px 20px}
 .sbl .toast{position:fixed;left:50%;bottom:78px;transform:translateX(-50%);background:#1b2748;color:#fff;padding:11px 16px;border-radius:12px;display:flex;gap:14px;align-items:center;box-shadow:0 10px 30px rgba(0,0,0,.3);z-index:60}.sbl .toast button{background:transparent;border:0;color:#9ec1ff;font:inherit;font-weight:700;cursor:pointer}
 .sbl .modal{position:fixed;inset:0;background:rgba(20,28,50,.5);display:flex;align-items:center;justify-content:center;z-index:70;padding:16px}
