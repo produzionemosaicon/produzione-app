@@ -239,6 +239,8 @@ export default function App() {
   const zoomRaw = useZoom();
   const zoom = wide ? zoomRaw : 1;
   const [tab, setTab] = useState("home");
+  const [navHide, setNavHide] = useState(() => { try { return localStorage.getItem("navHide") === "1"; } catch { return false; } });
+  const toggleNav = () => setNavHide((v) => { try { localStorage.setItem("navHide", v ? "0" : "1"); } catch {} return !v; });
   const [date, setDate] = useState(() => todayStr());
   const [stations, setStations] = useState(DEF_STATIONS);
   const [reports, setReports] = useState({});
@@ -776,7 +778,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ maxWidth: wide ? Math.floor(window.innerWidth / zoom) : 900, zoom: zoom > 1 ? zoom : undefined, margin:"0 auto", minHeight: zoom > 1 ? `${100 / zoom}dvh` : "100dvh", display:"flex", flexDirection:"column", background:BG, fontFamily:FONT, paddingLeft: wide ? 52 : 0 }}>
+    <div style={{ maxWidth: wide ? Math.floor(window.innerWidth / zoom) : 900, zoom: zoom > 1 ? zoom : undefined, margin:"0 auto", minHeight: zoom > 1 ? `${100 / zoom}dvh` : "100dvh", display:"flex", flexDirection:"column", background:BG, fontFamily:FONT, paddingLeft: wide && !navHide ? 52 : 0 }}>
       <style>{`
         @keyframes cellFlash { 0%{background:rgba(0,184,122,0)} 30%{background:rgba(0,184,122,0.25)} 100%{background:rgba(0,184,122,0)} }
         .cell-flash { animation: cellFlash 1.5s ease-out forwards; }
@@ -786,9 +788,15 @@ export default function App() {
         .print-only{display:none}
       `}</style>
 
-      {wide && (
+      {wide && navHide && (
+        <button className="no-print" onClick={toggleNav} aria-label="Mostra menu" title="Mostra menu"
+          style={{ position:"fixed", left:6, top:6, width:30, height:30, borderRadius:9, background:TXT, border:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", zIndex:31, opacity:0.88, boxShadow:"0 1px 4px rgba(0,0,0,.25)", padding:0 }}>
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true"><path d="M12 2.8 20 7.4v9.2l-8 4.6-8-4.6V7.4z"/><path d="M12 12 20 7.4M12 12v9.2M12 12 4 7.4" stroke="#7FA0FF"/></svg>
+        </button>
+      )}
+      {wide && !navHide && (
         <nav className="no-print" aria-label="Sezioni" style={{ position:"fixed", left:0, top:0, bottom:0, width:52, background:S0, borderRight:`1px solid ${BRD}`, padding:"12px 0", display:"flex", flexDirection:"column", alignItems:"center", gap:6, zIndex:30, overflowY:"auto" }}>
-          <div style={{ width:36, height:36, borderRadius:10, background:TXT, display:"flex", alignItems:"center", justifyContent:"center", marginBottom:10, flexShrink:0 }}>
+          <div role="button" tabIndex={0} onClick={toggleNav} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && toggleNav()} title="Nascondi menu" aria-label="Nascondi menu" style={{ width:36, height:36, borderRadius:10, background:TXT, display:"flex", alignItems:"center", justifyContent:"center", marginBottom:10, flexShrink:0, cursor:"pointer" }}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true"><path d="M12 2.8 20 7.4v9.2l-8 4.6-8-4.6V7.4z"/><path d="M12 12 20 7.4M12 12v9.2M12 12 4 7.4" stroke="#7FA0FF"/></svg>
           </div>
           {TABS.map(({ id, icon, label }) => {
