@@ -776,7 +776,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ maxWidth: wide ? Math.floor(window.innerWidth / zoom) : 900, zoom: zoom > 1 ? zoom : undefined, margin:"0 auto", minHeight: zoom > 1 ? `${100 / zoom}dvh` : "100dvh", display:"flex", flexDirection:"column", background:BG, fontFamily:FONT, paddingLeft: wide ? 92 : 0 }}>
+    <div style={{ maxWidth: wide ? Math.floor(window.innerWidth / zoom) : 900, zoom: zoom > 1 ? zoom : undefined, margin:"0 auto", minHeight: zoom > 1 ? `${100 / zoom}dvh` : "100dvh", display:"flex", flexDirection:"column", background:BG, fontFamily:FONT, paddingLeft: wide ? 52 : 0 }}>
       <style>{`
         @keyframes cellFlash { 0%{background:rgba(0,184,122,0)} 30%{background:rgba(0,184,122,0.25)} 100%{background:rgba(0,184,122,0)} }
         .cell-flash { animation: cellFlash 1.5s ease-out forwards; }
@@ -787,24 +787,23 @@ export default function App() {
       `}</style>
 
       {wide && (
-        <nav className="no-print" aria-label="Sezioni" style={{ position:"fixed", left:0, top:0, bottom:0, width:92, background:S0, borderRight:`1px solid ${BRD}`, padding:"16px 0", display:"flex", flexDirection:"column", alignItems:"center", gap:6, zIndex:30, overflowY:"auto" }}>
-          <div style={{ width:44, height:44, borderRadius:12, background:TXT, display:"flex", alignItems:"center", justifyContent:"center", marginBottom:12, flexShrink:0 }}>
+        <nav className="no-print" aria-label="Sezioni" style={{ position:"fixed", left:0, top:0, bottom:0, width:52, background:S0, borderRight:`1px solid ${BRD}`, padding:"12px 0", display:"flex", flexDirection:"column", alignItems:"center", gap:6, zIndex:30, overflowY:"auto" }}>
+          <div style={{ width:36, height:36, borderRadius:10, background:TXT, display:"flex", alignItems:"center", justifyContent:"center", marginBottom:10, flexShrink:0 }}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true"><path d="M12 2.8 20 7.4v9.2l-8 4.6-8-4.6V7.4z"/><path d="M12 12 20 7.4M12 12v9.2M12 12 4 7.4" stroke="#7FA0FF"/></svg>
           </div>
           {TABS.map(({ id, icon, label }) => {
             const on = tab === id;
             return (
-              <button key={id} onClick={() => setTab(id)} aria-current={on ? "page" : undefined} aria-label={label}
-                style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:3, width:68, minHeight:52, borderRadius:12, cursor:"pointer", fontFamily:FONT, fontSize:10, fontWeight:600, border:"none", background: on ? ML : "transparent", color: on ? M : T2, boxShadow: on ? `inset 0 0 0 1px #C9D7FF` : "none", flexShrink:0 }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icon} /></svg>
-                <span>{label}</span>
+              <button key={id} onClick={() => setTab(id)} aria-current={on ? "page" : undefined} aria-label={label} title={label}
+                style={{ display:"flex", alignItems:"center", justifyContent:"center", width:40, height:40, borderRadius:10, cursor:"pointer", border:"none", background: on ? ML : "transparent", color: on ? M : T2, boxShadow: on ? `inset 0 0 0 1px #C9D7FF` : "none", flexShrink:0 }}>
+                <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icon} /></svg>
               </button>
             );
           })}
         </nav>
       )}
 
-      {tab !== "piano" && <div className="no-print" style={{ position:"sticky", top:0, zIndex:20, background:S0, borderBottom:`1px solid ${BRD}`, padding:"8px 20px", flexShrink:0, display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+      {tab !== "piano" && tab !== "sblocchi" && <div className="no-print" style={{ position:"sticky", top:0, zIndex:20, background:S0, borderBottom:`1px solid ${BRD}`, padding:"8px 20px", flexShrink:0, display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
         <div style={{ flex:"1 1 200px", minWidth:0 }}>
           <div style={{ fontSize:10, fontWeight:600, letterSpacing:"0.14em", color:M }}>MOSAICON · EMOS / {(TABS.find((t) => t.id === tab) || {}).label?.toUpperCase()}</div>
         </div>
