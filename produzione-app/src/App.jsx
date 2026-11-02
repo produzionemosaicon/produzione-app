@@ -3632,7 +3632,7 @@ function PianoTab({ pia, vers, wide }) {
     weeks.forEach((w, i) => { const v = piPn(r, w.k); if (v) { totBy[c][i] += v; fatBy[c][i] += v * (+r.p || 0); grand[i] += v; grandF[i] += v * (+r.p || 0); } });
   });
   const wlOf = (i) => {
-    if (i <= 0) return {};
+    if (i <= 0) return { borderLeft: `4px solid ${RED}` }; // linea rossa che separa Check dalle settimane
     if (weeks[i].k.slice(0, 4) !== weeks[i - 1].k.slice(0, 4)) return { borderLeft: `4px solid ${RED}` };
     if (weeks[i].month !== weeks[i - 1].month) return { borderLeft: "2px solid #5A7494" };
     return {};
