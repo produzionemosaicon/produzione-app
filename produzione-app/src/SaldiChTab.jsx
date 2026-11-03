@@ -116,7 +116,9 @@ export default function SaldiChTab({ data }) {
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const D = data || {};
-  const POs = useMemo(() => Object.entries(D.po || {}).sort((a, b) => num(a[1].o) - num(b[1].o)), [D.po]);
+  // ordine del riepilogo: per blocco d'ordine Gea (serie / numero / riga), poi ordine di inserimento
+  const blKey = (bl) => { const m = String(bl || "").match(/(\d+)\s*\/\s*(\d+)(?:\D+(\d+))?/); return m ? [num(m[1]), num(m[2]), m[3] ? num(m[3]) : 0] : [999, 0, 0]; };
+  const POs = useMemo(() => Object.entries(D.po || {}).sort((a, b) => { const x = blKey(a[1].bl), y = blKey(b[1].bl); return x[0] - y[0] || x[1] - y[1] || x[2] - y[2] || num(a[1].o) - num(b[1].o); }), [D.po]);
   const list = (k) => Object.entries(D[k] || {}).filter(([, x]) => x && x.po);
   const pend = list("pend"), rej = list("rej"), res = list("res");
   const props = Object.entries(D.prop || {}).filter(([, x]) => x && !x.stato).sort((a, b) => String(a[1].d).localeCompare(String(b[1].d)));
