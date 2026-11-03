@@ -1,4 +1,4 @@
-import { useState, useMemo, Fragment } from "react";
+import { useState, useMemo, Fragment, useRef, useEffect } from "react";
 import { db, ref, set, update, get } from "./firebase.js";
 
 /* ═══ SALDI CHROME HEARTS (uso INTERNO: contiene STIL3, non mostrare al cliente) ═══
@@ -62,6 +62,53 @@ const nc = { ...td, textAlign: "center", fontFamily: MONO, fontWeight: 700 };
 const pill = (txt, bg, fg) => <span style={{ background: bg, color: fg, fontWeight: 800, fontSize: 11, padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap" }}>{txt}</span>;
 const stPill = (s) => s === "Chiuso" ? pill(s, "#DCFCE7", "#166534") : /RITARDO/.test(s) ? pill(s, "#FFE4D6", "#9A3412") : pill(s, "#FFF6D6", "#854D0E");
 
+/* filtro stile Excel sull'intestazione (stesso del PIANO) */
+function FilterTh({ label, style, values, selected, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
+  const [qq, setQq] = useState("");
+  const btn = useRef(null);
+  const on = selected.length > 0;
+  useEffect(() => {
+    if (!open) return;
+    const close = (e) => { if (!e.target.closest || !e.target.closest("[data-fpop]")) setOpen(false); };
+    const esc = (e) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("mousedown", close); window.addEventListener("keydown", esc);
+    return () => { window.removeEventListener("mousedown", close); window.removeEventListener("keydown", esc); };
+  }, [open]);
+  const toggle = (v) => onChange(selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v]);
+  const list = values.filter((v) => v.label.toUpperCase().includes(qq.trim().toUpperCase()));
+  return (
+    <th style={style}>
+      <div style={{ display: "flex", alignItems: "center", gap: 3, justifyContent: style.textAlign === "left" ? "flex-start" : "center" }}>
+        <span>{label}</span>
+        <button ref={btn} data-fpop="1" aria-label={`Filtra ${label}`}
+          onClick={() => { const r = btn.current.getBoundingClientRect(); setPos({ x: Math.min(r.left, window.innerWidth - 250), y: r.bottom + 4 }); setQq(""); setOpen(!open); }}
+          style={{ border: "none", background: on ? M : "transparent", color: on ? "#fff" : T2, borderRadius: 4, fontSize: 9, lineHeight: 1, padding: "2px 3px", cursor: "pointer" }}>▾</button>
+      </div>
+      {open && pos && (
+        <div data-fpop="1" style={{ position: "fixed", left: pos.x, top: pos.y, width: 240, zIndex: 80, background: S0, border: `1px solid ${BRD2}`, borderRadius: 12, boxShadow: "0 12px 32px rgba(11,18,32,0.18)", padding: 8, textAlign: "left", fontFamily: FONT, fontWeight: 600, textTransform: "none", letterSpacing: 0, color: TXT }}>
+          <input autoFocus value={qq} onChange={(e) => setQq(e.target.value)} placeholder="Cerca…" style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${BRD2}`, borderRadius: 8, padding: "6px 8px", fontSize: 12, fontFamily: FONT, outline: "none" }} />
+          <div style={{ display: "flex", gap: 6, margin: "6px 0" }}>
+            <button onClick={() => onChange(list.map((v) => v.key))} style={{ flex: 1, fontSize: 11, border: `1px solid ${BRD2}`, background: S1, borderRadius: 6, padding: "4px 0", cursor: "pointer", fontFamily: FONT }}>Seleziona tutti</button>
+            <button onClick={() => onChange([])} style={{ flex: 1, fontSize: 11, border: `1px solid ${BRD2}`, background: S1, borderRadius: 6, padding: "4px 0", cursor: "pointer", fontFamily: FONT }}>Cancella filtro</button>
+          </div>
+          <div style={{ maxHeight: 260, overflowY: "auto" }}>
+            {list.map((v) => (
+              <label key={v.key} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 4px", fontSize: 12, cursor: "pointer", borderRadius: 6 }}>
+                <input type="checkbox" checked={selected.includes(v.key)} onChange={() => toggle(v.key)} />
+                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.label}</span>
+                <span style={{ color: T3, fontSize: 10 }}>{v.n}</span>
+              </label>
+            ))}
+            {list.length === 0 && <div style={{ fontSize: 11, color: T3, padding: 6 }}>Nessun valore</div>}
+          </div>
+        </div>
+      )}
+    </th>
+  );
+}
+
 export default function SaldiChTab({ data }) {
   const [view, setView] = useState("riep");
   const [open, setOpen] = useState({});
@@ -118,8 +165,18 @@ export default function SaldiChTab({ data }) {
   const isClosed = (r) => num(r.p.q) > 0 && num(r.p.sped) >= num(r.p.q) && !r.pe && !r.rj && !r.rs;
   const [showClosed, setShowClosed] = useState(false);
   const nClosed = rows.filter(isClosed).length;
-  const shown = rows.filter((r) => (showClosed || !isClosed(r)) && (!qq || `${r.rif} ${r.p.mod} ${r.p.col} ${r.p.po} ${r.p.bl}`.toUpperCase().includes(qq)));
-  const T = rows.reduce((t, r) => ({ saldo: t.saldo + r.saldo, ready: t.ready + num(r.p.ready), readyS: t.readyS + num(r.p.readyS), pe: t.pe + r.pe, rj: t.rj + r.rj, rs: t.rs + r.rs }), { saldo: 0, ready: 0, readyS: 0, pe: 0, rj: 0, rs: 0 });
+  // filtri stile Excel per colonna: chiave → valori selezionati (vuoto = tutti)
+  const FCOLS = [["rif", "RIF", (r) => r.rif], ["mod", "Modello", (r) => r.p.mod], ["col", "Colore", (r) => r.p.col], ["po", "PO", (r) => r.p.po], ["bl", "Blocco Gea", (r) => r.p.bl],
+    ["q", "Q.tà ordine", (r) => r.p.q], ["sped", "Spedite al cliente", (r) => r.p.sped], ["saldo", "Saldo da spedire", (r) => r.saldo], ["ready", "Da noi", (r) => r.p.ready], ["readyS", "Da STIL3", (r) => r.p.readyS],
+    ["prod", "Mancanti", (r) => r.prod], ["rs", "di cui con motivo", (r) => r.rs], ["pe", "Pending cliente", (r) => r.pe], ["rj", "Rejected cliente", (r) => r.rj], ["note", "Note", (r) => r.p.note]];
+  const [cf, setCf] = useState({});
+  const fval = (get, r) => { const v = get(r); return v === undefined || v === null || v === "" || v === 0 ? "" : String(v); };
+  const base = rows.filter((r) => showClosed || !isClosed(r));
+  const passCf = (r, skip) => FCOLS.every(([k, , get]) => k === skip || !(cf[k] || []).length || cf[k].includes(fval(get, r)));
+  const fOpts = (k, get) => { const m = new Map(); base.filter((r) => passCf(r, k)).forEach((r) => { const v = fval(get, r); m.set(v, (m.get(v) || 0) + 1); }); return [...m.entries()].sort((a, b) => (isNaN(a[0]) || isNaN(b[0]) || a[0] === "" || b[0] === "" ? a[0].localeCompare(b[0], "it", { numeric: true }) : num(a[0]) - num(b[0]))).map(([key, n]) => ({ key, label: key === "" ? "(vuoto / 0)" : key, n })); };
+  const cfOn = Object.values(cf).some((a) => a && a.length);
+  const shown = base.filter((r) => passCf(r) && (!qq || `${r.rif} ${r.p.mod} ${r.p.col} ${r.p.po} ${r.p.bl}`.toUpperCase().includes(qq)));
+  const T = shown.reduce((t, r) => ({ saldo: t.saldo + r.saldo, ready: t.ready + num(r.p.ready), readyS: t.readyS + num(r.p.readyS), pe: t.pe + r.pe, rj: t.rj + r.rj, rs: t.rs + r.rs }), { saldo: 0, ready: 0, readyS: 0, pe: 0, rj: 0, rs: 0 });  // totali e riquadri seguono i filtri
 
   const applyProp = async (id, pr, sc) => {
     if (!window.confirm(`Confermi: «${sc.lab}»?`)) return;
@@ -267,7 +324,7 @@ export default function SaldiChTab({ data }) {
       <div style={{ overflow: "auto", maxHeight: "calc(100vh - 260px)", background: S0, border: `1px solid ${BRD2}`, borderRadius: 14 }}>
         {view === "riep" && (
           <table style={{ borderCollapse: "separate", borderSpacing: 0, minWidth: "max-content", width: "100%" }}>
-            <thead><tr>{["", "RIF", "Modello", "Colore", "PO", "Blocco Gea", "Q.tà ordine", "Spedite al cliente", "Saldo da spedire", "Da noi", "Da STIL3", "Mancanti", "di cui con motivo", "Pending cliente", "Rejected cliente", "Note"].map((h, i) => <th key={i} style={th}>{h}</th>)}</tr></thead>
+            <thead><tr><th style={th}>{cfOn && <button onClick={() => setCf({})} title="Togli tutti i filtri" style={{ border: "none", background: RED, color: "#fff", borderRadius: 6, fontSize: 10, fontWeight: 800, padding: "2px 5px", cursor: "pointer" }}>✕</button>}</th>{FCOLS.map(([k, l, get]) => <FilterTh key={k} label={l} style={{ ...th, textAlign: ["mod", "col", "note"].includes(k) ? "left" : "center" }} values={fOpts(k, get)} selected={cf[k] || []} onChange={(v) => setCf((c) => ({ ...c, [k]: v }))} />)}</tr></thead>
             <tbody>
               {shown.map((r) => { const s = (f) => (v) => wr(`po/${r.rif}/${f}`, v); const op = !!open[r.rif]; const nDet = by(pend, r.rif).length + by(rej, r.rif).length + by(res, r.rif).length; return (
                 <Fragment key={r.rif}>
