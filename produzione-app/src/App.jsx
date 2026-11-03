@@ -3886,14 +3886,17 @@ function PianoTab({ pia, vers, wide }) {
                 {stickC === "EMOS" && <tr><td colSpan={COLS_L + NW + 1} style={{ background: M, color: "#fff", padding: "2px 10px", fontWeight: 800, fontSize: 11, letterSpacing: "0.04em" }}>{PI_NAMES.EMOS} · {rows.filter((r) => r.c === "EMOS").length} righe</td></tr>}
                 {paiaRows(stickC)}
                 <tr>
-                  <td colSpan={COLS_L} rowSpan={2} style={{ background: "#FFF7E0", borderBottom: `2px solid ${BRD2}`, borderRight: grid, padding: "6px 12px", verticalAlign: "middle" }}>
+                  <td colSpan={COLS_L - 4} rowSpan={2} style={{ background: "#FFF7E0", borderBottom: `2px solid ${BRD2}`, borderRight: grid, padding: "6px 12px", verticalAlign: "middle" }}>
                     <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", color: "#854D0E" }}>FATTURATO PREVISTO PER MESE</div>
                     <div style={{ fontSize: 11, color: "#854D0E" }}>paia pianificate × prezzo medio; si aggiorna mentre scrivi</div>
                   </td>
+                  <td title="Giacenza di magazzino × prezzo medio, tutti i calzaturifici (non cambia con i filtri)" style={{ background: "#C9CED6", borderRight: grid, textAlign: "center", padding: "6px 4px 0", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", color: "#374151", whiteSpace: "nowrap" }}>VALORE GIAC.</td>
+                  <td colSpan={3} rowSpan={2} style={{ background: "#FFF7E0", borderBottom: `2px solid ${BRD2}`, borderRight: grid }} />
                   {months.map((m, i) => <td key={i} colSpan={m.span} style={{ background: "#FFF7E0", borderRight: grid, ...wlOf(m.first), textAlign: "center", padding: "6px 4px 0", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", color: "#854D0E" }}>{m.name}</td>)}
                   <td rowSpan={2} style={{ background: "#FFF7E0", borderBottom: `2px solid ${BRD2}` }} />
                 </tr>
                 <tr>
+                  <td style={{ background: "#C9CED6", borderRight: grid, borderBottom: `2px solid ${BRD2}`, textAlign: "center", padding: "0 4px 6px", fontFamily: MONO, fontSize: 13, fontWeight: 800, color: TXT, whiteSpace: "nowrap" }}>{piEur(rows.reduce((t, r) => t + (+r.g || 0) * (+r.p || 0), 0))}<div style={{ fontSize: 9, fontWeight: 600, color: "#4B5563" }}>{rows.reduce((t, r) => t + (+r.g || 0), 0).toLocaleString("it-IT")} paia</div></td>
                   {months.map((m, i) => <td key={i} colSpan={m.span} style={{ background: "#FFF7E0", borderRight: grid, ...wlOf(m.first), borderBottom: `2px solid ${BRD2}`, textAlign: "center", padding: "0 4px 6px", fontFamily: MONO, fontSize: 13, fontWeight: 700, color: TXT }}>{piEur(m.eur)}</td>)}
                 </tr>
                 <tr>
