@@ -63,6 +63,45 @@ const nc = { ...td, textAlign: "center", fontFamily: MONO, fontWeight: 700 };
 const pill = (txt, bg, fg) => <span style={{ background: bg, color: fg, fontWeight: 800, fontSize: 11, padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap" }}>{txt}</span>;
 const stPill = (s) => s === "Chiuso" ? pill(s, "#DCFCE7", "#166534") : /RITARDO/.test(s) ? pill(s, "#FFE4D6", "#9A3412") : pill(s, "#FFF6D6", "#854D0E");
 
+/* esportazione Excel: riepilogo (righe filtrate, nell'ordine visto) + pending, rejected e motivi dei mancanti */
+async function exportSaldiXlsx({ rows, pend, rej, res, label }) {
+  const ExcelJS = (await import("exceljs")).default;
+  const wb = new ExcelJS.Workbook();
+  const thin = { style: "thin", color: { argb: "FFBBBBBB" } };
+  const dt = (v) => (v && /^\d{4}-\d\d-\d\d/.test(v) ? new Date(v.slice(0, 10) + "T12:00:00") : v || null);
+  const sheet = (name, head, data, widths) => {
+    const ws = wb.addWorksheet(name, { views: [{ state: "frozen", ySplit: 3 }] });
+    ws.getCell(1, 1).value = "Saldi Chrome Hearts – " + name; ws.getCell(1, 1).font = { bold: true, size: 14, color: { argb: "FF1F3A5F" } };
+    ws.getCell(2, 1).value = `USO INTERNO MOSAICON – contiene STIL3, non inviare al cliente · estratto il ${new Date().toLocaleString("it-IT")}`; ws.getCell(2, 1).font = { italic: true, size: 9, color: { argb: "FFC00000" } };
+    head.forEach((h, i) => { const c = ws.getCell(3, i + 1); c.value = h; c.font = { bold: true, color: { argb: "FFFFFFFF" } }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F3A5F" } }; c.alignment = { horizontal: "center", vertical: "middle", wrapText: true }; c.border = { top: thin, bottom: thin, left: thin, right: thin }; });
+    ws.getRow(3).height = 32;
+    data.forEach((r, k) => r.forEach((v, i) => { const c = ws.getCell(4 + k, i + 1); c.value = dt(v); if (c.value instanceof Date) c.numFmt = "dd/mm/yy"; c.border = { top: thin, bottom: thin, left: thin, right: thin }; }));
+    widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+    ws.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3 + data.length, column: head.length } };
+    return ws;
+  };
+  const ws = sheet("Riepilogo", ["RIF", "Modello", "Colore", "PO", "Blocco Gea", "Q.tà ordine", "Spedite al cliente", "Saldo da spedire", "Da noi", "Da STIL3", "Mancanti", "di cui con motivo", "Pending cliente", "Rejected cliente", "Note"],
+    rows.map((r) => [r.rif, r.p.mod, r.p.col, r.p.po, r.p.bl, num(r.p.q), num(r.p.sped), r.saldo, num(r.p.ready), num(r.p.readyS), r.prod, r.rs, r.pe, r.rj, r.p.note || ""]),
+    [7, 22, 20, 12, 10, 9, 10, 10, 9, 9, 10, 10, 10, 10, 60]);
+  const tr = 4 + rows.length; ws.getCell(tr, 2).value = "TOTALE"; ws.getRow(tr).font = { bold: true };
+  for (let c = 6; c <= 14; c++) { const L = String.fromCharCode(64 + c); ws.getCell(tr, c).value = { formula: `SUM(${L}4:${L}${tr - 1})`, result: rows.reduce((t, r) => t + (num(ws.getCell(4 + rows.indexOf(r), c).value) || 0), 0) }; }
+  const keep = new Set(rows.map((r) => r.rif));
+  const sel = (arr) => arr.filter(([, x]) => keep.has(x.po)).sort((a, b) => String(a[1].po).localeCompare(String(b[1].po)) || String(a[1].d || "").localeCompare(String(b[1].d || "")));
+  sheet("Pending cliente", ["PO", "Report QC", "Data QC", "Ispettore", "Taglie", "Paia", "Difetto", "Dettaglio", "Ripresentare entro", "Reso a STIL3", "DDT reso", "Rientrate", "Rientrate il", "Ricontrollo", "Approvate", "→ Rejected", "Aperte", "Stato"],
+    sel(pend).map(([, x]) => [label(x.po), x.rep, x.d, x.isp, x.tg, num(x.n), x.dif, x.det, x.entro, x.reso, x.ddtReso, num(x.rientr) || null, x.rientrD, x.ric, num(x.appr) || null, num(x.rej) || null, pendOpen(x), pendState(x)]),
+    [30, 22, 10, 16, 30, 7, 18, 60, 11, 11, 10, 9, 11, 11, 9, 9, 8, 22]);
+  sheet("Rejected cliente", ["PO", "Report QC", "Data", "Taglie", "Paia", "Motivo", "Dettaglio", "Materiale da riordinare", "Nuova bolla Gea", "Deadline cliente", "Consegna prevista", "Rifatte e spedite", "Aperte", "Stato"],
+    sel(rej).map(([, x]) => [label(x.po), x.rep, x.d, x.tg, num(x.n), x.mot, x.det, x.mat, x.bolla, x.dl, x.cons, num(x.fatte) || null, rejOpen(x), rejState(x)]),
+    [30, 22, 10, 24, 7, 20, 50, 22, 12, 11, 11, 10, 8, 20]);
+  sheet("Mancanti - motivi", ["PO", "Blocco Gea", "Paia", "Motivo", "Dettaglio", "Azione", "Sollecitato il", "Arrivo previsto", "Arrivate", "Aperte", "Stato"],
+    sel(res).map(([, x]) => [label(x.po), x.bl, num(x.n), x.mot, x.det, x.az, x.soll, x.prev, num(x.arr) || null, resOpen(x), x.stato || "Aperto"]),
+    [30, 10, 7, 26, 60, 30, 11, 11, 9, 8, 12]);
+  const buf = await wb.xlsx.writeBuffer();
+  const url = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+  const a = document.createElement("a"); a.href = url; a.download = `Saldi_Chrome_Hearts_INTERNO_${today()}.xlsx`; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
 /* filtro stile Excel sull'intestazione (stesso del PIANO) */
 function FilterTh({ label, style, values, selected, onChange }) {
   const [open, setOpen] = useState(false);
@@ -289,7 +328,8 @@ export default function SaldiChTab({ data }) {
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
         {kpi("Saldo da spedire", T.saldo)}{kpi("Da noi", T.ready, GRN)}{kpi("Da STIL3", T.readyS, "#854D0E")}{kpi("Mancanti", T.saldo - T.ready - T.readyS, RED)}{kpi("Pending cliente", T.pe, T3)}{kpi("Rejected cliente", T.rj, T3)}
-        <input placeholder="Cerca PO, modello, colore, blocco…" value={q} onChange={(e) => setQ(e.target.value)} style={{ marginLeft: "auto", alignSelf: "center", minWidth: 240, border: `1.5px solid ${BRD2}`, borderRadius: 10, padding: "9px 12px", fontFamily: FONT, fontSize: 13 }} />
+        <button disabled={busy} onClick={async () => { setBusy(true); try { await exportSaldiXlsx({ rows: shown, pend, rej, res, label }); } catch (e) { window.alert("Export non riuscito: " + e.message); } finally { setBusy(false); } }} title="Scarica in Excel le righe visibili (con i filtri attivi) e i loro pending, rejected e motivi" style={{ marginLeft: "auto", alignSelf: "center", background: GRN, color: "#fff", border: "none", borderRadius: 10, padding: "9px 14px", fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>⬇ Scarica Excel</button>
+        <input placeholder="Cerca PO, modello, colore, blocco…" value={q} onChange={(e) => setQ(e.target.value)} style={{ alignSelf: "center", minWidth: 240, border: `1.5px solid ${BRD2}`, borderRadius: 10, padding: "9px 12px", fontFamily: FONT, fontSize: 13 }} />
       </div>
 
       {alerts.length > 0 && (
