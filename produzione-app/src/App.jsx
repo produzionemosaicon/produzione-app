@@ -3529,7 +3529,7 @@ const piCleanRow = (r) => {
 };
 
 // intestazione di colonna con filtro a tendina (stile Excel): elenco valori con spunte + ricerca
-function FilterTh({ label, style, values, selected, onChange }) {
+function FilterTh({ label, style, values, selected, onChange, extra }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState(null);
   const [qq, setQq] = useState("");
@@ -3546,6 +3546,7 @@ function FilterTh({ label, style, values, selected, onChange }) {
   const list = values.filter((v) => v.label.toUpperCase().includes(qq.trim().toUpperCase()));
   return (
     <th style={style}>
+      {extra}
       <div style={{ display: "flex", alignItems: "center", gap: 3, justifyContent: style.textAlign === "left" ? "flex-start" : "center" }}>
         <span>{label}</span>
         <button ref={btn} data-fpop="1" aria-label={`Filtra ${label}`}
@@ -3706,6 +3707,37 @@ function PianoTab({ pia, vers, wide }) {
   const COLS_L = 19; // colonne prima delle settimane: sel, brand, articolo, cons, blocco, R, 6 materiali, mat, qnt, sped, giac, prezzo, saldo, check
   const capOf = (c) => +(cfg.cap && cfg.cap[c]) || 0;
   const daysOf = (w) => (cfg.days && +cfg.days[w.k]) || w.days;
+  // larghezza colonne e altezza righe regolabili col mouse (come in Excel), salvate nel browser
+  const [colW, setColW] = useState(() => { try { return JSON.parse(localStorage.getItem("piano_colw") || "null"); } catch (e) { return null; } });
+  const [rowH, setRowH] = useState(() => { try { return JSON.parse(localStorage.getItem("piano_rowh") || "{}") || {}; } catch (e) { return {}; } });
+  const tableRef = useRef(null);
+  const colKeys = [...Array.from({ length: COLS_L }, (_, i) => "L" + i), ...weeks.map((w) => w.k), "S"];
+  const dragStart = (e, onMove, onEnd) => {
+    e.preventDefault(); e.stopPropagation();
+    const mv = (ev) => onMove(ev);
+    const up = () => { window.removeEventListener("mousemove", mv); window.removeEventListener("mouseup", up); onEnd(); };
+    window.addEventListener("mousemove", mv); window.addEventListener("mouseup", up);
+  };
+  const startColDrag = (e, idx) => {
+    const hr = theadRef.current && theadRef.current.lastElementChild; if (!hr) return;
+    const ths = hr.children, th0 = ths[idx]; if (!th0) return;
+    const sc = th0.getBoundingClientRect().width / (th0.offsetWidth || 1) || 1;
+    let base = colW;
+    if (!base) { base = {}; colKeys.forEach((k, i) => { base[k] = ths[i] ? Math.round(ths[i].offsetWidth) : 54; }); }
+    const key = colKeys[idx], w0 = base[key] || th0.offsetWidth, x0 = e.clientX;
+    dragStart(e, (ev) => { const nw = Math.max(18, Math.round(w0 + (ev.clientX - x0) / sc)); setColW((p) => ({ ...(p || base), [key]: nw })); },
+      () => setColW((p) => { try { localStorage.setItem("piano_colw", JSON.stringify(p)); } catch (er) {} return p; }));
+  };
+  const startRowDrag = (e, id) => {
+    const tr = e.currentTarget.closest("tr"); if (!tr) return;
+    const sc = tr.getBoundingClientRect().height / (tr.offsetHeight || 1) || 1;
+    const h0 = tr.offsetHeight, y0 = e.clientY, all = e.shiftKey;
+    dragStart(e, (ev) => { const nh = Math.max(16, Math.round(h0 + (ev.clientY - y0) / sc)); setRowH((p) => (all ? { all: nh } : { ...p, [id]: nh })); },
+      () => setRowH((p) => { try { localStorage.setItem("piano_rowh", JSON.stringify(p)); } catch (er) {} return p; }));
+  };
+  const resetSizes = () => { setColW(null); setRowH({}); try { localStorage.removeItem("piano_colw"); localStorage.removeItem("piano_rowh"); } catch (er) {} };
+  const rzH = (idx) => <div onMouseDown={(e) => startColDrag(e, idx)} title="Trascina per allargare o stringere la colonna" style={{ position: "absolute", top: 0, right: -3, bottom: 0, width: 7, cursor: "col-resize", zIndex: 3 }} />;
+  const sumW = colW ? colKeys.reduce((a, k) => a + (colW[k] || 54), 0) : 0;
 
   const info = useMemo(() => {
     const m = new Map();
@@ -3813,7 +3845,7 @@ function PianoTab({ pia, vers, wide }) {
     try { await set(ref(db, `piano/righe/${id}`), null); setEdit(null); } catch (e) { window.alert("Eliminazione non riuscita: " + e.message); }
   };
 
-  const th = { background: ML, padding: "7px 5px", fontSize: 13, color: "#1E293B", fontWeight: 800, borderBottom: `2px solid ${BRD2}`, borderRight: `1px solid ${BRD}`, whiteSpace: "nowrap", textAlign: "center", lineHeight: 1.15 };
+  const th = { position: "relative", background: ML, padding: "7px 5px", fontSize: 13, color: "#1E293B", fontWeight: 800, borderBottom: `2px solid ${BRD2}`, borderRight: `1px solid ${BRD}`, whiteSpace: "nowrap", textAlign: "center", lineHeight: 1.15 };
   const thWrap = { ...th, whiteSpace: "normal" };
   const grid = `1px solid ${BRD}`;
   const empty = rows.length === 0 && Object.keys(vers || {}).length === 0;
@@ -3838,6 +3870,7 @@ function PianoTab({ pia, vers, wide }) {
           <input type="range" min={40} max={130} step={5} value={Math.round(zm * 100)} onChange={(e) => setZoom(+e.target.value / 100)} aria-label="Zoom" style={{ width: 130, accentColor: M, cursor: "pointer" }} />
           <span style={{ fontSize: 12, color: M, fontWeight: 800, fontFamily: MONO, minWidth: 38 }}>{Math.round(zm * 100)}%</span>
         </div>
+        {(colW || Object.keys(rowH).length > 0) && <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28,fontSize: 11, border: `1.5px solid ${BRD2}` }} onClick={resetSizes}>Ripristina misure</Btn>}
         <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28,fontSize: 11, border: `1.5px solid ${BRD2}` }} onClick={() => setShowCfg(true)}>Limiti e giorni</Btn>
         <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28,fontSize: 11, border: `1.5px solid ${BRD2}` }} onClick={() => setShowVers(true)}>Versioni e confronto</Btn>
         {!ro && <><Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28,fontSize: 11, border: `1.5px solid ${BRD2}` }} onClick={newWeek}>{`Salva ${meta.name || wName(baseKey)} e apri ${wName(nextKey)}`}</Btn>
@@ -3882,7 +3915,8 @@ function PianoTab({ pia, vers, wide }) {
           )}
 
           <div ref={scrollRef} onScroll={onPianoScroll} style={{ overflow: "auto", maxHeight: `calc((100vh - 150px) / ${zm})`, background: S0, border: `1px solid ${BRD2}`, borderRadius: 14 }}>
-            <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 12, minWidth: "max-content", width: "100%" }}>
+            <table ref={tableRef} style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 12, minWidth: "max-content", width: "100%", ...(colW ? { tableLayout: "fixed", width: sumW, minWidth: sumW } : {}) }}>
+              {colW && <colgroup>{colKeys.map((k) => <col key={k} style={{ width: colW[k] || 54 }} />)}</colgroup>}
               <thead ref={theadRef} style={{ position: "sticky", top: 0, zIndex: 5 }}>
                 {stickC === "EMOS" && <tr><td colSpan={COLS_L + NW + 1} style={{ background: M, color: "#fff", padding: "2px 10px", fontWeight: 800, fontSize: 11, letterSpacing: "0.04em" }}>{PI_NAMES.EMOS} · {rows.filter((r) => r.c === "EMOS").length} righe</td></tr>}
                 {paiaRows(stickC)}
@@ -3901,24 +3935,24 @@ function PianoTab({ pia, vers, wide }) {
                   {months.map((m, i) => <td key={i} colSpan={m.span} style={{ background: "#FFF7E0", borderRight: grid, ...wlOf(m.first), borderBottom: `2px solid ${BRD2}`, textAlign: "center", padding: "0 4px 6px", fontFamily: MONO, fontSize: 13, fontWeight: 700, color: TXT }}>{piEur(m.eur)}</td>)}
                 </tr>
                 <tr>
-                  <th style={{ ...th, width: 26 }} />
-                  <FilterTh label="Marchio" style={{ ...th, textAlign: "left", minWidth: 62 }} values={cfOpts("b")} selected={cf.b} onChange={(v) => setCf((c) => ({ ...c, b: v }))} />
-                  <FilterTh label="Articolo · colore" style={{ ...th, textAlign: "left", minWidth: 160 }} values={cfOpts("a")} selected={cf.a} onChange={(v) => setCf((c) => ({ ...c, a: v }))} />
-                  <FilterTh label="Consegna" style={{ ...th, minWidth: 48 }} values={cfOpts("d")} selected={cf.d} onChange={(v) => setCf((c) => ({ ...c, d: v }))} />
-                  <FilterTh label="Blocco ordine" style={{ ...th, minWidth: 64 }} values={cfOpts("bl")} selected={cf.bl} onChange={(v) => setCf((c) => ({ ...c, bl: v }))} />
-                  <th style={{ ...th, minWidth: 24 }}>R</th>
-                  {PI_MAT.map(([k, l]) => <th key={k} style={{ ...thWrap, background: "#FFF7E0", color: "#854D0E", minWidth: k === "fm" ? 46 : 48 }}>{l}</th>)}
-                  <th style={{ ...thWrap, background: "#FFF7E0", color: "#854D0E", minWidth: 52 }}>Materiali</th>
-                  <th style={{ ...th, minWidth: 44 }}>Qnt</th>
-                  <th style={{ ...th, minWidth: 44 }}>Sped.</th>
-                  <th style={{ ...th, minWidth: 44, background: "#C9CED6", color: "#4B5563" }}>Giac.</th>
-                  <th style={{ ...thWrap, minWidth: 54 }}>Prezzo medio (€)</th>
-                  <th style={{ ...th, minWidth: 46, background: "#DCE5F3" }}>Saldo</th>
-                  <th style={{ ...th, minWidth: 44 }}>Check</th>
+                  <th style={{ ...th, width: 26 }}>{rzH(0)}</th>
+                  <FilterTh label="Marchio" style={{ ...th, textAlign: "left", minWidth: 62 }} values={cfOpts("b")} selected={cf.b} onChange={(v) => setCf((c) => ({ ...c, b: v }))} extra={rzH(1)} />
+                  <FilterTh label="Articolo · colore" style={{ ...th, textAlign: "left", minWidth: 160 }} values={cfOpts("a")} selected={cf.a} onChange={(v) => setCf((c) => ({ ...c, a: v }))} extra={rzH(2)} />
+                  <FilterTh label="Consegna" style={{ ...th, minWidth: 48 }} values={cfOpts("d")} selected={cf.d} onChange={(v) => setCf((c) => ({ ...c, d: v }))} extra={rzH(3)} />
+                  <FilterTh label="Blocco ordine" style={{ ...th, minWidth: 64 }} values={cfOpts("bl")} selected={cf.bl} onChange={(v) => setCf((c) => ({ ...c, bl: v }))} extra={rzH(4)} />
+                  <th style={{ ...th, minWidth: 24 }}>R{rzH(5)}</th>
+                  {PI_MAT.map(([k, l], j) => <th key={k} style={{ ...thWrap, background: "#FFF7E0", color: "#854D0E", minWidth: k === "fm" ? 46 : 48 }}>{l}{rzH(6 + j)}</th>)}
+                  <th style={{ ...thWrap, background: "#FFF7E0", color: "#854D0E", minWidth: 52 }}>Materiali{rzH(12)}</th>
+                  <th style={{ ...th, minWidth: 44 }}>Qnt{rzH(13)}</th>
+                  <th style={{ ...th, minWidth: 44 }}>Sped.{rzH(14)}</th>
+                  <th style={{ ...th, minWidth: 44, background: "#C9CED6", color: "#4B5563" }}>Giac.{rzH(15)}</th>
+                  <th style={{ ...thWrap, minWidth: 54 }}>Prezzo medio (€){rzH(16)}</th>
+                  <th style={{ ...th, minWidth: 46, background: "#DCE5F3" }}>Saldo{rzH(17)}</th>
+                  <th style={{ ...th, minWidth: 44 }}>Check{rzH(18)}</th>
                   {weeks.map((w, i) => (
-                    <th key={w.k} style={{ ...th, minWidth: 54, ...wlOf(i), ...(w.k === baseKey ? { background: "#D7E3FF", color: M } : {}) }}>{w.n}<div style={{ fontWeight: 600, fontSize: 11 }}>{w.cal}</div>{!usedW[w.k] && <button onClick={() => hideWeek(w.k)} title="Nascondi questa settimana (vuota)" aria-label={`Nascondi settimana ${w.n}`} style={{ border: "none", background: "transparent", color: T3, cursor: "pointer", fontSize: 11, lineHeight: 1, padding: "2px 4px" }}>×</button>}</th>
+                    <th key={w.k} style={{ ...th, minWidth: 54, ...wlOf(i), ...(w.k === baseKey ? { background: "#D7E3FF", color: M } : {}) }}>{rzH(COLS_L + i)}{w.n}<div style={{ fontWeight: 600, fontSize: 11 }}>{w.cal}</div>{!usedW[w.k] && <button onClick={() => hideWeek(w.k)} title="Nascondi questa settimana (vuota)" aria-label={`Nascondi settimana ${w.n}`} style={{ border: "none", background: "transparent", color: T3, cursor: "pointer", fontSize: 11, lineHeight: 1, padding: "2px 4px" }}>×</button>}</th>
                   ))}
-                  <th style={{ ...thWrap, minWidth: 62 }}>Slitta riga</th>
+                  <th style={{ ...thWrap, minWidth: 62 }}>Slitta riga{rzH(COLS_L + weeks.length)}</th>
                 </tr>
               </thead>
               <tbody>
@@ -3944,8 +3978,8 @@ function PianoTab({ pia, vers, wide }) {
                           const cell = (n) => ({ ...bt, padding: 0, textAlign: "center" });
                           const nums = [["q", r.q, "num"], ["sp", r.sp, "num"], ["g", r.g, "num"], ["p", r.p, "dec"]];
                           return (
-                            <tr key={r.id}>
-                              <td style={{ ...bt, textAlign: "center", padding: "0 4px" }}><input type="checkbox" checked={isSel} onChange={(e) => setSel((p) => ({ ...p, [r.id]: e.target.checked }))} aria-label={`Seleziona ${r.a} ${r.k}`} style={{ width: 16, height: 16, accentColor: M }} /></td>
+                            <tr key={r.id} style={(rowH[r.id] || rowH.all) ? { height: rowH[r.id] || rowH.all } : undefined}>
+                              <td style={{ ...bt, textAlign: "center", padding: "0 4px", position: "relative" }}><div onMouseDown={(e) => startRowDrag(e, r.id)} title="Trascina per cambiare l'altezza (Maiusc = tutte le righe)" style={{ position: "absolute", left: 0, right: 0, bottom: -3, height: 7, cursor: "row-resize", zIndex: 2 }} /><input type="checkbox" checked={isSel} onChange={(e) => setSel((p) => ({ ...p, [r.id]: e.target.checked }))} aria-label={`Seleziona ${r.a} ${r.k}`} style={{ width: 16, height: 16, accentColor: M }} /></td>
                               <td style={{ ...bt, padding: "2px 6px", fontWeight: 800, fontSize: 12, color: TXT }}>{r.b}</td>
                               <td style={{ ...bt, padding: "2px 6px", lineHeight: 1.15, cursor: "pointer" }} onClick={() => { if (!ro) setEdit({ id: r.id, ...r }); }} title="Modifica la riga">
                                 <div style={{ fontWeight: 800, fontSize: 12, color: TXT }}>{r.a}</div>
