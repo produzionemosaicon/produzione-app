@@ -203,13 +203,15 @@ export default function SaldiChTab({ data }) {
     const hasRes = res.some(([, x]) => x.po === r.rif && resOpen(x) > 0);
     if (q0 && got > 0 && r.prod >= 1 && r.prod <= q0 * SOGLIA_SALDO && !hasRes) A(2, r.rif, `${labOf(r.p)} non ha saldato l'ordine: mancano ${r.prod} paia su ${q0} (${Math.round((r.prod / q0) * 100)}%), nessun motivo registrato. Chiedere motivo e data.`, { saldo: r.prod });
   });
+  // i PO archiviati a mano non danno avvisi
+  for (let i = alerts.length - 1; i >= 0; i--) if (((D.po || {})[alerts[i].rif] || {}).arch) alerts.splice(i, 1);
   alerts.sort((a, b) => a.liv - b.liv || String(a.rif).localeCompare(String(b.rif)));
   const [showAll, setShowAll] = useState(false);
   const goTo = (rif) => { setView("riep"); setQ(""); setOpen((o) => ({ ...o, [rif]: true })); setTimeout(() => { const el = document.getElementById("sch-" + rif); if (el) el.scrollIntoView({ block: "center", behavior: "smooth" }); }, 50); };
 
   const qq = q.trim().toUpperCase();
   // PO consegnato al 100% (spedite = ordinate) e senza pending, rejected o residui aperti: chiuso, si nasconde dal riepilogo
-  const isClosed = (r) => num(r.p.q) > 0 && num(r.p.sped) >= num(r.p.q) && !r.pe && !r.rj && !r.rs;
+  const isClosed = (r) => !!r.p.arch || (num(r.p.q) > 0 && num(r.p.sped) >= num(r.p.q) && !r.pe && !r.rj && !r.rs);
   const [showClosed, setShowClosed] = useState(false);
   const nClosed = rows.filter(isClosed).length;
   // filtri stile Excel per colonna: chiave → valori selezionati (vuoto = tutti)
@@ -396,6 +398,11 @@ export default function SaldiChTab({ data }) {
                   </tr>
                   {op && (
                     <tr><td colSpan={16} style={{ ...td, background: S1, padding: 10 }}>
+                      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
+                        {r.p.arch
+                          ? <span style={{ fontSize: 12, color: T2 }}>Archiviato il {fd(r.p.archD)} · <button onClick={() => { wr(`po/${r.rif}/arch`, null); wr(`po/${r.rif}/archD`, null); }} style={{ background: S0, color: M, border: `1.5px solid ${M}`, borderRadius: 8, padding: "3px 10px", fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>Riattiva PO</button></span>
+                          : <button onClick={() => { if (window.confirm(`Archivio ${label(r.rif)}? Sparisce dal riepilogo e dagli avvisi (resta in "Mostra i PO chiusi").`)) { wr(`po/${r.rif}/arch`, true); wr(`po/${r.rif}/archD`, today()); } }} style={{ background: S0, color: T2, border: `1.5px solid ${BRD2}`, borderRadius: 8, padding: "3px 10px", fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>Archivia PO</button>}
+                      </div>
                       <div style={{ fontWeight: 800, fontSize: 12, margin: "2px 0 6px" }}>Pending dal QC (lato cliente)</div>
                       {by(pend, r.rif).length > 0 && pendTable(by(pend, r.rif), false)}
                       <div style={{ margin: "6px 0 12px" }}>{addBtn("pending", () => add("pend", r.rif, {}))}</div>
@@ -419,7 +426,7 @@ export default function SaldiChTab({ data }) {
         {view === "rej" && <div style={{ padding: 8 }}>{rejTable(filt(rej), true)}<div style={{ marginTop: 8 }}>{addBtn("rejected", () => add("rej", "", {}))}</div></div>}
         {view === "res" && <div style={{ padding: 8 }}>{resTable(filt(res), true)}<div style={{ marginTop: 8 }}>{addBtn("residuo STIL3", () => add("res", "", { stato: "Aperto" }))}</div></div>}
       </div>
-      {view === "riep" && nClosed > 0 && <button onClick={() => setShowClosed((v) => !v)} style={{ marginTop: 8, background: "transparent", border: "none", color: M, fontWeight: 800, cursor: "pointer", fontFamily: FONT, fontSize: 12 }}>{showClosed ? "Nascondi i PO chiusi" : `Mostra i PO chiusi (consegnati al 100%): ${nClosed}`}</button>}
+      {view === "riep" && nClosed > 0 && <button onClick={() => setShowClosed((v) => !v)} style={{ marginTop: 8, background: "transparent", border: "none", color: M, fontWeight: 800, cursor: "pointer", fontFamily: FONT, fontSize: 12 }}>{showClosed ? "Nascondi i PO chiusi e archiviati" : `Mostra i PO chiusi o archiviati: ${nClosed}`}</button>}
       <div style={{ fontSize: 11, color: T3, marginTop: 8 }}>Lato interno: saldo da spedire = da noi + da STIL3 + mancanti (in rosso se negativo). "Di cui con motivo" = mancanti spiegati nelle righe Residui STIL3. Pending e rejected cliente: come risultano al controllo qualità di Chrome Hearts, solo informativi (le paia sono già comprese nel saldo).</div>
     </div>
   );
