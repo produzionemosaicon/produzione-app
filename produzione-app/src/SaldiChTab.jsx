@@ -43,7 +43,7 @@ const resOpen = (x) => (x.stato === "Chiuso" ? 0 : Math.max(0, num(x.n) - num(x.
 function In({ v, onSave, w = 70, type = "text", list, ro, center, bold }) {
   const [t, setT] = useState(null);
   const val = t ?? (v ?? "");
-  const st = { width: w, boxSizing: "border-box", border: `1px solid ${BRD}`, borderRadius: 6, padding: "4px 6px", fontFamily: type === "number" ? MONO : FONT, fontSize: 12, fontWeight: bold ? 800 : 500, background: ro ? S1 : "#FFFCEB", textAlign: center ? "center" : "left", color: TXT };
+  const st = { width: w, boxSizing: "border-box", border: `1px solid ${BRD}`, borderRadius: 6, padding: "3px 4px", fontFamily: type === "number" ? MONO : FONT, fontSize: 12, fontWeight: bold ? 800 : 500, background: ro ? S1 : "#FFFCEB", textAlign: center ? "center" : "left", color: TXT };
   if (ro) return <div style={{ ...st, background: "transparent", border: "none" }}>{v ?? ""}</div>;
   if (list) return (
     <select value={v || ""} onChange={(e) => onSave(e.target.value)} style={{ ...st, background: "#FFFCEB" }}>
@@ -59,7 +59,7 @@ function In({ v, onSave, w = 70, type = "text", list, ro, center, bold }) {
 }
 
 const th = { background: "#EEF2F8", color: TXT, fontSize: 11, fontWeight: 800, padding: "6px 6px", borderBottom: `2px solid ${BRD2}`, borderRight: `1px solid ${BRD}`, textAlign: "center", whiteSpace: "nowrap", position: "sticky", top: 0, zIndex: 2 };
-const thc = { ...th, whiteSpace: "normal", fontSize: 10, lineHeight: 1.15, padding: "4px 3px", verticalAlign: "bottom" };
+const thc = { ...th, whiteSpace: "normal", fontSize: 10, lineHeight: 1.1, padding: "3px 2px", verticalAlign: "bottom", maxWidth: 70 };
 const td = { padding: "2px 3px", borderBottom: `1px solid ${BRD}`, borderRight: `1px solid ${BRD}`, fontSize: 12, verticalAlign: "middle" };
 const nc = { ...td, textAlign: "center", fontFamily: MONO, fontWeight: 700 };
 const pill = (txt, bg, fg) => <span style={{ background: bg, color: fg, fontWeight: 800, fontSize: 11, padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap" }}>{txt}</span>;
@@ -387,19 +387,19 @@ export default function SaldiChTab({ data }) {
                   <tr id={"sch-" + r.rif} className={newMod ? "sch-newmod" : undefined} style={{ background: op ? ML : undefined }}>
                     <td style={{ ...td, textAlign: "center" }}><button onClick={() => setOpen((o) => ({ ...o, [r.rif]: !o[r.rif] }))} aria-label={`Dettaglio ${r.rif}`} style={{ border: `1px solid ${BRD2}`, background: S0, borderRadius: 6, width: 26, height: 24, cursor: "pointer", color: M, fontWeight: 900 }}>{op ? "−" : "+"}</button></td>
                     <td style={{ ...td, fontWeight: 800, fontFamily: MONO }}>{r.rif}{nDet ? <span style={{ color: ACC }}> •</span> : ""}</td>
-                    {grp !== 0 && <td rowSpan={grp.length} style={{ ...td, verticalAlign: "middle", background: grp.length > 1 ? "#F5F8FF" : undefined, borderBottom: `1px solid ${BRD2}` }}><In v={r.p.mod} onSave={(v) => grp.forEach((rif) => wr(`po/${rif}/mod`, v))} w={112} bold={grp.length > 1} /></td>}
-                    <td style={td}><In v={r.p.col} onSave={s("col")} w={104} /></td>
-                    <td style={td}><In v={r.p.po} onSave={s("po")} w={76} /></td>
-                    <td style={td}><In v={r.p.bl} onSave={s("bl")} w={62} /></td>
-                    <td style={nc}><In v={r.p.q} type="number" onSave={s("q")} w={46} center /></td>
-                    <td style={nc}><In v={r.p.sped} type="number" onSave={s("sped")} w={46} center /></td>
+                    {grp !== 0 && <td rowSpan={grp.length} style={{ ...td, verticalAlign: "middle", background: grp.length > 1 ? "#F5F8FF" : undefined, borderBottom: `1px solid ${BRD2}` }}><In v={r.p.mod} onSave={(v) => grp.forEach((rif) => wr(`po/${rif}/mod`, v))} w={96} bold={grp.length > 1} /></td>}
+                    <td style={td}><In v={r.p.col} onSave={s("col")} w={92} /></td>
+                    <td style={td}><In v={r.p.po} onSave={s("po")} w={70} /></td>
+                    <td style={td}><In v={r.p.bl} onSave={s("bl")} w={56} /></td>
+                    <td style={nc}><In v={r.p.q} type="number" onSave={s("q")} w={42} center /></td>
+                    <td style={nc}><In v={r.p.sped} type="number" onSave={s("sped")} w={42} center /></td>
                     <td style={{ ...nc, background: "#DCE5F3" }}>{r.saldo}</td>
-                    <td style={nc}><In v={r.p.ready} type="number" onSave={s("ready")} w={46} center /></td>
-                    <td style={nc}><In v={r.p.readyS} type="number" onSave={s("readyS")} w={46} center /></td>
+                    <td style={nc}><In v={r.p.ready} type="number" onSave={s("ready")} w={42} center /></td>
+                    <td style={nc}><In v={r.p.readyS} type="number" onSave={s("readyS")} w={42} center /></td>
                     <td style={{ ...nc, background: r.prod < 0 ? "#FFE4D6" : "#DCE5F3", color: r.prod < 0 ? "#9A3412" : TXT }} title={r.prod < 0 ? "Negativo: da noi + da STIL3 superano il saldo" : ""}>{r.prod}</td>
                     <td style={{ ...nc, background: S1, color: r.pe ? T2 : BRD2 }}>{r.pe || "—"}</td>
                     <td style={{ ...nc, background: S1, color: r.rj ? T2 : BRD2 }}>{r.rj || "—"}</td>
-                    <td style={{ ...td, maxWidth: 280 }}>{r.mot && <div style={{ fontSize: 11, color: "#854D0E", fontWeight: 700, lineHeight: 1.25, margin: "1px 0 3px", whiteSpace: "normal" }}>{r.mot}</div>}<In v={r.p.note} onSave={s("note")} w={270} /></td>
+                    <td style={{ ...td, maxWidth: 236 }}>{r.mot && <div style={{ fontSize: 11, color: "#854D0E", fontWeight: 700, lineHeight: 1.25, margin: "1px 0 3px", whiteSpace: "normal" }}>{r.mot}</div>}<In v={r.p.note} onSave={s("note")} w={230} /></td>
                   </tr>
                   {op && (
                     <tr><td colSpan={15} style={{ ...td, background: S1, padding: 10 }}>
