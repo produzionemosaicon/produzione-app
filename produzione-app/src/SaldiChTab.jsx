@@ -376,12 +376,15 @@ export default function SaldiChTab({ data }) {
           <table style={{ borderCollapse: "separate", borderSpacing: 0, minWidth: "max-content", width: "100%" }}>
             <thead><tr><th style={thc}>{cfOn && <button onClick={() => setCf({})} title="Togli tutti i filtri" style={{ border: "none", background: RED, color: "#fff", borderRadius: 6, fontSize: 10, fontWeight: 800, padding: "2px 5px", cursor: "pointer" }}>✕</button>}</th>{FCOLS.map(([k, l, get]) => <FilterTh key={k} label={l} style={{ ...thc, textAlign: ["mod", "col", "note"].includes(k) ? "left" : "center" }} values={fOpts(k, get)} selected={cf[k] || []} onChange={(v) => setCf((c) => ({ ...c, [k]: v }))} />)}</tr></thead>
             <tbody>
-              {shown.map((r) => { const s = (f) => (v) => wr(`po/${r.rif}/${f}`, v); const op = !!open[r.rif]; const nDet = by(pend, r.rif).length + by(rej, r.rif).length + by(res, r.rif).length; return (
+              {(() => { /* celle Modello unite (stile Excel) per righe consecutive con lo stesso modello; il gruppo si interrompe dove una riga è aperta */
+                const span = {}; let i = 0;
+                while (i < shown.length) { let j = i; const m = String(shown[i].p.mod || "").trim().toUpperCase(); while (j + 1 < shown.length && !open[shown[j].rif] && String(shown[j + 1].p.mod || "").trim().toUpperCase() === m) j++; span[shown[i].rif] = shown.slice(i, j + 1).map((x) => x.rif); for (let k = i + 1; k <= j; k++) span[shown[k].rif] = 0; i = j + 1; }
+                return shown.map((r) => { const s = (f) => (v) => wr(`po/${r.rif}/${f}`, v); const grp = span[r.rif]; const op = !!open[r.rif]; const nDet = by(pend, r.rif).length + by(rej, r.rif).length + by(res, r.rif).length; return (
                 <Fragment key={r.rif}>
                   <tr id={"sch-" + r.rif} style={{ background: op ? ML : undefined }}>
                     <td style={{ ...td, textAlign: "center" }}><button onClick={() => setOpen((o) => ({ ...o, [r.rif]: !o[r.rif] }))} aria-label={`Dettaglio ${r.rif}`} style={{ border: `1px solid ${BRD2}`, background: S0, borderRadius: 6, width: 26, height: 24, cursor: "pointer", color: M, fontWeight: 900 }}>{op ? "−" : "+"}</button></td>
                     <td style={{ ...td, fontWeight: 800, fontFamily: MONO }}>{r.rif}{nDet ? <span style={{ color: ACC }}> •</span> : ""}</td>
-                    <td style={td}><In v={r.p.mod} onSave={s("mod")} w={112} /></td>
+                    {grp !== 0 && <td rowSpan={grp.length} style={{ ...td, verticalAlign: "middle", background: grp.length > 1 ? "#F5F8FF" : undefined, borderBottom: `1px solid ${BRD2}` }}><In v={r.p.mod} onSave={(v) => grp.forEach((rif) => wr(`po/${rif}/mod`, v))} w={112} bold={grp.length > 1} /></td>}
                     <td style={td}><In v={r.p.col} onSave={s("col")} w={104} /></td>
                     <td style={td}><In v={r.p.po} onSave={s("po")} w={76} /></td>
                     <td style={td}><In v={r.p.bl} onSave={s("bl")} w={62} /></td>
@@ -414,7 +417,7 @@ export default function SaldiChTab({ data }) {
                       <div style={{ margin: "6px 0 4px" }}>{addBtn("residuo STIL3", () => add("res", r.rif, { bl: r.p.bl || "", stato: "Aperto" }))}</div>
                     </td></tr>
                   )}
-                </Fragment>); })}
+                </Fragment>); }); })()}
               <tr style={{ background: "#DCE5F3", fontWeight: 800 }}>
                 <td style={td} colSpan={8}>TOTALE</td>
                 <td style={nc}>{T.saldo}</td><td style={nc}>{T.ready}</td><td style={nc}>{T.readyS}</td><td style={nc}>{T.saldo - T.ready - T.readyS}</td><td style={nc}>{T.rs}</td><td style={nc}>{T.pe}</td><td style={nc}>{T.rj}</td><td style={td} />
