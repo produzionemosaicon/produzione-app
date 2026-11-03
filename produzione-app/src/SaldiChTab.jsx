@@ -4,7 +4,8 @@ import { db, ref, set, update, get } from "./firebase.js";
 /* ═══ SALDI CHROME HEARTS (uso INTERNO: contiene STIL3, non mostrare al cliente) ═══
    Database saldiCH/
      po/{rif}   = { o, mod, col, po, bl, q (ordine), sped (spedite al cliente), ready (pronte nel nostro magazzino),
-                    readyS (pronte da STIL3), note }
+                    readyS (paia da STIL3: in riparazione o finite), note }
+   Lato interno: saldo = da noi (ready) + da STIL3 (readyS) + mancanti. Pending/rejected = lato cliente, solo informativi.
      pend/{id}  = paia PENDING dal QC: { po, rep, d, isp, tg, n, dif, det, reso, ddtReso, rientr, rientrD, ric, appr, rej, note }
      rej/{id}   = paia REJECTED da rifare: { po, rep, d, tg, n, mot, det, mat, bolla, dl (deadline cliente), cons, fatte }
      res/{id}   = paia non spedite da STIL3: { po, bl, n, mot, det, az, soll, prev, arr, stato }
@@ -77,7 +78,8 @@ export default function SaldiChTab({ data }) {
   const sum = (arr, f, rif) => arr.filter(([, x]) => x.po === rif).reduce((t, [, x]) => t + f(x), 0);
   const rows = POs.map(([rif, p]) => {
     const saldo = num(p.q) - num(p.sped), pe = sum(pend, pendOpen, rif), rj = sum(rej, rejOpen, rif), rs = sum(res, resOpen, rif);
-    const prod = saldo - num(p.ready) - num(p.readyS) - pe - rj - rs;
+    // lato interno: dove sono fisicamente le paia ancora da spedire. Pending/rejected sono solo il punto di vista del cliente.
+    const prod = saldo - num(p.ready) - num(p.readyS);
     return { rif, p, saldo, pe, rj, rs, prod };
   });
   /* ═══ AVVISI ═══ */
@@ -226,7 +228,7 @@ export default function SaldiChTab({ data }) {
       </div>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-        {kpi("Saldo ordini", T.saldo)}{kpi("Pronte da noi", T.ready, GRN)}{kpi("Pronte da STIL3", T.readyS, GRN)}{kpi("Pending aperti", T.pe, ACC)}{kpi("Rejected da rifare", T.rj, RED)}{kpi("Residuo STIL3", T.rs, "#854D0E")}
+        {kpi("Saldo da spedire", T.saldo)}{kpi("Da noi", T.ready, GRN)}{kpi("Da STIL3", T.readyS, "#854D0E")}{kpi("Mancanti", T.saldo - T.ready - T.readyS, RED)}{kpi("Pending cliente", T.pe, T3)}{kpi("Rejected cliente", T.rj, T3)}
         <input placeholder="Cerca PO, modello, colore, blocco…" value={q} onChange={(e) => setQ(e.target.value)} style={{ marginLeft: "auto", alignSelf: "center", minWidth: 240, border: `1.5px solid ${BRD2}`, borderRadius: 10, padding: "9px 12px", fontFamily: FONT, fontSize: 13 }} />
       </div>
 
@@ -265,7 +267,7 @@ export default function SaldiChTab({ data }) {
       <div style={{ overflow: "auto", maxHeight: "calc(100vh - 260px)", background: S0, border: `1px solid ${BRD2}`, borderRadius: 14 }}>
         {view === "riep" && (
           <table style={{ borderCollapse: "separate", borderSpacing: 0, minWidth: "max-content", width: "100%" }}>
-            <thead><tr>{["", "RIF", "Modello", "Colore", "PO", "Blocco Gea", "Q.tà ordine", "Spedite al cliente", "Saldo", "Pronte da noi", "Pronte da STIL3", "Pending aperti", "Rejected da rifare", "Residuo STIL3", "Ancora in produzione", "Note"].map((h, i) => <th key={i} style={th}>{h}</th>)}</tr></thead>
+            <thead><tr>{["", "RIF", "Modello", "Colore", "PO", "Blocco Gea", "Q.tà ordine", "Spedite al cliente", "Saldo da spedire", "Da noi", "Da STIL3", "Mancanti", "di cui con motivo", "Pending cliente", "Rejected cliente", "Note"].map((h, i) => <th key={i} style={th}>{h}</th>)}</tr></thead>
             <tbody>
               {shown.map((r) => { const s = (f) => (v) => wr(`po/${r.rif}/${f}`, v); const op = !!open[r.rif]; const nDet = by(pend, r.rif).length + by(rej, r.rif).length + by(res, r.rif).length; return (
                 <Fragment key={r.rif}>
@@ -281,21 +283,21 @@ export default function SaldiChTab({ data }) {
                     <td style={{ ...nc, background: "#DCE5F3" }}>{r.saldo}</td>
                     <td style={nc}><In v={r.p.ready} type="number" onSave={s("ready")} w={62} center /></td>
                     <td style={nc}><In v={r.p.readyS} type="number" onSave={s("readyS")} w={62} center /></td>
-                    <td style={{ ...nc, color: r.pe ? ACC : T3 }}>{r.pe || "—"}</td>
-                    <td style={{ ...nc, color: r.rj ? RED : T3 }}>{r.rj || "—"}</td>
+                    <td style={{ ...nc, background: r.prod < 0 ? "#FFE4D6" : "#DCE5F3", color: r.prod < 0 ? "#9A3412" : TXT }} title={r.prod < 0 ? "Negativo: da noi + da STIL3 superano il saldo" : ""}>{r.prod}</td>
                     <td style={{ ...nc, color: r.rs ? "#854D0E" : T3 }}>{r.rs || "—"}</td>
-                    <td style={{ ...nc, background: r.prod < 0 ? "#FFE4D6" : "#DCE5F3", color: r.prod < 0 ? "#9A3412" : TXT }} title={r.prod < 0 ? "Negativo: qualche paio è contato due volte" : ""}>{r.prod}</td>
+                    <td style={{ ...nc, background: S1, color: r.pe ? T2 : BRD2 }}>{r.pe || "—"}</td>
+                    <td style={{ ...nc, background: S1, color: r.rj ? T2 : BRD2 }}>{r.rj || "—"}</td>
                     <td style={td}><In v={r.p.note} onSave={s("note")} w={320} /></td>
                   </tr>
                   {op && (
                     <tr><td colSpan={16} style={{ ...td, background: S1, padding: 10 }}>
-                      <div style={{ fontWeight: 800, fontSize: 12, margin: "2px 0 6px" }}>Pending dal QC</div>
+                      <div style={{ fontWeight: 800, fontSize: 12, margin: "2px 0 6px" }}>Pending dal QC (lato cliente)</div>
                       {by(pend, r.rif).length > 0 && pendTable(by(pend, r.rif), false)}
                       <div style={{ margin: "6px 0 12px" }}>{addBtn("pending", () => add("pend", r.rif, {}))}</div>
-                      <div style={{ fontWeight: 800, fontSize: 12, margin: "2px 0 6px" }}>Rejected da rifare</div>
+                      <div style={{ fontWeight: 800, fontSize: 12, margin: "2px 0 6px" }}>Rejected da rifare (lato cliente)</div>
                       {by(rej, r.rif).length > 0 && rejTable(by(rej, r.rif), false)}
                       <div style={{ margin: "6px 0 12px" }}>{addBtn("rejected", () => add("rej", r.rif, {}))}</div>
-                      <div style={{ fontWeight: 800, fontSize: 12, margin: "2px 0 6px" }}>Paia non spedite da STIL3</div>
+                      <div style={{ fontWeight: 800, fontSize: 12, margin: "2px 0 6px" }}>Mancanti: motivi e date (residui STIL3)</div>
                       {by(res, r.rif).length > 0 && resTable(by(res, r.rif), false)}
                       <div style={{ margin: "6px 0 4px" }}>{addBtn("residuo STIL3", () => add("res", r.rif, { bl: r.p.bl || "", stato: "Aperto" }))}</div>
                     </td></tr>
@@ -303,8 +305,7 @@ export default function SaldiChTab({ data }) {
                 </Fragment>); })}
               <tr style={{ background: "#DCE5F3", fontWeight: 800 }}>
                 <td style={td} colSpan={8}>TOTALE</td>
-                <td style={nc}>{T.saldo}</td><td style={nc}>{T.ready}</td><td style={nc}>{T.readyS}</td><td style={nc}>{T.pe}</td><td style={nc}>{T.rj}</td><td style={nc}>{T.rs}</td>
-                <td style={nc}>{T.saldo - T.ready - T.readyS - T.pe - T.rj - T.rs}</td><td style={td} />
+                <td style={nc}>{T.saldo}</td><td style={nc}>{T.ready}</td><td style={nc}>{T.readyS}</td><td style={nc}>{T.saldo - T.ready - T.readyS}</td><td style={nc}>{T.rs}</td><td style={nc}>{T.pe}</td><td style={nc}>{T.rj}</td><td style={td} />
               </tr>
             </tbody>
           </table>
@@ -314,7 +315,7 @@ export default function SaldiChTab({ data }) {
         {view === "res" && <div style={{ padding: 8 }}>{resTable(filt(res), true)}<div style={{ marginTop: 8 }}>{addBtn("residuo STIL3", () => add("res", "", { stato: "Aperto" }))}</div></div>}
       </div>
       {view === "riep" && nClosed > 0 && <button onClick={() => setShowClosed((v) => !v)} style={{ marginTop: 8, background: "transparent", border: "none", color: M, fontWeight: 800, cursor: "pointer", fontFamily: FONT, fontSize: 12 }}>{showClosed ? "Nascondi i PO chiusi" : `Mostra i PO chiusi (consegnati al 100%): ${nClosed}`}</button>}
-      <div style={{ fontSize: 11, color: T3, marginTop: 8 }}>Ancora in produzione = saldo − pronte da noi − pronte da STIL3 − pending − rejected − residuo STIL3. In rosso se negativo (qualcosa contato due volte).</div>
+      <div style={{ fontSize: 11, color: T3, marginTop: 8 }}>Lato interno: saldo da spedire = da noi + da STIL3 + mancanti (in rosso se negativo). "Di cui con motivo" = mancanti spiegati nelle righe Residui STIL3. Pending e rejected cliente: come risultano al controllo qualità di Chrome Hearts, solo informativi (le paia sono già comprese nel saldo).</div>
     </div>
   );
 }
