@@ -112,7 +112,11 @@ export default function SaldiChTab({ data }) {
   const goTo = (rif) => { setView("riep"); setQ(""); setOpen((o) => ({ ...o, [rif]: true })); setTimeout(() => { const el = document.getElementById("sch-" + rif); if (el) el.scrollIntoView({ block: "center", behavior: "smooth" }); }, 50); };
 
   const qq = q.trim().toUpperCase();
-  const shown = rows.filter((r) => !qq || `${r.rif} ${r.p.mod} ${r.p.col} ${r.p.po} ${r.p.bl}`.toUpperCase().includes(qq));
+  // PO consegnato al 100% (spedite = ordinate) e senza pending, rejected o residui aperti: chiuso, si nasconde dal riepilogo
+  const isClosed = (r) => num(r.p.q) > 0 && num(r.p.sped) >= num(r.p.q) && !r.pe && !r.rj && !r.rs;
+  const [showClosed, setShowClosed] = useState(false);
+  const nClosed = rows.filter(isClosed).length;
+  const shown = rows.filter((r) => (showClosed || !isClosed(r)) && (!qq || `${r.rif} ${r.p.mod} ${r.p.col} ${r.p.po} ${r.p.bl}`.toUpperCase().includes(qq)));
   const T = rows.reduce((t, r) => ({ saldo: t.saldo + r.saldo, ready: t.ready + num(r.p.ready), readyS: t.readyS + num(r.p.readyS), pe: t.pe + r.pe, rj: t.rj + r.rj, rs: t.rs + r.rs }), { saldo: 0, ready: 0, readyS: 0, pe: 0, rj: 0, rs: 0 });
 
   const applyProp = async (id, pr, sc) => {
@@ -309,6 +313,7 @@ export default function SaldiChTab({ data }) {
         {view === "rej" && <div style={{ padding: 8 }}>{rejTable(filt(rej), true)}<div style={{ marginTop: 8 }}>{addBtn("rejected", () => add("rej", "", {}))}</div></div>}
         {view === "res" && <div style={{ padding: 8 }}>{resTable(filt(res), true)}<div style={{ marginTop: 8 }}>{addBtn("residuo STIL3", () => add("res", "", { stato: "Aperto" }))}</div></div>}
       </div>
+      {view === "riep" && nClosed > 0 && <button onClick={() => setShowClosed((v) => !v)} style={{ marginTop: 8, background: "transparent", border: "none", color: M, fontWeight: 800, cursor: "pointer", fontFamily: FONT, fontSize: 12 }}>{showClosed ? "Nascondi i PO chiusi" : `Mostra i PO chiusi (consegnati al 100%): ${nClosed}`}</button>}
       <div style={{ fontSize: 11, color: T3, marginTop: 8 }}>Ancora in produzione = saldo − pronte da noi − pronte da STIL3 − pending − rejected − residuo STIL3. In rosso se negativo (qualcosa contato due volte).</div>
     </div>
   );
