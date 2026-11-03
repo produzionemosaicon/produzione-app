@@ -20,6 +20,9 @@ const ROOT = "saldiCH";
 const num = (v) => { const n = parseFloat(String(v ?? "").replace(",", ".")); return isNaN(n) ? 0 : n; };
 const fd = (s) => (s && /^\d{4}-\d\d-\d\d/.test(s) ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(2, 4)}` : s || "");
 const wr = (path, v) => set(ref(db, `${ROOT}/${path}`), v === "" || v === undefined ? null : v);
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+const days = (a, b = today()) => (a && /^\d{4}-\d\d-\d\d/.test(a) ? Math.round((Date.parse(b) - Date.parse(a.slice(0, 10))) / 86400000) : null);
+const SOGLIA_SALDO = 0.15; // avviso "ordine non saldato" quando mancano tra 1 paio e il 15% dell'ordine
 const newId = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
 
 const MOT_RES = ["Materiale mancante", "Materiale difettoso (suole/pelle)", "Scarti di produzione", "Taglie mancanti", "Ritardo STIL3", "Altro"];
@@ -77,6 +80,37 @@ export default function SaldiChTab({ data }) {
     const prod = saldo - num(p.ready) - num(p.readyS) - pe - rj - rs;
     return { rif, p, saldo, pe, rj, rs, prod };
   });
+  /* ═══ AVVISI ═══ */
+  const alerts = [];
+  const A = (liv, rif, txt, extra) => alerts.push({ liv, rif, txt, ...extra });
+  pend.forEach(([id, x]) => {
+    const o = pendOpen(x); if (!o) return;
+    const dq = days(x.d), dr = days(x.reso), dri = days(x.rientrD), de = x.entro ? -days(x.entro) : null;
+    if (de !== null && de <= 3) A(de < 0 ? 1 : 2, x.po, `${o} paia pending da ripresentare ${de < 0 ? `scaduto da ${-de} gg` : de === 0 ? "entro OGGI" : `entro ${fd(x.entro)} (tra ${de} gg)`}`);
+    if (num(x.rientr) > 0 && !x.ric) { if (dri !== null && dri > 3) A(2, x.po, `${num(x.rientr)} paia riparate rientrate da ${dri} gg, non ancora ripresentate al QC`); }
+    else if (x.reso && !num(x.rientr)) { if (dr !== null && dr > 7) A(dr > 14 ? 1 : 2, x.po, `${o} paia in riparazione da STIL3 da ${dr} gg (reso del ${fd(x.reso)})`); }
+    else if (!x.reso && dq !== null && dq > 3) A(dq > 14 ? 1 : 2, x.po, `${o} paia pending dal QC del ${fd(x.d)} (${dq} gg) non ancora rese a STIL3`);
+  });
+  res.forEach(([id, x]) => {
+    const o = resOpen(x); if (!o) return;
+    const dp = x.prev ? days(x.prev) : null, age = days(x.d || "2026-11-03");
+    if (dp !== null && dp > 0) A(1, x.po, `Residuo STIL3: ${o} paia, arrivo previsto il ${fd(x.prev)} già passato da ${dp} gg${x.mot ? ` (${x.mot})` : ""}`);
+    else if (!x.soll && !x.prev && age !== null && age > 14) A(2, x.po, `Residuo STIL3: ${o} paia ferme da ${age} gg senza sollecito né data prevista${x.mot ? ` (${x.mot})` : ""}`);
+  });
+  rej.forEach(([id, x]) => {
+    const o = rejOpen(x); if (!o) return;
+    if (x.dl && x.cons && x.cons > x.dl) A(1, x.po, `${o} paia rejected: consegna prevista ${fd(x.cons)} DOPO la deadline del cliente ${fd(x.dl)}`);
+    else if (x.dl) { const t = -days(x.dl); if (t <= 7) A(t < 0 ? 1 : 2, x.po, `${o} paia rejected da rifare: deadline del cliente ${fd(x.dl)} ${t < 0 ? `scaduta da ${-t} gg` : `tra ${t} gg`}${x.bolla ? "" : ", bolla non ancora lanciata"}`); }
+  });
+  rows.forEach((r) => {
+    const q0 = num(r.p.q), got = num(r.p.sped) + num(r.p.ready) + num(r.p.readyS);
+    const hasRes = res.some(([, x]) => x.po === r.rif && resOpen(x) > 0);
+    if (q0 && got > 0 && r.prod >= 1 && r.prod <= q0 * SOGLIA_SALDO && !hasRes) A(2, r.rif, `STIL3 non ha saldato l'ordine: mancano ${r.prod} paia su ${q0} (${Math.round((r.prod / q0) * 100)}%), nessun motivo registrato. Chiedere motivo e data.`, { saldo: r.prod });
+  });
+  alerts.sort((a, b) => a.liv - b.liv || String(a.rif).localeCompare(String(b.rif)));
+  const [showAll, setShowAll] = useState(false);
+  const goTo = (rif) => { setView("riep"); setQ(""); setOpen((o) => ({ ...o, [rif]: true })); setTimeout(() => { const el = document.getElementById("sch-" + rif); if (el) el.scrollIntoView({ block: "center", behavior: "smooth" }); }, 50); };
+
   const qq = q.trim().toUpperCase();
   const shown = rows.filter((r) => !qq || `${r.rif} ${r.p.mod} ${r.p.col} ${r.p.po} ${r.p.bl}`.toUpperCase().includes(qq));
   const T = rows.reduce((t, r) => ({ saldo: t.saldo + r.saldo, ready: t.ready + num(r.p.ready), readyS: t.readyS + num(r.p.readyS), pe: t.pe + r.pe, rj: t.rj + r.rj, rs: t.rs + r.rs }), { saldo: 0, ready: 0, readyS: 0, pe: 0, rj: 0, rs: 0 });
@@ -103,7 +137,7 @@ export default function SaldiChTab({ data }) {
 
   const pendTable = (arr, showPo) => (
     <table style={{ borderCollapse: "separate", borderSpacing: 0, minWidth: "max-content" }}>
-      <thead><tr>{[showPo && "PO", "Report QC", "Data", "Ispettore", "Taglie", "Paia", "Difetto", "Dettaglio", "Reso a STIL3", "DDT reso", "Rientrate", "Rientrate il", "Ricontrollo", "Approvate", "→ Rejected", "Aperte", "Stato", ""].filter((x) => x !== false).map((h, i) => <th key={i} style={th}>{h}</th>)}</tr></thead>
+      <thead><tr>{[showPo && "PO", "Report QC", "Data", "Ispettore", "Taglie", "Paia", "Difetto", "Dettaglio", "Ripresentare entro", "Reso a STIL3", "DDT reso", "Rientrate", "Rientrate il", "Ricontrollo", "Approvate", "→ Rejected", "Aperte", "Stato", ""].filter((x) => x !== false).map((h, i) => <th key={i} style={th}>{h}</th>)}</tr></thead>
       <tbody>{arr.map(([id, x]) => { const s = (f) => (v) => wr(`pend/${id}/${f}`, v); return (
         <tr key={id}>
           {showPo && <td style={td}><In v={x.po} list={rifOpts} onSave={s("po")} w={90} /><div style={{ fontSize: 10, color: T2 }}>{label(x.po).slice(5, 40)}</div></td>}
@@ -114,6 +148,7 @@ export default function SaldiChTab({ data }) {
           <td style={nc}><In v={x.n} type="number" onSave={s("n")} w={54} center bold /></td>
           <td style={td}><In v={x.dif} list={DIF} onSave={s("dif")} w={150} /></td>
           <td style={td}><In v={x.det} onSave={s("det")} w={280} /></td>
+          <td style={td}><In v={x.entro} type="date" onSave={s("entro")} w={124} /></td>
           <td style={td}><In v={x.reso} type="date" onSave={s("reso")} w={124} /></td>
           <td style={td}><In v={x.ddtReso} onSave={s("ddtReso")} w={80} /></td>
           <td style={nc}><In v={x.rientr} type="number" onSave={s("rientr")} w={54} center /></td>
@@ -191,6 +226,22 @@ export default function SaldiChTab({ data }) {
         <input placeholder="Cerca PO, modello, colore, blocco…" value={q} onChange={(e) => setQ(e.target.value)} style={{ marginLeft: "auto", alignSelf: "center", minWidth: 240, border: `1.5px solid ${BRD2}`, borderRadius: 10, padding: "9px 12px", fontFamily: FONT, fontSize: 13 }} />
       </div>
 
+      {alerts.length > 0 && (
+        <div style={{ border: `2px solid ${RED}`, background: "#FFF5F5", borderRadius: 14, padding: 12, marginBottom: 14 }}>
+          <div style={{ fontWeight: 900, color: "#9B1C1C", marginBottom: 6 }}>Avvisi · {alerts.length} {alerts.filter((a) => a.liv === 1).length ? `(${alerts.filter((a) => a.liv === 1).length} urgenti)` : ""}</div>
+          {(showAll ? alerts : alerts.slice(0, 8)).map((a, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderTop: i ? `1px solid ${BRD}` : "none", flexWrap: "wrap" }}>
+              {a.liv === 1 ? pill("URGENTE", "#FFE4D6", "#9A3412") : pill("DA SEGUIRE", "#FFF6D6", "#854D0E")}
+              <b style={{ fontSize: 12, fontFamily: MONO }}>{label(a.rif)}</b>
+              <span style={{ fontSize: 13, color: TXT, flex: 1, minWidth: 220 }}>{a.txt}</span>
+              {a.saldo ? <button onClick={() => { add("res", a.rif, { bl: ((D.po || {})[a.rif] || {}).bl || "", n: a.saldo, stato: "Aperto", det: "Saldo non completato da STIL3" }); goTo(a.rif); }} style={{ background: S0, color: M, border: `1.5px solid ${M}`, borderRadius: 8, padding: "4px 10px", fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>Registra residuo</button> : null}
+              <button onClick={() => goTo(a.rif)} style={{ background: M, color: "#fff", border: "none", borderRadius: 8, padding: "4px 10px", fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>Apri</button>
+            </div>
+          ))}
+          {alerts.length > 8 && <button onClick={() => setShowAll((v) => !v)} style={{ marginTop: 6, background: "transparent", border: "none", color: M, fontWeight: 800, cursor: "pointer", fontFamily: FONT }}>{showAll ? "Mostra meno" : `Mostra tutti (${alerts.length})`}</button>}
+        </div>
+      )}
+
       {props.length > 0 && (
         <div style={{ border: `2px solid ${ACC}`, background: "#FFF7F2", borderRadius: 14, padding: 12, marginBottom: 14 }}>
           <div style={{ fontWeight: 900, color: "#9A3412", marginBottom: 8 }}>Da confermare · {props.length} {props.length === 1 ? "movimento letto" : "movimenti letti"} dalle mail</div>
@@ -214,7 +265,7 @@ export default function SaldiChTab({ data }) {
             <tbody>
               {shown.map((r) => { const s = (f) => (v) => wr(`po/${r.rif}/${f}`, v); const op = !!open[r.rif]; const nDet = by(pend, r.rif).length + by(rej, r.rif).length + by(res, r.rif).length; return (
                 <Fragment key={r.rif}>
-                  <tr style={{ background: op ? ML : undefined }}>
+                  <tr id={"sch-" + r.rif} style={{ background: op ? ML : undefined }}>
                     <td style={{ ...td, textAlign: "center" }}><button onClick={() => setOpen((o) => ({ ...o, [r.rif]: !o[r.rif] }))} aria-label={`Dettaglio ${r.rif}`} style={{ border: `1px solid ${BRD2}`, background: S0, borderRadius: 6, width: 26, height: 24, cursor: "pointer", color: M, fontWeight: 900 }}>{op ? "−" : "+"}</button></td>
                     <td style={{ ...td, fontWeight: 800, fontFamily: MONO }}>{r.rif}{nDet ? <span style={{ color: ACC }}> •</span> : ""}</td>
                     <td style={td}><In v={r.p.mod} onSave={s("mod")} w={150} /></td>
