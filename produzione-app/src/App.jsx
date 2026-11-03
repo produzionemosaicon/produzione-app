@@ -3668,7 +3668,7 @@ function PianoTab({ pia, vers, wide }) {
   const weeks = useMemo(() => allWeeks.filter((w) => !hideMap[w.k] || usedW[w.k]), [allWeeks, cfg.hide, usedW]);
   const nHidden = allWeeks.filter((w) => hideMap[w.k] && !usedW[w.k]).length;
   const nEmpty = weeks.filter((w) => !usedW[w.k]).length;
-  const [zm, setZm] = useState(() => { try { const v = parseFloat(localStorage.getItem("piano_zoom")); return v > 0.4 && v <= 1 ? v : 0.7; } catch (e) { return 0.7; } });
+  const [zm, setZm] = useState(() => { try { const v = parseFloat(localStorage.getItem("piano_zoom")); return v >= 0.4 && v <= 1.3 ? v : 0.7; } catch (e) { return 0.7; } });
   // quando scorrendo si arriva al piano EMOS, in alto si bloccano le righe di EMOS al posto di quelle MOS
   const [stickC, setStickC] = useState("MOS");
   const scrollRef = useRef(null), theadRef = useRef(null), emosBarRef = useRef(null);
@@ -3835,7 +3835,8 @@ function PianoTab({ pia, vers, wide }) {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }} title="Dimensione della tabella">
           <span style={{ fontSize: 11, color: T2, fontWeight: 700 }}>Zoom</span>
-          {[0.6, 0.7, 0.85, 1].map((v) => <button key={v} onClick={() => setZoom(v)} style={{ background: zm === v ? M : S0, color: zm === v ? "#fff" : M, border: `1.5px solid ${BRD2}`, borderRadius: 8, padding: "0 8px", minHeight: 24, fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>{Math.round(v * 100)}%</button>)}
+          <input type="range" min={40} max={130} step={5} value={Math.round(zm * 100)} onChange={(e) => setZoom(+e.target.value / 100)} aria-label="Zoom" style={{ width: 130, accentColor: M, cursor: "pointer" }} />
+          <span style={{ fontSize: 12, color: M, fontWeight: 800, fontFamily: MONO, minWidth: 38 }}>{Math.round(zm * 100)}%</span>
         </div>
         <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28,fontSize: 11, border: `1.5px solid ${BRD2}` }} onClick={() => setShowCfg(true)}>Limiti e giorni</Btn>
         <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28,fontSize: 11, border: `1.5px solid ${BRD2}` }} onClick={() => setShowVers(true)}>Versioni e confronto</Btn>
