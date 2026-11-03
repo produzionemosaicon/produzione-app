@@ -3993,25 +3993,29 @@ function PianoTab({ pia, vers, wide }) {
                           );
                         })}
                         {c !== "MOS" && c !== "EMOS" && <>
+                        {c !== "STIL3" && (
                         <tr>
                           <td colSpan={COLS_L} style={{ ...sumCell, background: "#DCE5F3", textAlign: "left", padding: "6px 12px", fontFamily: FONT, borderTop: `2px solid ${BRD2}` }}>Totale paia pianificate {c}</td>
                           {tot.map((v, i) => <td key={i} style={{ ...sumCell, ...wlOf(i), background: "#DCE5F3", borderTop: `2px solid ${BRD2}` }}>{v || ""}</td>)}
                           <td style={{ background: "#DCE5F3", borderTop: `2px solid ${BRD2}` }} />
                         </tr>
+                        )}
                         <tr>
-                          <td colSpan={COLS_L} style={{ background: S0, padding: "5px 12px", fontWeight: 600, fontSize: 11, color: T2, borderRight: grid, borderBottom: grid }}>Paia al giorno{cap ? ` · limite ${cap}` : " · limite non impostato"}</td>
+                          <td colSpan={COLS_L} style={{ background: S0, padding: "5px 12px", fontWeight: 600, fontSize: 11, color: T2, borderRight: grid, borderBottom: c === "STIL3" ? `2px solid ${BRD2}` : grid }}>Paia al giorno{cap ? ` · limite ${cap}` : " · limite non impostato"}</td>
                           {tot.map((v, i) => {
                             const dl = Math.round(v / daysOf(weeks[i]));
                             const over = cap && dl > cap, near = cap && dl >= cap - 2 && !over;
-                            return <td key={i} style={{ ...sumCell, borderBottom: grid, background: over ? "#FFE4D6" : near ? "#FFF6D6" : S0, color: over ? "#9A3412" : near ? "#854D0E" : TXT }}>{v ? dl : ""}</td>;
+                            return <td key={i} style={{ ...sumCell, borderBottom: c === "STIL3" ? `2px solid ${BRD2}` : grid, background: over ? "#FFE4D6" : near ? "#FFF6D6" : S0, color: over ? "#9A3412" : near ? "#854D0E" : TXT }}>{v ? dl : ""}</td>;
                           })}
-                          <td style={{ background: S0, borderBottom: grid }} />
+                          <td style={{ background: S0, borderBottom: c === "STIL3" ? `2px solid ${BRD2}` : grid }} />
                         </tr>
+                        {c !== "STIL3" && (
                         <tr>
                           <td colSpan={COLS_L} style={{ background: "#FFF7E0", padding: "5px 12px", fontWeight: 600, fontSize: 11, color: "#854D0E", borderRight: grid, borderBottom: `2px solid ${BRD2}` }}>Fatturato previsto {c} (€)</td>
                           {fat.map((v, i) => <td key={i} style={{ ...sumCell, ...wlOf(i), background: "#FFF7E0", color: "#854D0E", borderBottom: `2px solid ${BRD2}` }}>{piK(v)}</td>)}
                           <td style={{ background: "#FFF7E0", borderBottom: `2px solid ${BRD2}` }} />
                         </tr>
+                        )}
                         </>}
                       </Fragment>
                     );
