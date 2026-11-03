@@ -2217,7 +2217,81 @@ async function exportManoviaXlsx(day, draft) {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
+// selezione stile Excel nella Manovia: trascinamento = rettangolo (nella stessa tabella), Ctrl/Cmd+clic = aggiunge/toglie celle, Maiusc+clic = estende
+function useManSelect(rootRef) {
+  const [tot, setTot] = useState(null);
+  useEffect(() => {
+    const root = rootRef.current; if (!root) return;
+    const SEL = "[data-man],[data-mc]";
+    let anchor = null, drag = false, active = false, base = new Set(), cur = new Set(), add = false;
+    const keyOf = (el) => el.dataset.man || el.dataset.mc;
+    const pos = (el) => { const k = el && keyOf(el); if (!k) return null; const [sid, r, c] = k.split(":"); return { sid, r: +r, c: +c, k }; };
+    const cellOf = (t) => (t && t.closest ? t.closest(SEL) : null);
+    const num = (el, q) => {
+      if (q.c < 0) return null;
+      const raw = el.tagName === "INPUT" ? el.value : el.textContent;
+      if (String(raw).trim() === "") return null;
+      const n = el.tagName === "INPUT" ? manSum(raw) : parseInt(String(raw).replace(/[^0-9-]/g, ""), 10);
+      return Number.isNaN(n) ? null : n;
+    };
+    const paint = () => {
+      let sum = 0, n = 0;
+      root.querySelectorAll(SEL).forEach((el) => {
+        const q = pos(el);
+        if (cur.has(q.k)) { el.setAttribute("data-sel", "1"); const x = num(el, q); if (x !== null) { sum += x; n++; } }
+        else el.removeAttribute("data-sel");
+      });
+      setTot(cur.size ? { sum, n, cells: cur.size } : null);
+    };
+    const clear = () => { cur = new Set(); base = new Set(); paint(); };
+    const rect = (a, b) => {
+      const r1 = Math.min(a.r, b.r), r2 = Math.max(a.r, b.r), c1 = Math.min(a.c, b.c), c2 = Math.max(a.c, b.c);
+      const out = new Set(add ? base : []);
+      root.querySelectorAll(SEL).forEach((el) => { const q = pos(el); if (q.sid === a.sid && q.r >= r1 && q.r <= r2 && q.c >= c1 && q.c <= c2) out.add(q.k); });
+      return out;
+    };
+    const down = (e) => {
+      if (e.button !== 0) return;
+      const t = cellOf(e.target); const q = t ? pos(t) : null;
+      const multi = e.ctrlKey || e.metaKey;
+      if (!q) { drag = false; if (!multi) clear(); return; }
+      if (multi) {
+        e.preventDefault(); if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+        cur = new Set(cur); if (cur.has(q.k)) cur.delete(q.k); else cur.add(q.k);
+        base = new Set(cur); anchor = q; add = true; drag = true; active = false; paint(); return;
+      }
+      if (e.shiftKey && anchor && anchor.sid === q.sid) { e.preventDefault(); add = false; cur = rect(anchor, q); paint(); drag = false; return; }
+      anchor = q; add = false; drag = true; active = false; clear();
+    };
+    const over = (e) => {
+      if (!drag) return; const t = cellOf(e.target); const q = t ? pos(t) : null; if (!q || q.sid !== anchor.sid) return;
+      if (!active && q.r === anchor.r && q.c === anchor.c) return;
+      active = true; if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      const sl = window.getSelection(); if (sl) sl.removeAllRanges();
+      cur = rect(anchor, q); paint();
+    };
+    const up = () => { drag = false; };
+    const ss = (e) => { if (active || e.ctrlKey || e.metaKey) e.preventDefault(); };
+    const ds = (e) => { if (e.target && e.target.tagName === "INPUT") e.preventDefault(); };
+    const key = (e) => {
+      if (root.offsetParent === null) return;   // scheda nascosta
+      if (e.key === "Escape") clear();
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c" && cur.size > 1) {
+        const rows = {};
+        root.querySelectorAll(SEL).forEach((el) => { const q = pos(el); if (cur.has(q.k)) { (rows[q.sid + ":" + q.r] = rows[q.sid + ":" + q.r] || []).push([q.c, el.tagName === "INPUT" ? el.value : el.textContent]); } });
+        const txt = Object.keys(rows).sort().map((r) => rows[r].sort((a, b) => a[0] - b[0]).map((x) => x[1]).join("\t")).join("\n");
+        try { navigator.clipboard.writeText(txt); e.preventDefault(); } catch (_) {}
+      }
+    };
+    root.addEventListener("mousedown", down); root.addEventListener("mouseover", over); window.addEventListener("mouseup", up); root.addEventListener("selectstart", ss); root.addEventListener("dragstart", ds); window.addEventListener("keydown", key);
+    return () => { root.removeEventListener("mousedown", down); root.removeEventListener("mouseover", over); window.removeEventListener("mouseup", up); root.removeEventListener("selectstart", ss); root.removeEventListener("dragstart", ds); window.removeEventListener("keydown", key); };
+  }, []);
+  return tot;
+}
+
 function ManoviaTab({ man, saveManDay, wide }) {
+  const manRoot = useRef(null);
+  const manTot = useManSelect(manRoot);
   const [day, setDay] = useState(() => todayStr());
   const [draft, setDraft] = useState({ art: [], cli: [] });
   const [dirty, setDirty] = useState(false);
@@ -2427,7 +2501,7 @@ function ManoviaTab({ man, saveManDay, wide }) {
                   {MAN_COLS.map((c, ci) => {
                     if (c.calc) {
                       const v = manVal(r, c.k);
-                      return <td key={c.k} style={{ background: S2, textAlign: "right", padding: "0 10px", fontFamily: MONO, fontSize: 14, fontWeight: 700, color: v ? TXT : T3, ...cb }}>{v === null ? "" : v}</td>;
+                      return <td key={c.k} data-mc={`${sec.id}:${ri}:${ci}`} style={{ background: S2, textAlign: "right", padding: "0 10px", fontFamily: MONO, fontSize: 14, fontWeight: 700, color: v ? TXT : T3, ...cb }}>{v === null ? "" : v}</td>;
                     }
                     if (c.text) {
                       const fld = c.brand ? "brand" : "cons";
@@ -2476,7 +2550,14 @@ function ManoviaTab({ man, saveManDay, wide }) {
   };
 
   return (
-    <div style={{ fontFamily: FONT, padding: "14px 14px", paddingBottom: 32 }}>
+    <div ref={manRoot} style={{ fontFamily: FONT, padding: "14px 14px", paddingBottom: 32 }}>
+      <style>{`[data-man][data-sel="1"],td[data-mc][data-sel="1"]{box-shadow:inset 0 0 0 100px rgba(47,91,255,.22) !important}`}</style>
+      {manTot && manTot.n > 0 && (
+        <div style={{ position: "fixed", bottom: 16, left: "50%", transform: "translateX(-50%)", zIndex: 60, background: TXT, color: "#fff", borderRadius: 12, padding: "8px 16px", fontSize: 13, fontWeight: 700, display: "flex", gap: 14, alignItems: "center", boxShadow: "0 6px 20px rgba(11,18,32,0.25)" }}>
+          <span>Totale selezionato: <span style={{ fontFamily: MONO, fontSize: 16 }}>{manTot.sum.toLocaleString("it-IT")}</span></span>
+          <span style={{ opacity: 0.7, fontSize: 11 }}>{manTot.n} celle numeriche · Ctrl+clic per aggiungere · Esc per annullare</span>
+        </div>
+      )}
       <div style={{ fontSize: 18, fontWeight: 900, color: TXT, marginBottom: 4 }}>Manovia · situazione ore 17:30</div>
       <div style={{ fontSize: 12, color: T2, marginBottom: 14 }}>Le righe sono già impostate come nel modello: scrivi le quantità nelle celle (puoi usare somme come 17+11), poi premi «Salva». Le colonne grigie si calcolano da sole.</div>
 
