@@ -57,7 +57,8 @@ function In({ v, onSave, w = 70, type = "text", list, ro, center, bold }) {
 }
 
 const th = { background: "#EEF2F8", color: TXT, fontSize: 11, fontWeight: 800, padding: "6px 6px", borderBottom: `2px solid ${BRD2}`, borderRight: `1px solid ${BRD}`, textAlign: "center", whiteSpace: "nowrap", position: "sticky", top: 0, zIndex: 2 };
-const td = { padding: "3px 5px", borderBottom: `1px solid ${BRD}`, borderRight: `1px solid ${BRD}`, fontSize: 12, verticalAlign: "middle" };
+const thc = { ...th, whiteSpace: "normal", fontSize: 10, lineHeight: 1.15, padding: "4px 3px", verticalAlign: "bottom" };
+const td = { padding: "2px 3px", borderBottom: `1px solid ${BRD}`, borderRight: `1px solid ${BRD}`, fontSize: 12, verticalAlign: "middle" };
 const nc = { ...td, textAlign: "center", fontFamily: MONO, fontWeight: 700 };
 const pill = (txt, bg, fg) => <span style={{ background: bg, color: fg, fontWeight: 800, fontSize: 11, padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap" }}>{txt}</span>;
 const stPill = (s) => s === "Chiuso" ? pill(s, "#DCFCE7", "#166534") : /RITARDO/.test(s) ? pill(s, "#FFE4D6", "#9A3412") : pill(s, "#FFF6D6", "#854D0E");
@@ -324,27 +325,27 @@ export default function SaldiChTab({ data }) {
       <div style={{ overflow: "auto", maxHeight: "calc(100vh - 260px)", background: S0, border: `1px solid ${BRD2}`, borderRadius: 14 }}>
         {view === "riep" && (
           <table style={{ borderCollapse: "separate", borderSpacing: 0, minWidth: "max-content", width: "100%" }}>
-            <thead><tr><th style={th}>{cfOn && <button onClick={() => setCf({})} title="Togli tutti i filtri" style={{ border: "none", background: RED, color: "#fff", borderRadius: 6, fontSize: 10, fontWeight: 800, padding: "2px 5px", cursor: "pointer" }}>✕</button>}</th>{FCOLS.map(([k, l, get]) => <FilterTh key={k} label={l} style={{ ...th, textAlign: ["mod", "col", "note"].includes(k) ? "left" : "center" }} values={fOpts(k, get)} selected={cf[k] || []} onChange={(v) => setCf((c) => ({ ...c, [k]: v }))} />)}</tr></thead>
+            <thead><tr><th style={thc}>{cfOn && <button onClick={() => setCf({})} title="Togli tutti i filtri" style={{ border: "none", background: RED, color: "#fff", borderRadius: 6, fontSize: 10, fontWeight: 800, padding: "2px 5px", cursor: "pointer" }}>✕</button>}</th>{FCOLS.map(([k, l, get]) => <FilterTh key={k} label={l} style={{ ...thc, textAlign: ["mod", "col", "note"].includes(k) ? "left" : "center" }} values={fOpts(k, get)} selected={cf[k] || []} onChange={(v) => setCf((c) => ({ ...c, [k]: v }))} />)}</tr></thead>
             <tbody>
               {shown.map((r) => { const s = (f) => (v) => wr(`po/${r.rif}/${f}`, v); const op = !!open[r.rif]; const nDet = by(pend, r.rif).length + by(rej, r.rif).length + by(res, r.rif).length; return (
                 <Fragment key={r.rif}>
                   <tr id={"sch-" + r.rif} style={{ background: op ? ML : undefined }}>
                     <td style={{ ...td, textAlign: "center" }}><button onClick={() => setOpen((o) => ({ ...o, [r.rif]: !o[r.rif] }))} aria-label={`Dettaglio ${r.rif}`} style={{ border: `1px solid ${BRD2}`, background: S0, borderRadius: 6, width: 26, height: 24, cursor: "pointer", color: M, fontWeight: 900 }}>{op ? "−" : "+"}</button></td>
                     <td style={{ ...td, fontWeight: 800, fontFamily: MONO }}>{r.rif}{nDet ? <span style={{ color: ACC }}> •</span> : ""}</td>
-                    <td style={td}><In v={r.p.mod} onSave={s("mod")} w={150} /></td>
-                    <td style={td}><In v={r.p.col} onSave={s("col")} w={140} /></td>
-                    <td style={td}><In v={r.p.po} onSave={s("po")} w={92} /></td>
-                    <td style={td}><In v={r.p.bl} onSave={s("bl")} w={80} /></td>
-                    <td style={nc}><In v={r.p.q} type="number" onSave={s("q")} w={62} center /></td>
-                    <td style={nc}><In v={r.p.sped} type="number" onSave={s("sped")} w={62} center /></td>
+                    <td style={td}><In v={r.p.mod} onSave={s("mod")} w={112} /></td>
+                    <td style={td}><In v={r.p.col} onSave={s("col")} w={104} /></td>
+                    <td style={td}><In v={r.p.po} onSave={s("po")} w={76} /></td>
+                    <td style={td}><In v={r.p.bl} onSave={s("bl")} w={62} /></td>
+                    <td style={nc}><In v={r.p.q} type="number" onSave={s("q")} w={46} center /></td>
+                    <td style={nc}><In v={r.p.sped} type="number" onSave={s("sped")} w={46} center /></td>
                     <td style={{ ...nc, background: "#DCE5F3" }}>{r.saldo}</td>
-                    <td style={nc}><In v={r.p.ready} type="number" onSave={s("ready")} w={62} center /></td>
-                    <td style={nc}><In v={r.p.readyS} type="number" onSave={s("readyS")} w={62} center /></td>
+                    <td style={nc}><In v={r.p.ready} type="number" onSave={s("ready")} w={46} center /></td>
+                    <td style={nc}><In v={r.p.readyS} type="number" onSave={s("readyS")} w={46} center /></td>
                     <td style={{ ...nc, background: r.prod < 0 ? "#FFE4D6" : "#DCE5F3", color: r.prod < 0 ? "#9A3412" : TXT }} title={r.prod < 0 ? "Negativo: da noi + da STIL3 superano il saldo" : ""}>{r.prod}</td>
                     <td style={{ ...nc, color: r.rs ? "#854D0E" : T3 }}>{r.rs || "—"}</td>
                     <td style={{ ...nc, background: S1, color: r.pe ? T2 : BRD2 }}>{r.pe || "—"}</td>
                     <td style={{ ...nc, background: S1, color: r.rj ? T2 : BRD2 }}>{r.rj || "—"}</td>
-                    <td style={td}><In v={r.p.note} onSave={s("note")} w={320} /></td>
+                    <td style={td}><In v={r.p.note} onSave={s("note")} w={170} /></td>
                   </tr>
                   {op && (
                     <tr><td colSpan={16} style={{ ...td, background: S1, padding: 10 }}>
