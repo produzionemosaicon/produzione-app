@@ -322,6 +322,7 @@ export default function SaldiChTab({ data }) {
 
   return (
     <div style={{ fontFamily: FONT, padding: 14, paddingBottom: 40 }}>
+      <style>{`.sch-newmod > td { border-top: 3px solid ${RED} !important; }`}</style>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
         <div style={{ flex: 1, minWidth: 260 }}>
           <div style={{ fontSize: 18, fontWeight: 900, color: TXT }}>Saldi Chrome Hearts</div>
@@ -379,9 +380,10 @@ export default function SaldiChTab({ data }) {
               {(() => { /* celle Modello unite (stile Excel) per righe consecutive con lo stesso modello; il gruppo si interrompe dove una riga è aperta */
                 const span = {}; let i = 0;
                 while (i < shown.length) { let j = i; const m = String(shown[i].p.mod || "").trim().toUpperCase(); while (j + 1 < shown.length && !open[shown[j].rif] && String(shown[j + 1].p.mod || "").trim().toUpperCase() === m) j++; span[shown[i].rif] = shown.slice(i, j + 1).map((x) => x.rif); for (let k = i + 1; k <= j; k++) span[shown[k].rif] = 0; i = j + 1; }
-                return shown.map((r) => { const s = (f) => (v) => wr(`po/${r.rif}/${f}`, v); const grp = span[r.rif]; const op = !!open[r.rif]; const nDet = by(pend, r.rif).length + by(rej, r.rif).length + by(res, r.rif).length; return (
+                const modOf = (x) => String((x && x.p.mod) || "").trim().toUpperCase();
+                return shown.map((r, ri) => { const s = (f) => (v) => wr(`po/${r.rif}/${f}`, v); const grp = span[r.rif]; const newMod = ri > 0 && modOf(r) !== modOf(shown[ri - 1]); const op = !!open[r.rif]; const nDet = by(pend, r.rif).length + by(rej, r.rif).length + by(res, r.rif).length; return (
                 <Fragment key={r.rif}>
-                  <tr id={"sch-" + r.rif} style={{ background: op ? ML : undefined }}>
+                  <tr id={"sch-" + r.rif} className={newMod ? "sch-newmod" : undefined} style={{ background: op ? ML : undefined }}>
                     <td style={{ ...td, textAlign: "center" }}><button onClick={() => setOpen((o) => ({ ...o, [r.rif]: !o[r.rif] }))} aria-label={`Dettaglio ${r.rif}`} style={{ border: `1px solid ${BRD2}`, background: S0, borderRadius: 6, width: 26, height: 24, cursor: "pointer", color: M, fontWeight: 900 }}>{op ? "−" : "+"}</button></td>
                     <td style={{ ...td, fontWeight: 800, fontFamily: MONO }}>{r.rif}{nDet ? <span style={{ color: ACC }}> •</span> : ""}</td>
                     {grp !== 0 && <td rowSpan={grp.length} style={{ ...td, verticalAlign: "middle", background: grp.length > 1 ? "#F5F8FF" : undefined, borderBottom: `1px solid ${BRD2}` }}><In v={r.p.mod} onSave={(v) => grp.forEach((rif) => wr(`po/${rif}/mod`, v))} w={112} bold={grp.length > 1} /></td>}
