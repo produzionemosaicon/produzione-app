@@ -32,7 +32,9 @@ const DIF = ["Sottopiede/soletta scollata", "Pulizia", "Colla", "Cuciture", "Suo
 const ST_RES = ["Aperto", "Sollecitato", "Chiuso"];
 
 const pendOpen = (x) => Math.max(0, num(x.n) - num(x.appr) - num(x.rej));
-const pendState = (x) => (pendOpen(x) <= 0 ? "Chiuso" : num(x.rientr) > 0 ? "Rientrate, da ricontrollare" : x.reso ? "Da STIL3 in riparazione" : "Da rendere a STIL3");
+// chi produce il PO: campo lab, altrimenti i Sugar Jones li fa Mosaicon, tutto il resto STIL3
+const labOf = (p) => (p && p.lab) || (/SUGAR\s*JONES/i.test((p && p.mod) || "") ? "Mosaicon" : "STIL3");
+const pendState = (x, lab = "STIL3") => (pendOpen(x) <= 0 ? "Chiuso" : num(x.rientr) > 0 ? "Rientrate, da ricontrollare" : lab !== "STIL3" ? "Da riparare in " + lab : x.reso ? "Da STIL3 in riparazione" : "Da rendere a STIL3");
 const rejOpen = (x) => Math.max(0, num(x.n) - num(x.fatte));
 const rejState = (x) => (rejOpen(x) <= 0 ? "Chiuso" : x.dl && x.cons && x.cons > x.dl ? "IN RITARDO su deadline" : x.bolla ? "In produzione" : "Da lanciare");
 const resOpen = (x) => (x.stato === "Chiuso" ? 0 : Math.max(0, num(x.n) - num(x.arr)));
@@ -64,7 +66,7 @@ const pill = (txt, bg, fg) => <span style={{ background: bg, color: fg, fontWeig
 const stPill = (s) => s === "Chiuso" ? pill(s, "#DCFCE7", "#166534") : /RITARDO/.test(s) ? pill(s, "#FFE4D6", "#9A3412") : pill(s, "#FFF6D6", "#854D0E");
 
 /* esportazione Excel: riepilogo (righe filtrate, nell'ordine visto) + pending, rejected e motivi dei mancanti */
-async function exportSaldiXlsx({ rows, pend, rej, res, label }) {
+async function exportSaldiXlsx({ rows, pend, rej, res, label, poMap = {} }) {
   const ExcelJS = (await import("exceljs")).default;
   const wb = new ExcelJS.Workbook();
   const thin = { style: "thin", color: { argb: "FFBBBBBB" } };
@@ -88,7 +90,7 @@ async function exportSaldiXlsx({ rows, pend, rej, res, label }) {
   const keep = new Set(rows.map((r) => r.rif));
   const sel = (arr) => arr.filter(([, x]) => keep.has(x.po)).sort((a, b) => String(a[1].po).localeCompare(String(b[1].po)) || String(a[1].d || "").localeCompare(String(b[1].d || "")));
   sheet("Pending cliente", ["PO", "Report QC", "Data QC", "Ispettore", "Taglie", "Paia", "Difetto", "Dettaglio", "Ripresentare entro", "Reso a STIL3", "DDT reso", "Rientrate", "Rientrate il", "Ricontrollo", "Approvate", "→ Rejected", "Aperte", "Stato"],
-    sel(pend).map(([, x]) => [label(x.po), x.rep, x.d, x.isp, x.tg, num(x.n), x.dif, x.det, x.entro, x.reso, x.ddtReso, num(x.rientr) || null, x.rientrD, x.ric, num(x.appr) || null, num(x.rej) || null, pendOpen(x), pendState(x)]),
+    sel(pend).map(([, x]) => [label(x.po), x.rep, x.d, x.isp, x.tg, num(x.n), x.dif, x.det, x.entro, x.reso, x.ddtReso, num(x.rientr) || null, x.rientrD, x.ric, num(x.appr) || null, num(x.rej) || null, pendOpen(x), pendState(x, labOf(poMap[x.po]))]),
     [30, 22, 10, 16, 30, 7, 18, 60, 11, 11, 10, 9, 11, 11, 9, 9, 8, 22]);
   sheet("Rejected cliente", ["PO", "Report QC", "Data", "Taglie", "Paia", "Motivo", "Dettaglio", "Materiale da riordinare", "Nuova bolla Gea", "Deadline cliente", "Consegna prevista", "Rifatte e spedite", "Aperte", "Stato"],
     sel(rej).map(([, x]) => [label(x.po), x.rep, x.d, x.tg, num(x.n), x.mot, x.det, x.mat, x.bolla, x.dl, x.cons, num(x.fatte) || null, rejOpen(x), rejState(x)]),
@@ -178,6 +180,8 @@ export default function SaldiChTab({ data }) {
     const o = pendOpen(x); if (!o) return;
     const dq = days(x.d), dr = days(x.reso), dri = days(x.rientrD), de = x.entro ? -days(x.entro) : null;
     if (de !== null && de <= 3) A(de < 0 ? 1 : 2, x.po, `${o} paia pending da ripresentare ${de < 0 ? `scaduto da ${-de} gg` : de === 0 ? "entro OGGI" : `entro ${fd(x.entro)} (tra ${de} gg)`}`);
+    const lab = labOf((D.po || {})[x.po]);
+    if (lab !== "STIL3") { if (num(x.rientr) > 0 && !x.ric) { if (dri !== null && dri > 3) A(2, x.po, `${num(x.rientr)} paia riparate da ${dri} gg, non ancora ripresentate al QC`); } else if (dq !== null && dq > 7) A(dq > 14 ? 1 : 2, x.po, `${o} paia pending dal QC del ${fd(x.d)} (${dq} gg) da riparare in ${lab}`); return; }
     if (num(x.rientr) > 0 && !x.ric) { if (dri !== null && dri > 3) A(2, x.po, `${num(x.rientr)} paia riparate rientrate da ${dri} gg, non ancora ripresentate al QC`); }
     else if (x.reso && !num(x.rientr)) { if (dr !== null && dr > 7) A(dr > 14 ? 1 : 2, x.po, `${o} paia in riparazione da STIL3 da ${dr} gg (reso del ${fd(x.reso)})`); }
     else if (!x.reso && dq !== null && dq > 3) A(dq > 14 ? 1 : 2, x.po, `${o} paia pending dal QC del ${fd(x.d)} (${dq} gg) non ancora rese a STIL3`);
@@ -185,8 +189,9 @@ export default function SaldiChTab({ data }) {
   res.forEach(([id, x]) => {
     const o = resOpen(x); if (!o) return;
     const dp = x.prev ? days(x.prev) : null, age = days(x.d || "2026-11-03");
-    if (dp !== null && dp > 0) A(1, x.po, `Residuo STIL3: ${o} paia, arrivo previsto il ${fd(x.prev)} già passato da ${dp} gg${x.mot ? ` (${x.mot})` : ""}`);
-    else if (!x.soll && !x.prev && age !== null && age > 14) A(2, x.po, `Residuo STIL3: ${o} paia ferme da ${age} gg senza sollecito né data prevista${x.mot ? ` (${x.mot})` : ""}`);
+    const lab = labOf((D.po || {})[x.po]);
+    if (dp !== null && dp > 0) A(1, x.po, `Residuo ${lab}: ${o} paia, arrivo previsto il ${fd(x.prev)} già passato da ${dp} gg${x.mot ? ` (${x.mot})` : ""}`);
+    else if (!x.soll && !x.prev && age !== null && age > 14) A(2, x.po, `Residuo ${lab}: ${o} paia ferme da ${age} gg senza sollecito né data prevista${x.mot ? ` (${x.mot})` : ""}`);
   });
   rej.forEach(([id, x]) => {
     const o = rejOpen(x); if (!o) return;
@@ -196,7 +201,7 @@ export default function SaldiChTab({ data }) {
   rows.forEach((r) => {
     const q0 = num(r.p.q), got = num(r.p.sped) + num(r.p.ready) + num(r.p.readyS);
     const hasRes = res.some(([, x]) => x.po === r.rif && resOpen(x) > 0);
-    if (q0 && got > 0 && r.prod >= 1 && r.prod <= q0 * SOGLIA_SALDO && !hasRes) A(2, r.rif, `STIL3 non ha saldato l'ordine: mancano ${r.prod} paia su ${q0} (${Math.round((r.prod / q0) * 100)}%), nessun motivo registrato. Chiedere motivo e data.`, { saldo: r.prod });
+    if (q0 && got > 0 && r.prod >= 1 && r.prod <= q0 * SOGLIA_SALDO && !hasRes) A(2, r.rif, `${labOf(r.p)} non ha saldato l'ordine: mancano ${r.prod} paia su ${q0} (${Math.round((r.prod / q0) * 100)}%), nessun motivo registrato. Chiedere motivo e data.`, { saldo: r.prod });
   });
   alerts.sort((a, b) => a.liv - b.liv || String(a.rif).localeCompare(String(b.rif)));
   const [showAll, setShowAll] = useState(false);
@@ -262,7 +267,7 @@ export default function SaldiChTab({ data }) {
           <td style={nc}><In v={x.appr} type="number" onSave={s("appr")} w={54} center /></td>
           <td style={nc}><In v={x.rej} type="number" onSave={s("rej")} w={54} center /></td>
           <td style={{ ...nc, background: "#DCE5F3" }}>{pendOpen(x)}</td>
-          <td style={td}>{stPill(pendState(x))}</td>
+          <td style={td}>{stPill(pendState(x, labOf((D.po || {})[x.po])))}</td>
           <td style={td}>{xBtn(() => del("pend", id))}</td>
         </tr>); })}</tbody>
     </table>
@@ -328,7 +333,7 @@ export default function SaldiChTab({ data }) {
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
         {kpi("Saldo da spedire", T.saldo)}{kpi("Da noi", T.ready, GRN)}{kpi("Da STIL3", T.readyS, "#854D0E")}{kpi("Mancanti", T.saldo - T.ready - T.readyS, RED)}{kpi("Pending cliente", T.pe, T3)}{kpi("Rejected cliente", T.rj, T3)}
-        <button disabled={busy} onClick={async () => { setBusy(true); try { await exportSaldiXlsx({ rows: shown, pend, rej, res, label }); } catch (e) { window.alert("Export non riuscito: " + e.message); } finally { setBusy(false); } }} title="Scarica in Excel le righe visibili (con i filtri attivi) e i loro pending, rejected e motivi" style={{ marginLeft: "auto", alignSelf: "center", background: GRN, color: "#fff", border: "none", borderRadius: 10, padding: "9px 14px", fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>⬇ Scarica Excel</button>
+        <button disabled={busy} onClick={async () => { setBusy(true); try { await exportSaldiXlsx({ rows: shown, pend, rej, res, label, poMap: D.po || {} }); } catch (e) { window.alert("Export non riuscito: " + e.message); } finally { setBusy(false); } }} title="Scarica in Excel le righe visibili (con i filtri attivi) e i loro pending, rejected e motivi" style={{ marginLeft: "auto", alignSelf: "center", background: GRN, color: "#fff", border: "none", borderRadius: 10, padding: "9px 14px", fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>⬇ Scarica Excel</button>
         <input placeholder="Cerca PO, modello, colore, blocco…" value={q} onChange={(e) => setQ(e.target.value)} style={{ alignSelf: "center", minWidth: 240, border: `1.5px solid ${BRD2}`, borderRadius: 10, padding: "9px 12px", fontFamily: FONT, fontSize: 13 }} />
       </div>
 
@@ -340,7 +345,7 @@ export default function SaldiChTab({ data }) {
               {a.liv === 1 ? pill("URGENTE", "#FFE4D6", "#9A3412") : pill("DA SEGUIRE", "#FFF6D6", "#854D0E")}
               <b style={{ fontSize: 12, fontFamily: MONO }}>{label(a.rif)}</b>
               <span style={{ fontSize: 13, color: TXT, flex: 1, minWidth: 220 }}>{a.txt}</span>
-              {a.saldo ? <button onClick={() => { add("res", a.rif, { bl: ((D.po || {})[a.rif] || {}).bl || "", n: a.saldo, stato: "Aperto", det: "Saldo non completato da STIL3" }); goTo(a.rif); }} style={{ background: S0, color: M, border: `1.5px solid ${M}`, borderRadius: 8, padding: "4px 10px", fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>Registra residuo</button> : null}
+              {a.saldo ? <button onClick={() => { add("res", a.rif, { bl: ((D.po || {})[a.rif] || {}).bl || "", n: a.saldo, stato: "Aperto", det: "Saldo non completato da " + labOf((D.po || {})[a.rif]) }); goTo(a.rif); }} style={{ background: S0, color: M, border: `1.5px solid ${M}`, borderRadius: 8, padding: "4px 10px", fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>Registra residuo</button> : null}
               <button onClick={() => goTo(a.rif)} style={{ background: M, color: "#fff", border: "none", borderRadius: 8, padding: "4px 10px", fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>Apri</button>
             </div>
           ))}
