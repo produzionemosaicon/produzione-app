@@ -2809,6 +2809,7 @@ function RieBlock({ oid, o, edit, onEdit, onAddDdt, onAddReso, onRientra, onArch
         <button onClick={() => onAddReso(oid)} style={{ background: S0, color: "#B45309", border: "1px solid #E9B949", borderRadius: 10, padding: "7px 12px", fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>↩ Reso</button>
         <button onClick={() => onAddDdt(oid)} style={{ background: M, color: "#fff", border: "none", borderRadius: 10, padding: "7px 12px", fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>+ Rientro</button>
         <button onClick={() => onEdit(edit ? null : oid)} style={{ background: edit ? ACL : S0, color: edit ? ACC : T2, border: `1px solid ${edit ? ACC : BRD2}`, borderRadius: 10, padding: "7px 12px", fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>{edit ? "Fine modifica" : "✎ Ordine"}</button>
+        {onArchive && <button onClick={() => onArchive(oid)} title="Sposta l'ordine negli ordini archiviati" style={{ background: RED, color: "#fff", border: "none", borderRadius: 10, padding: "7px 12px", fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>Archivia</button>}
       </div>
       {edit && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "10px 14px", background: ACL, borderBottom: `1px solid ${BRD}` }}>
@@ -2845,7 +2846,7 @@ function RieBlock({ oid, o, edit, onEdit, onAddDdt, onAddReso, onRientra, onArch
                 </td>
               ))}
               <td style={{ ...td, padding: "8px 6px", textAlign: "right", fontFamily: MONO, fontWeight: 900, color: TXT }}>{ordT}</td>
-              <td style={td} colSpan={4}>{edit && onArchive && <button onClick={() => onArchive(oid)} style={{ background: "none", border: "none", color: M, fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer", padding: "8px 10px" }}>Archivia ordine</button>}{edit && <button onClick={delOrder} style={{ background: "none", border: "none", color: RED, fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer", padding: "8px 10px" }}>Elimina ordine</button>}</td>
+              <td style={td} colSpan={4}>{edit && <button onClick={delOrder} style={{ background: "none", border: "none", color: RED, fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer", padding: "8px 10px" }}>Elimina ordine</button>}</td>
             </tr>
             {rows.map((r, ri) => {
               const tot = rieRowTot(o, r);
@@ -3435,7 +3436,7 @@ function RientriTab({ rie, wide }) {
       {view === "arch" && (
         <>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
-            <div style={{ fontSize: 13, color: T2, flex: 1, minWidth: 220 }}>Ordini archiviati: non compaiono in «Ordini e rientri» né nel Riepilogo. Si archivia un ordine con «✎ Ordine» → «Archivia ordine», oppure in blocco quelli saldati con ultimo DDT da più di 5 mesi.</div>
+            <div style={{ fontSize: 13, color: T2, flex: 1, minWidth: 220 }}>Ordini archiviati: non compaiono in «Ordini e rientri» né nel Riepilogo. Si archivia un ordine con il tasto rosso «Archivia» in testata, oppure in blocco quelli saldati con ultimo DDT da più di 5 mesi.</div>
             {actBtn(`Archivia saldati da più di 5 mesi (${cand.length})`, cand.length ? M : BRD, cand.length ? "#fff" : T3, () => { if (cand.length && window.confirm(`Archivio ${cand.length} ordini saldati con ultimo DDT prima del ${cut5.split("-").reverse().join("/")}?`)) archiveIds(cand.map(([id]) => id)); })}
           </div>
           <div style={{ overflowX: "auto", background: S0, border: `1px solid ${BRD}`, borderRadius: 14 }}>
