@@ -3435,7 +3435,7 @@ function RientriTab({ rie, wide }) {
       {view === "arch" && (
         <>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
-            <div style={{ fontSize: 13, color: T2, flex: 1, minWidth: 220 }}>Ordini archiviati: non compaiono in «Ordini e rientri» né nel Riepilogo. Si archivia un ordine con «Modifica» → «Archivia ordine», oppure in blocco quelli saldati con ultimo DDT da più di 5 mesi.</div>
+            <div style={{ fontSize: 13, color: T2, flex: 1, minWidth: 220 }}>Ordini archiviati: non compaiono in «Ordini e rientri» né nel Riepilogo. Si archivia un ordine con «✎ Ordine» → «Archivia ordine», oppure in blocco quelli saldati con ultimo DDT da più di 5 mesi.</div>
             {actBtn(`Archivia saldati da più di 5 mesi (${cand.length})`, cand.length ? M : BRD, cand.length ? "#fff" : T3, () => { if (cand.length && window.confirm(`Archivio ${cand.length} ordini saldati con ultimo DDT prima del ${cut5.split("-").reverse().join("/")}?`)) archiveIds(cand.map(([id]) => id)); })}
           </div>
           <div style={{ overflowX: "auto", background: S0, border: `1px solid ${BRD}`, borderRadius: 14 }}>
