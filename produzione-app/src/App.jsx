@@ -2771,7 +2771,7 @@ const rieResoRem = (o, r) => { const m = {}; rieSizes(o).forEach((s) => { const 
 // ricerca DDT / FT: uguale, oppure (da 3 caratteri) contenuto
 const rieMatch = (val, q) => { const v = String(val ?? "").trim().toUpperCase(), t = q.trim().toUpperCase(); return !!t && !!v && (v === t || (t.length >= 3 && v.includes(t))); };
 
-function RieBlock({ oid, o, edit, onEdit, onAddDdt, onAddReso, onRientra, allEntries, ddtQ, ftQ }) {
+function RieBlock({ oid, o, edit, onEdit, onAddDdt, onAddReso, onRientra, onArchive, allEntries, ddtQ, ftQ }) {
   const sizes = rieSizes(o);
   const rows = rieRows(o);
   const ordT = rieOrdTot(o), delT = rieDelTot(o), res = ordT - delT;
@@ -2845,7 +2845,7 @@ function RieBlock({ oid, o, edit, onEdit, onAddDdt, onAddReso, onRientra, allEnt
                 </td>
               ))}
               <td style={{ ...td, padding: "8px 6px", textAlign: "right", fontFamily: MONO, fontWeight: 900, color: TXT }}>{ordT}</td>
-              <td style={td} colSpan={4}>{edit && <button onClick={delOrder} style={{ background: "none", border: "none", color: RED, fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer", padding: "8px 10px" }}>Elimina ordine</button>}</td>
+              <td style={td} colSpan={4}>{edit && onArchive && <button onClick={() => onArchive(oid)} style={{ background: "none", border: "none", color: M, fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer", padding: "8px 10px" }}>Archivia ordine</button>}{edit && <button onClick={delOrder} style={{ background: "none", border: "none", color: RED, fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: "pointer", padding: "8px 10px" }}>Elimina ordine</button>}</td>
             </tr>
             {rows.map((r, ri) => {
               const tot = rieRowTot(o, r);
@@ -3332,7 +3332,15 @@ function RientriTab({ rie, wide }) {
   const [modal, setModal] = useState(null);
   const [editId, setEditId] = useState(null);
   const [busy, setBusy] = useState(false);
-  const all = useMemo(() => Object.entries(rie || {}).filter(([, o]) => o && o.art).sort((a, b) => rieCmp(a[1], b[1])), [rie]);
+  const allAll = useMemo(() => Object.entries(rie || {}).filter(([, o]) => o && o.art).sort((a, b) => rieCmp(a[1], b[1])), [rie]);
+  const all = useMemo(() => allAll.filter(([, o]) => !o.arch), [allAll]);
+  const archAll = useMemo(() => allAll.filter(([, o]) => o.arch), [allAll]);
+  // candidati all'archiviazione: saldati (consegnato = ordinato, nessun reso aperto), ultimo DDT da più di 5 mesi
+  const cut5 = (() => { const d = new Date(); d.setMonth(d.getMonth() - 5); return d.toISOString().slice(0, 10); })();
+  const lastDdt = (o) => rieRows(o).reduce((m, r) => (r.data && r.data > m ? r.data : m), "");
+  const cand = all.filter(([, o]) => rieOrdTot(o) > 0 && rieOrdTot(o) === rieDelTot(o) && rieResoOpen(o) === 0 && lastDdt(o) && lastDdt(o) < cut5);
+  const archiveIds = (ids) => { const dd = new Date().toISOString().slice(0, 10); ids.forEach((id) => { rieSet(`${id}/arch`, true); rieSet(`${id}/archD`, dd); }); };
+  const restoreId = (id) => { rieSet(`${id}/arch`, null); rieSet(`${id}/archD`, null); };
   const uniq = (arr) => Array.from(new Set(arr)).sort((a, b) => a.localeCompare(b, "it"));
   const labs = uniq(all.map(([, o]) => o.lab));
   const brands = uniq(all.filter(([, o]) => !fLab || o.lab === fLab).map(([, o]) => o.brand));
@@ -3380,7 +3388,7 @@ function RientriTab({ rie, wide }) {
           <div style={{ fontSize: 18, fontWeight: 900, color: TXT }}>Rientri dai laboratori</div>
           <div style={{ fontSize: 12, color: T2 }}>Ordini affidati ai calzaturifici esterni, DDT di rientro e fatture di lavorazione. Le caselle accettano somme (17+11) e ci si muove con le frecce.</div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>{tabBtn("ord", "Ordini e rientri")}{tabBtn("riep", "Riepilogo")}</div>
+        <div style={{ display: "flex", gap: 8 }}>{tabBtn("ord", "Ordini e rientri")}{tabBtn("riep", "Riepilogo")}{tabBtn("arch", `Ordini archiviati${archAll.length ? ` (${archAll.length})` : ""}`)}</div>
       </div>
 
       {view === "ord" && (
@@ -3417,10 +3425,40 @@ function RientriTab({ rie, wide }) {
             return (
               <Fragment key={id}>
                 {showHead && <div style={{ fontSize: 11, fontWeight: 800, color: T2, letterSpacing: "0.1em", textTransform: "uppercase", margin: "6px 2px 8px" }}>{head}</div>}
-                <RieBlock oid={id} o={o} edit={editId === id} onEdit={setEditId} allEntries={all} ddtQ={ddtQ} ftQ={ftQ} onAddDdt={(x) => setModal({ k: "ddt", id: x })} onAddReso={(x) => setModal({ k: "reso", id: x })} onRientra={(x, rid) => setModal({ k: "rientra", id: x, rid })} />
+                <RieBlock oid={id} o={o} edit={editId === id} onEdit={setEditId} allEntries={allAll} onArchive={(x) => { if (window.confirm(`Archivio ${o.art} ${o.col || ""}? Lo ritrovi in «Ordini archiviati».`)) archiveIds([x]); }} ddtQ={ddtQ} ftQ={ftQ} onAddDdt={(x) => setModal({ k: "ddt", id: x })} onAddReso={(x) => setModal({ k: "reso", id: x })} onRientra={(x, rid) => setModal({ k: "rientra", id: x, rid })} />
               </Fragment>
             );
           })}
+        </>
+      )}
+
+      {view === "arch" && (
+        <>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
+            <div style={{ fontSize: 13, color: T2, flex: 1, minWidth: 220 }}>Ordini archiviati: non compaiono in «Ordini e rientri» né nel Riepilogo. Si archivia un ordine con «Modifica» → «Archivia ordine», oppure in blocco quelli saldati con ultimo DDT da più di 5 mesi.</div>
+            {actBtn(`Archivia saldati da più di 5 mesi (${cand.length})`, cand.length ? M : BRD, cand.length ? "#fff" : T3, () => { if (cand.length && window.confirm(`Archivio ${cand.length} ordini saldati con ultimo DDT prima del ${cut5.split("-").reverse().join("/")}?`)) archiveIds(cand.map(([id]) => id)); })}
+          </div>
+          <div style={{ overflowX: "auto", background: S0, border: `1px solid ${BRD}`, borderRadius: 14 }}>
+            <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 720, fontSize: 13 }}>
+              <thead><tr>{["Laboratorio", "Brand", "Articolo", "Colore", "Ordinate", "Consegnate", "Ultimo DDT", "Archiviato il", ""].map((h, i) => <th key={i} style={{ padding: "8px 8px", fontSize: 10, fontWeight: 700, color: T2, letterSpacing: "0.04em", textAlign: i > 3 && i < 6 ? "right" : "left", background: S1, borderBottom: `1px solid ${BRD}` }}>{h}</th>)}</tr></thead>
+              <tbody>
+                {archAll.length === 0 && <tr><td colSpan={9} style={{ padding: 16, color: T2, textAlign: "center" }}>Nessun ordine archiviato.</td></tr>}
+                {archAll.map(([id, o]) => {
+                  const fdm = (d) => (d ? d.split("-").reverse().join("/") : "–");
+                  return (
+                    <tr key={id} style={{ borderBottom: `1px solid ${BRD}` }}>
+                      <td style={{ padding: "7px 8px" }}>{o.lab}</td><td style={{ padding: "7px 8px" }}>{o.brand}</td>
+                      <td style={{ padding: "7px 8px", fontWeight: 700 }}>{o.art}</td><td style={{ padding: "7px 8px" }}>{o.col}</td>
+                      <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: MONO }}>{rieOrdTot(o)}</td>
+                      <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: MONO }}>{rieDelTot(o)}</td>
+                      <td style={{ padding: "7px 8px" }}>{fdm(lastDdt(o))}</td><td style={{ padding: "7px 8px" }}>{fdm(o.archD)}</td>
+                      <td style={{ padding: "7px 8px" }}><button onClick={() => restoreId(id)} style={{ background: S0, color: M, border: `1.5px solid ${M}`, borderRadius: 8, padding: "3px 10px", fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>Riattiva</button></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
 
@@ -3447,7 +3485,7 @@ function RientriTab({ rie, wide }) {
         </>
       )}
 
-      {modal?.k === "ord" && <RieOrdModal list={all.map(([, o]) => o)} defaults={{ lab: fLab, brand: fBrand, linea: fLinea }} onClose={() => setModal(null)} />}
+      {modal?.k === "ord" && <RieOrdModal list={allAll.map(([, o]) => o)} defaults={{ lab: fLab, brand: fBrand, linea: fLinea }} onClose={() => setModal(null)} />}
       {modal?.k === "ddt" && <RieDdtModal entries={all} startId={modal.id} onClose={() => setModal(null)} />}
       {modal?.k === "rientra" && <RieRientraModal oid={modal.id} o={rie[modal.id]} rid={modal.rid} onClose={() => setModal(null)} />}
       {modal?.k === "reso" && <RieResoModal entries={all} startId={modal.id} onClose={() => setModal(null)} />}
