@@ -5,7 +5,8 @@ import { db, ref, set, update, get } from "./firebase.js";
    Database saldiCH/
      po/{rif}   = { o, mod, col, po, bl, q (ordine), sped (spedite al cliente), ready (pronte nel nostro magazzino),
                     readyS (paia da STIL3: in riparazione o finite), note }
-   Lato interno: saldo = da noi (ready) + da STIL3 (readyS) + mancanti. Pending/rejected = lato cliente, solo informativi.
+   Quadratura: saldo = da noi (ready) + da STIL3 (readyS) + pending (da noi / da STIL3) + rejected (da noi / da STIL3) + differenza (deve fare 0).
+  ready/readyS = solo paia buone; la posizione di pending/rejected si ricava da reso/rientrate e da chi produce il PO.
      pend/{id}  = paia PENDING dal QC: { po, rep, d, isp, tg, n, dif, det, reso, ddtReso, rientr, rientrD, ric, appr, rej, note }
      rej/{id}   = paia REJECTED da rifare: { po, rep, d, tg, n, mot, det, mat, bolla, dl (deadline cliente), cons, fatte }
      res/{id}   = paia non spedite da STIL3: { po, bl, n, mot, det, az, soll, prev, arr, stato }
@@ -37,6 +38,9 @@ const labOf = (p) => (p && p.lab) || (/SUGAR\s*JONES/i.test((p && p.mod) || "") 
 const pendState = (x, lab = "STIL3") => (pendOpen(x) <= 0 ? "Chiuso" : num(x.rientr) > 0 ? "Rientrate, da ricontrollare" : lab !== "STIL3" ? "Da riparare in " + lab : x.reso ? "Da STIL3 in riparazione" : "Da rendere a STIL3");
 const rejOpen = (x) => Math.max(0, num(x.n) - num(x.fatte));
 const rejState = (x) => (rejOpen(x) <= 0 ? "Chiuso" : x.dl && x.cons && x.cons > x.dl ? "IN RITARDO su deadline" : x.bolla ? "In produzione" : "Da lanciare");
+// dove sono fisicamente le paia pending/rejected aperte (se il PO non è di STIL3, sono da noi)
+const pendLoc = (x, lab = "STIL3") => { const o = pendOpen(x); if (lab !== "STIL3" || !x.reso) return { noi: o, stil: 0 }; const back = Math.min(o, num(x.rientr)); return { noi: back, stil: o - back }; };
+const rejLoc = (x, lab = "STIL3") => (lab === "STIL3" ? { noi: 0, stil: rejOpen(x) } : { noi: rejOpen(x), stil: 0 });
 const resOpen = (x) => (x.stato === "Chiuso" ? 0 : Math.max(0, num(x.n) - num(x.arr)));
 
 /* casella modificabile: salva quando esci */
@@ -82,11 +86,11 @@ async function exportSaldiXlsx({ rows, pend, rej, res, label, poMap = {} }) {
     ws.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3 + data.length, column: head.length } };
     return ws;
   };
-  const ws = sheet("Riepilogo", ["RIF", "Modello", "Colore", "PO", "Blocco Gea", "Q.tà ordine", "Spedite al cliente", "Saldo da spedire", "Da noi", "Da STIL3", "Mancanti", "Pending cliente", "Rejected cliente", "Note (motivi paia ferme + note)"],
-    rows.map((r) => [r.rif, r.p.mod, r.p.col, r.p.po, r.p.bl, num(r.p.q), num(r.p.sped), r.saldo, num(r.p.ready), num(r.p.readyS), r.prod, r.pe, r.rj, [r.mot, r.p.note].filter(Boolean).join(" | ")]),
-    [7, 22, 20, 12, 10, 9, 10, 10, 9, 9, 10, 10, 10, 80]);
+  const ws = sheet("Riepilogo", ["RIF", "Modello", "Colore", "PO", "Blocco Gea", "Q.tà ordine", "Spedite al cliente", "Saldo da spedire", "Da noi", "Da STIL3", "Pending da noi", "Pending da STIL3", "Rejected da noi", "Rejected da STIL3", "Differenza (deve fare 0)", "Note (motivi paia ferme + note)"],
+    rows.map((r) => [r.rif, r.p.mod, r.p.col, r.p.po, r.p.bl, num(r.p.q), num(r.p.sped), r.saldo, num(r.p.ready), num(r.p.readyS), r.pN, r.pS, r.jN, r.jS, r.prod, [r.mot, r.p.note].filter(Boolean).join(" | ")]),
+    [7, 22, 20, 12, 10, 9, 10, 10, 9, 9, 10, 10, 10, 10, 12, 80]);
   const tr = 4 + rows.length; ws.getCell(tr, 2).value = "TOTALE"; ws.getRow(tr).font = { bold: true };
-  for (let c = 6; c <= 13; c++) { const L = String.fromCharCode(64 + c); ws.getCell(tr, c).value = { formula: `SUM(${L}4:${L}${tr - 1})`, result: rows.reduce((t, r) => t + (num(ws.getCell(4 + rows.indexOf(r), c).value) || 0), 0) }; }
+  for (let c = 6; c <= 15; c++) { const L = String.fromCharCode(64 + c); ws.getCell(tr, c).value = { formula: `SUM(${L}4:${L}${tr - 1})`, result: rows.reduce((t, r) => t + (num(ws.getCell(4 + rows.indexOf(r), c).value) || 0), 0) }; }
   const keep = new Set(rows.map((r) => r.rif));
   const sel = (arr) => arr.filter(([, x]) => keep.has(x.po)).sort((a, b) => String(a[1].po).localeCompare(String(b[1].po)) || String(a[1].d || "").localeCompare(String(b[1].d || "")));
   sheet("Pending cliente", ["PO", "Report QC", "Data QC", "Ispettore", "Taglie", "Paia", "Difetto", "Dettaglio", "Ripresentare entro", "Reso a STIL3", "DDT reso", "Rientrate", "Rientrate il", "Ricontrollo", "Approvate", "→ Rejected", "Aperte", "Stato"],
@@ -170,9 +174,12 @@ export default function SaldiChTab({ data }) {
   const rows = POs.map(([rif, p]) => {
     const saldo = num(p.q) - num(p.sped), pe = sum(pend, pendOpen, rif), rj = sum(rej, rejOpen, rif), rs = sum(res, resOpen, rif);
     // lato interno: dove sono fisicamente le paia ancora da spedire. Pending/rejected sono solo il punto di vista del cliente.
-    const prod = saldo - num(p.ready) - num(p.readyS);
+    const lab = labOf(p), pl = pend.filter(([, x]) => x.po === rif).map(([, x]) => pendLoc(x, lab)), rl = rej.filter(([, x]) => x.po === rif).map(([, x]) => rejLoc(x, lab));
+    const pN = pl.reduce((t, a) => t + a.noi, 0), pS = pl.reduce((t, a) => t + a.stil, 0), jN = rl.reduce((t, a) => t + a.noi, 0), jS = rl.reduce((t, a) => t + a.stil, 0);
+    // quadratura: saldo = da noi + da STIL3 + pending (noi/STIL3) + rejected (noi/STIL3) → la differenza deve fare 0
+    const prod = saldo - num(p.ready) - num(p.readyS) - pN - pS - jN - jS;
     const mot = res.filter(([, x]) => x.po === rif && resOpen(x) > 0).map(([, x]) => `${resOpen(x)} paia: ${x.mot || "motivo da indicare"}${x.det ? " – " + x.det : ""}`).join(" · ");
-    return { rif, p, saldo, pe, rj, rs, prod, mot };
+    return { rif, p, saldo, pe, rj, rs, pN, pS, jN, jS, prod, mot };
   });
   /* ═══ AVVISI ═══ */
   const alerts = [];
@@ -218,7 +225,7 @@ export default function SaldiChTab({ data }) {
   // filtri stile Excel per colonna: chiave → valori selezionati (vuoto = tutti)
   const FCOLS = [["rif", "RIF", (r) => r.rif], ["mod", "Modello", (r) => r.p.mod], ["col", "Colore", (r) => r.p.col], ["po", "PO", (r) => r.p.po], ["bl", "Blocco Gea", (r) => r.p.bl],
     ["q", "Q.tà ordine", (r) => r.p.q], ["sped", "Spedite al cliente", (r) => r.p.sped], ["saldo", "Saldo da spedire", (r) => r.saldo], ["ready", "Da noi", (r) => r.p.ready], ["readyS", "Da STIL3", (r) => r.p.readyS],
-    ["prod", "Mancanti", (r) => r.prod], ["pe", "Pending cliente", (r) => r.pe], ["rj", "Rejected cliente", (r) => r.rj], ["note", "Note", (r) => [r.mot, r.p.note].filter(Boolean).join(" | ")]];
+    ["pN", "Pending da noi", (r) => r.pN], ["pS", "Pending da STIL3", (r) => r.pS], ["jN", "Rejected da noi", (r) => r.jN], ["jS", "Rejected da STIL3", (r) => r.jS], ["prod", "Differenza (deve fare 0)", (r) => r.prod], ["note", "Note", (r) => [r.mot, r.p.note].filter(Boolean).join(" | ")]];
   const [cf, setCf] = useState({});
   const fval = (get, r) => { const v = get(r); return v === undefined || v === null || v === "" || v === 0 ? "" : String(v); };
   const base = rows.filter((r) => showClosed || !isClosed(r));
@@ -226,7 +233,7 @@ export default function SaldiChTab({ data }) {
   const fOpts = (k, get) => { const m = new Map(); base.filter((r) => passCf(r, k)).forEach((r) => { const v = fval(get, r); m.set(v, (m.get(v) || 0) + 1); }); return [...m.entries()].sort((a, b) => (isNaN(a[0]) || isNaN(b[0]) || a[0] === "" || b[0] === "" ? a[0].localeCompare(b[0], "it", { numeric: true }) : num(a[0]) - num(b[0]))).map(([key, n]) => ({ key, label: key === "" ? "(vuoto / 0)" : key, n })); };
   const cfOn = Object.values(cf).some((a) => a && a.length);
   const shown = base.filter((r) => passCf(r) && (!qq || `${r.rif} ${r.p.mod} ${r.p.col} ${r.p.po} ${r.p.bl}`.toUpperCase().includes(qq)));
-  const T = shown.reduce((t, r) => ({ saldo: t.saldo + r.saldo, ready: t.ready + num(r.p.ready), readyS: t.readyS + num(r.p.readyS), pe: t.pe + r.pe, rj: t.rj + r.rj, rs: t.rs + r.rs }), { saldo: 0, ready: 0, readyS: 0, pe: 0, rj: 0, rs: 0 });  // totali e riquadri seguono i filtri
+  const T = shown.reduce((t, r) => ({ saldo: t.saldo + r.saldo, ready: t.ready + num(r.p.ready), readyS: t.readyS + num(r.p.readyS), pe: t.pe + r.pe, rj: t.rj + r.rj, rs: t.rs + r.rs, pN: t.pN + r.pN, pS: t.pS + r.pS, jN: t.jN + r.jN, jS: t.jS + r.jS }), { saldo: 0, ready: 0, readyS: 0, pe: 0, rj: 0, rs: 0, pN: 0, pS: 0, jN: 0, jS: 0 });  // totali e riquadri seguono i filtri
 
   const applyProp = async (id, pr, sc) => {
     if (!window.confirm(`Confermi: «${sc.lab}»?`)) return;
@@ -336,7 +343,7 @@ export default function SaldiChTab({ data }) {
       </div>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-        {kpi("Saldo da spedire", T.saldo)}{kpi("Da noi", T.ready, GRN)}{kpi("Da STIL3", T.readyS, "#854D0E")}{kpi("Mancanti", T.saldo - T.ready - T.readyS, RED)}{kpi("Pending cliente", T.pe, T3)}{kpi("Rejected cliente", T.rj, T3)}
+        {kpi("Saldo da spedire", T.saldo)}{kpi("Da noi", T.ready, GRN)}{kpi("Da STIL3", T.readyS, "#854D0E")}{kpi("Pending da noi", T.pN, T3)}{kpi("Pending da STIL3", T.pS, T3)}{kpi("Rejected da noi", T.jN, T3)}{kpi("Rejected da STIL3", T.jS, T3)}{kpi("Differenza (deve fare 0)", T.saldo - T.ready - T.readyS - T.pN - T.pS - T.jN - T.jS, RED)}
         <button disabled={busy} onClick={async () => { setBusy(true); try { await exportSaldiXlsx({ rows: shown, pend, rej, res, label, poMap: D.po || {} }); } catch (e) { window.alert("Export non riuscito: " + e.message); } finally { setBusy(false); } }} title="Scarica in Excel le righe visibili (con i filtri attivi) e i loro pending, rejected e motivi" style={{ marginLeft: "auto", alignSelf: "center", background: GRN, color: "#fff", border: "none", borderRadius: 10, padding: "9px 14px", fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>⬇ Scarica Excel</button>
         <input placeholder="Cerca PO, modello, colore, blocco…" value={q} onChange={(e) => setQ(e.target.value)} style={{ alignSelf: "center", minWidth: 240, border: `1.5px solid ${BRD2}`, borderRadius: 10, padding: "9px 12px", fontFamily: FONT, fontSize: 13 }} />
       </div>
@@ -396,13 +403,12 @@ export default function SaldiChTab({ data }) {
                     <td style={{ ...nc, background: "#DCE5F3" }}>{r.saldo}</td>
                     <td style={nc}><In v={r.p.ready} type="number" onSave={s("ready")} w={42} center /></td>
                     <td style={nc}><In v={r.p.readyS} type="number" onSave={s("readyS")} w={42} center /></td>
-                    <td style={{ ...nc, background: r.prod < 0 ? "#FFE4D6" : "#DCE5F3", color: r.prod < 0 ? "#9A3412" : TXT }} title={r.prod < 0 ? "Negativo: da noi + da STIL3 superano il saldo" : ""}>{r.prod}</td>
-                    <td style={{ ...nc, background: S1, color: r.pe ? T2 : BRD2 }}>{r.pe || "—"}</td>
-                    <td style={{ ...nc, background: S1, color: r.rj ? T2 : BRD2 }}>{r.rj || "—"}</td>
+                    {[r.pN, r.pS, r.jN, r.jS].map((v, i) => <td key={i} style={{ ...nc, background: S1, color: v ? TXT : BRD2 }}>{v || "—"}</td>)}
+                    <td style={{ ...nc, background: r.prod === 0 ? "#DCFCE7" : r.prod < 0 ? "#FFE4D6" : "#FFF6D6", color: r.prod === 0 ? "#166534" : r.prod < 0 ? "#9A3412" : "#854D0E" }} title={r.prod === 0 ? "Quadra" : r.prod < 0 ? "Negativo: le paia contate superano il saldo" : "Paia del saldo non ancora collocate (da noi, da STIL3, pending, rejected)"}>{r.prod}</td>
                     <td style={{ ...td, maxWidth: 236 }}>{r.mot && <div style={{ fontSize: 11, color: "#854D0E", fontWeight: 700, lineHeight: 1.25, margin: "1px 0 3px", whiteSpace: "normal" }}>{r.mot}</div>}<In v={r.p.note} onSave={s("note")} w={230} /></td>
                   </tr>
                   {op && (
-                    <tr><td colSpan={15} style={{ ...td, background: S1, padding: 10 }}>
+                    <tr><td colSpan={17} style={{ ...td, background: S1, padding: 10 }}>
                       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
                         {r.p.arch
                           ? <span style={{ fontSize: 12, color: T2 }}>Archiviato il {fd(r.p.archD)} · <button onClick={() => { wr(`po/${r.rif}/arch`, null); wr(`po/${r.rif}/archD`, null); }} style={{ background: S0, color: M, border: `1.5px solid ${M}`, borderRadius: 8, padding: "3px 10px", fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>Riattiva PO</button></span>
@@ -422,7 +428,7 @@ export default function SaldiChTab({ data }) {
                 </Fragment>); }); })()}
               <tr style={{ background: "#DCE5F3", fontWeight: 800 }}>
                 <td style={td} colSpan={8}>TOTALE</td>
-                <td style={nc}>{T.saldo}</td><td style={nc}>{T.ready}</td><td style={nc}>{T.readyS}</td><td style={nc}>{T.saldo - T.ready - T.readyS}</td><td style={nc}>{T.pe}</td><td style={nc}>{T.rj}</td><td style={td} />
+                <td style={nc}>{T.saldo}</td><td style={nc}>{T.ready}</td><td style={nc}>{T.readyS}</td><td style={nc}>{T.pN}</td><td style={nc}>{T.pS}</td><td style={nc}>{T.jN}</td><td style={nc}>{T.jS}</td><td style={nc}>{T.saldo - T.ready - T.readyS - T.pN - T.pS - T.jN - T.jS}</td><td style={td} />
               </tr>
             </tbody>
           </table>
@@ -432,7 +438,7 @@ export default function SaldiChTab({ data }) {
         {view === "res" && <div style={{ padding: 8 }}>{resTable(filt(res), true)}<div style={{ marginTop: 8 }}>{addBtn("residuo STIL3", () => add("res", "", { stato: "Aperto" }))}</div></div>}
       </div>
       {view === "riep" && nClosed > 0 && <button onClick={() => setShowClosed((v) => !v)} style={{ marginTop: 8, background: "transparent", border: "none", color: M, fontWeight: 800, cursor: "pointer", fontFamily: FONT, fontSize: 12 }}>{showClosed ? "Nascondi i PO chiusi e archiviati" : `Mostra i PO chiusi o archiviati: ${nClosed}`}</button>}
-      <div style={{ fontSize: 11, color: T3, marginTop: 8 }}>Lato interno: saldo da spedire = da noi + da STIL3 + mancanti (in rosso se negativo). In Note, in marrone, i motivi delle paia ferme (dalle righe Residui STIL3). Pending e rejected cliente: come risultano al controllo qualità di Chrome Hearts, solo informativi (le paia sono già comprese nel saldo).</div>
+      <div style={{ fontSize: 11, color: T3, marginTop: 8 }}>Quadratura: saldo da spedire = da noi + da STIL3 + pending (da noi / da STIL3) + rejected (da noi / da STIL3) + differenza, che deve fare 0 (giallo = paia non ancora collocate, rosso = negativo). Da noi e Da STIL3 sono solo le paia buone pronte; pending e rejected sono separati e la posizione si ricava da dettaglio (reso a STIL3, rientrate). In Note, in marrone, i motivi delle paia ferme (dalle righe Residui STIL3).</div>
     </div>
   );
 }
