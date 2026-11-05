@@ -3616,6 +3616,147 @@ function FilterTh({ label, style, values, selected, onChange, extra }) {
 }
 
 const cfKey = (f, r) => (f === "a" ? [r.a, r.k].filter(Boolean).join(" · ") : String(r[f] ?? ""));
+
+// Esporta in Excel il piano come si vede (filtri e settimane nascoste rispettati), con formule per saldo, check e totali
+async function exportPianoXlsx({ name, rows, calzs, weeks, info, daysOf, capOf, filtered }) {
+  const ExcelJS = (await import("exceljs")).default;
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet(String(name || "Piano").replace(/[\\/?*[\]:]/g, " ").slice(0, 31) || "Piano", { views: [{ state: "frozen", xSplit: 4, ySplit: 4 }] });
+  const L = (n) => { let s = ""; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
+  const thin = { style: "thin", color: { argb: "FFBBBBBB" } };
+  const box = { top: thin, bottom: thin, left: thin, right: thin };
+  const fill = (hex) => ({ type: "pattern", pattern: "solid", fgColor: { argb: "FF" + hex.replace("#", "").slice(0, 6).toUpperCase() } });
+  const NW = weeks.length;
+  const C = { calz: 1, b: 2, a: 3, k: 4, d: 5, bl: 6, r: 7, mat0: 8, matS: 14, q: 15, sp: 16, g: 17, p: 18, saldo: 19, check: 20, w0: 21 };
+  const cTot = C.w0 + NW, lastC = cTot;
+  const MATFILL = { ok: "DCFCE7", na: "F1F5F9", soon: "E0F2FE", late: "FFD9B8", miss: "FFF1E6" };
+
+  // riga 1: titolo · riga 2: note · riga 3: mesi · riga 4: intestazioni
+  ws.getCell(1, 1).value = `Piano settimanale ${name || ""}`.trim();
+  ws.getCell(1, 1).font = { bold: true, size: 14 };
+  const now = new Date();
+  ws.getCell(2, 1).value = `Esportato il ${now.toLocaleDateString("it-IT")} alle ${now.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}${filtered ? " · ATTENZIONE: esportate solo le righe filtrate" : " · tutte le righe"}`;
+  ws.getCell(2, 1).font = { italic: true, size: 10, color: { argb: filtered ? "FF9A3412" : "FF64748B" } };
+  let m0 = 0;
+  for (let i = 1; i <= NW; i++) {
+    if (i === NW || weeks[i].month !== weeks[m0].month) {
+      const c1 = C.w0 + m0, c2 = C.w0 + i - 1;
+      if (c2 > c1) ws.mergeCells(3, c1, 3, c2);
+      const c = ws.getCell(3, c1); c.value = weeks[m0].month; c.font = { bold: true, size: 9, color: { argb: "FF854D0E" } }; c.alignment = { horizontal: "center" }; c.fill = fill("FFF7E0");
+      m0 = i;
+    }
+  }
+  const head = ["Calzaturificio", "Marchio", "Articolo", "Colore", "Consegna", "Blocco ordine", "R", ...PI_MAT.map(([, l]) => l), "Materiali", "Qnt", "Sped.", "Giac.", "Prezzo medio (€)", "Saldo", "Check", ...weeks.map((w) => `${w.n}\n${w.cal}\n${daysOf(w)} gg`), "Tot. pianificato"];
+  head.forEach((h, i) => {
+    const c = ws.getCell(4, i + 1); c.value = h; c.font = { bold: true, size: 10 }; c.border = box;
+    c.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    c.fill = fill(i + 1 >= C.mat0 && i + 1 <= C.matS ? "FFF7E0" : i + 1 === C.g ? "C9CED6" : i + 1 === C.saldo ? "DCE5F3" : "EEF3FF");
+  });
+  ws.getRow(4).height = 42;
+
+  let r = 5;
+  const dataFirst = r;
+  const paiaRowsAt = [];   // righe "PAIA SETTIMANALI" per il totale generale
+  calzs.forEach((cz) => {
+    const list = rows.filter((x) => x.c === cz);
+    if (!list.length) return;
+    // fascia calzaturificio
+    ws.mergeCells(r, 1, r, lastC);
+    const band = ws.getCell(r, 1); band.value = `${PI_NAMES[cz] || cz} · ${list.length} righe`;
+    band.font = { bold: true, color: { argb: "FF1A3FA0" } }; band.fill = fill("D7E3FF");
+    r++;
+    const first = r;
+    list.forEach((x, zi) => {
+      const nf = info.get(x.id);
+      const row = ws.getRow(r);
+      row.getCell(C.calz).value = x.c; row.getCell(C.b).value = x.b; row.getCell(C.a).value = x.a; row.getCell(C.k).value = x.k || null;
+      if (x.d && /^\d{4}-\d\d-\d\d$/.test(x.d)) { row.getCell(C.d).value = new Date(x.d + "T12:00:00"); row.getCell(C.d).numFmt = "dd/mm/yy"; }
+      else row.getCell(C.d).value = x.d || null;
+      row.getCell(C.bl).value = x.bl ? (isNaN(+x.bl) ? x.bl : +x.bl) : null;
+      row.getCell(C.r).value = x.r ? (isNaN(+x.r) ? x.r : +x.r) : null;
+      PI_MAT.forEach(([k], j) => {
+        const c = row.getCell(C.mat0 + j); c.value = x.m?.[k] ?? null; c.alignment = { horizontal: "center" };
+        const st = nf.ms[j]; if (MATFILL[st]) c.fill = fill(MATFILL[st]);
+      });
+      if (nf.plan > 0) { const c = row.getCell(C.matS); c.value = nf.miss ? `manca ${nf.miss}` : "ok"; c.font = { bold: true, color: { argb: nf.miss ? "FF9A3412" : "FF166534" } }; c.alignment = { horizontal: "center" }; }
+      row.getCell(C.q).value = +x.q || null; row.getCell(C.sp).value = +x.sp || null; row.getCell(C.g).value = +x.g || null;
+      row.getCell(C.p).value = +x.p || null; row.getCell(C.p).numFmt = "€ #,##0.00";
+      row.getCell(C.g).fill = fill("E4E7EC");
+      const tp = nf.plan, sal = piSaldo(x);
+      row.getCell(C.saldo).value = { formula: `${L(C.q)}${r}-${L(C.sp)}${r}-${L(C.g)}${r}`, result: sal };
+      row.getCell(C.saldo).fill = fill("DCE5F3");
+      weeks.forEach((w, i) => { const v = piPn(x, w.k); const c = row.getCell(C.w0 + i); c.value = v || null; if (v) { c.fill = fill("BBD0FF"); c.font = { bold: true, color: { argb: "FF1A3FA0" } }; } });
+      row.getCell(cTot).value = { formula: `SUM(${L(C.w0)}${r}:${L(cTot - 1)}${r})`, result: tp };
+      row.getCell(cTot).font = { bold: true };
+      const d = `${L(cTot)}${r}-${L(C.saldo)}${r}`;
+      row.getCell(C.check).value = { formula: `IF(${d}=0,"ok",${d})`, result: tp - sal === 0 ? "ok" : tp - sal };
+      row.getCell(C.check).font = { bold: true, color: { argb: tp - sal === 0 ? "FF166534" : "FFC2410C" } };
+      for (let c = 1; c <= lastC; c++) { const cc = row.getCell(c); cc.border = box; if (c >= C.d && !cc.alignment) cc.alignment = { horizontal: "center" }; if (!cc.fill && zi % 2 === 0) cc.fill = fill("F5F8FF"); }
+      r++;
+    });
+    const last = r - 1;
+    // paia settimanali e giornaliere del calzaturificio
+    const cap = capOf(cz);
+    ws.mergeCells(r, 1, r, C.w0 - 1); ws.getCell(r, 1).value = `PAIA SETTIMANALI · ${cz}`;
+    ws.mergeCells(r + 1, 1, r + 1, C.w0 - 1); ws.getCell(r + 1, 1).value = `PAIA GIORNALIERE · ${cz}${cap ? ` · limite ${cap}` : ""}`;
+    weeks.forEach((w, i) => {
+      const col = L(C.w0 + i);
+      const t = list.reduce((s, x) => s + piPn(x, w.k), 0), dl = t ? Math.round(t / daysOf(w)) : 0;
+      ws.getCell(r, C.w0 + i).value = { formula: `SUM(${col}${first}:${col}${last})`, result: t };
+      ws.getCell(r + 1, C.w0 + i).value = { formula: `IF(${col}${r}=0,"",ROUND(${col}${r}/${daysOf(w)},0))`, result: dl || "" };
+      if (cap && dl > cap) ws.getCell(r + 1, C.w0 + i).fill = fill("FFE4D6");
+      else if (cap && dl >= cap - 2) ws.getCell(r + 1, C.w0 + i).fill = fill("FFF6D6");
+    });
+    ws.getCell(r, cTot).value = { formula: `SUM(${L(cTot)}${first}:${L(cTot)}${last})`, result: list.reduce((s, x) => s + info.get(x.id).plan, 0) };
+    [r, r + 1].forEach((rr) => { const row = ws.getRow(rr); for (let c = 1; c <= lastC; c++) { const cc = row.getCell(c); cc.border = box; cc.font = { bold: true }; if (!cc.fill) cc.fill = fill("EEF2F8"); if (c >= C.w0) cc.alignment = { horizontal: "center" }; } });
+    paiaRowsAt.push(r);
+    r += 3;
+  });
+  const dataLast = r - 1;
+
+  // totali generali
+  const tr1 = r, tr2 = r + 1;
+  ws.mergeCells(tr1, 1, tr1, C.q - 1); ws.getCell(tr1, 1).value = "TOTALE GENERALE · paia";
+  ws.mergeCells(tr2, 1, tr2, C.q - 1); ws.getCell(tr2, 1).value = "TOTALE GENERALE · fatturato (€)";
+  const rng = (c) => `${L(c)}${dataFirst}:${L(c)}${dataLast}`;
+  const crit = `${L(C.calz)}${dataFirst}:${L(C.calz)}${dataLast}`;
+  [C.q, C.sp, C.g, C.saldo].forEach((c) => { ws.getCell(tr1, c).value = { formula: `SUMIF(${crit},"<>",${rng(c)})` }; });
+  ws.getCell(tr2, C.g).value = { formula: `SUMPRODUCT(${rng(C.g)},${rng(C.p)})` }; ws.getCell(tr2, C.g).numFmt = "€ #,##0";
+  for (let i = 0; i <= NW; i++) {
+    const c = C.w0 + i, col = L(c);
+    ws.getCell(tr1, c).value = paiaRowsAt.length ? { formula: paiaRowsAt.map((p) => `${col}${p}`).join("+") } : 0;
+    if (i < NW) { ws.getCell(tr2, c).value = { formula: `SUMPRODUCT(${rng(c)},${rng(C.p)})` }; ws.getCell(tr2, c).numFmt = "€ #,##0"; }
+  }
+  [tr1, tr2].forEach((rr) => { const row = ws.getRow(rr); for (let c = 1; c <= lastC; c++) { const cc = row.getCell(c); cc.border = box; cc.font = { bold: true, color: { argb: "FF1A3FA0" } }; cc.fill = fill("D7E3FF"); if (c >= C.q) cc.alignment = { horizontal: "center" }; } });
+
+  // fatturato previsto per mese (sotto i totali)
+  let mr = tr2 + 2;
+  ws.getCell(mr, 1).value = "FATTURATO PREVISTO PER MESE (paia pianificate × prezzo medio)"; ws.getCell(mr, 1).font = { bold: true, color: { argb: "FF854D0E" } };
+  mr++;
+  m0 = 0;
+  for (let i = 1; i <= NW; i++) {
+    if (i === NW || weeks[i].month !== weeks[m0].month) {
+      ws.getCell(mr, 1).value = `${weeks[m0].month} ${weeks[m0].k.slice(0, 4)}`;
+      ws.getCell(mr, 2).value = { formula: `SUM(${L(C.w0 + m0)}${tr2}:${L(C.w0 + i - 1)}${tr2})` };
+      ws.getCell(mr, 2).numFmt = "€ #,##0"; ws.getCell(mr, 2).font = { bold: true };
+      mr++; m0 = i;
+    }
+  }
+
+  // larghezze, filtro, stampa
+  const widths = { [C.calz]: 9, [C.b]: 11, [C.a]: 20, [C.k]: 18, [C.d]: 10, [C.bl]: 9, [C.r]: 4, [C.matS]: 10, [C.q]: 7, [C.sp]: 7, [C.g]: 7, [C.p]: 10, [C.saldo]: 7, [C.check]: 7, [cTot]: 10 };
+  for (let c = 1; c <= lastC; c++) ws.getColumn(c).width = widths[c] || (c >= C.mat0 && c < C.matS ? 7 : 8);
+  ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: lastC } };
+  ws.pageSetup = { orientation: "landscape", paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: "3:4", margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } };
+
+  const buf = await wb.xlsx.writeBuffer();
+  const filename = `piano_${piSlug(name || "piano")}_${todayStr()}${filtered ? "_filtrato" : ""}.xlsx`;
+  const url = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+  const a = document.createElement("a"); a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
 function PianoTab({ pia, vers, wide }) {
   const [view, setView] = useState(null);   // versione aperta in sola lettura (non tocca il piano di lavoro)
   const ro = !!view;
@@ -3912,6 +4053,9 @@ function PianoTab({ pia, vers, wide }) {
         {(colW || Object.keys(rowH).length > 0) && <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28,fontSize: 11, border: `1.5px solid ${BRD2}` }} onClick={resetSizes}>Ripristina misure</Btn>}
         <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28,fontSize: 11, border: `1.5px solid ${BRD2}` }} onClick={() => setShowCfg(true)}>Limiti e giorni</Btn>
         <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28,fontSize: 11, border: `1.5px solid ${BRD2}` }} onClick={() => setShowVers(true)}>Versioni e confronto</Btn>
+        {rows.length > 0 && <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28,fontSize: 11, border: `1.5px solid ${BRD2}` }}
+          onClick={async () => { if (busy) return; setBusy("xls"); try { await exportPianoXlsx({ name: meta.name || wName(baseKey), rows: shown, calzs, weeks, info, daysOf, capOf, filtered: shown.length !== rows.length }); } catch (e) { console.error(e); window.alert("Esportazione non riuscita: " + e.message); } finally { setBusy(""); } }}>
+          {busy === "xls" ? "Preparo il file…" : shown.length !== rows.length ? `Esporta Excel (${shown.length} righe)` : "Esporta Excel"}</Btn>}
         {!ro && <><Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28,fontSize: 11, border: `1.5px solid ${BRD2}` }} onClick={newWeek}>{`Salva ${meta.name || wName(baseKey)} e apri ${wName(nextKey)}`}</Btn>
         <Btn style={{ width: "auto", padding: "0 12px", minHeight: 28, fontSize: 11 }} onClick={() => setShowVers("save")}>Salva versione</Btn></>}
       </div>
