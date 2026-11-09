@@ -3627,7 +3627,7 @@ async function exportPianoXlsx({ name, rows, calzs, weeks, info, daysOf, capOf, 
   const box = { top: thin, bottom: thin, left: thin, right: thin };
   const fill = (hex) => ({ type: "pattern", pattern: "solid", fgColor: { argb: "FF" + hex.replace("#", "").slice(0, 6).toUpperCase() } });
   const NW = weeks.length;
-  const C = { calz: 1, b: 2, a: 3, k: 4, d: 5, bl: 6, r: 7, mat0: 8, matS: 14, q: 15, sp: 16, g: 17, p: 18, saldo: 19, check: 20, w0: 21 };
+  const C = { calz: 1, b: 2, s: 3, a: 4, k: 5, d: 6, bl: 7, r: 8, mat0: 9, matS: 15, q: 16, sp: 17, g: 18, p: 19, saldo: 20, check: 21, w0: 22 };
   const cTot = C.w0 + NW, lastC = cTot;
   const MATFILL = { ok: "DCFCE7", na: "F1F5F9", soon: "E0F2FE", late: "FFD9B8", miss: "FFF1E6" };
 
@@ -3646,7 +3646,7 @@ async function exportPianoXlsx({ name, rows, calzs, weeks, info, daysOf, capOf, 
       m0 = i;
     }
   }
-  const head = ["Calzaturificio", "Marchio", "Articolo", "Colore", "Consegna", "Blocco ordine", "R", ...PI_MAT.map(([, l]) => l), "Materiali", "Qnt", "Sped.", "Giac.", "Prezzo medio (€)", "Saldo", "Check", ...weeks.map((w) => `${w.n}\n${w.cal}\n${daysOf(w)} gg`), "Tot. pianificato"];
+  const head = ["Calzaturificio", "Marchio", "Stag.", "Articolo", "Colore", "Consegna", "Blocco ordine", "R", ...PI_MAT.map(([, l]) => l), "Materiali", "Qnt", "Sped.", "Giac.", "Prezzo medio (€)", "Saldo", "Check", ...weeks.map((w) => `${w.n}\n${w.cal}\n${daysOf(w)} gg`), "Tot. pianificato"];
   head.forEach((h, i) => {
     const c = ws.getCell(4, i + 1); c.value = h; c.font = { bold: true, size: 10 }; c.border = box;
     c.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
@@ -3669,7 +3669,7 @@ async function exportPianoXlsx({ name, rows, calzs, weeks, info, daysOf, capOf, 
     list.forEach((x, zi) => {
       const nf = info.get(x.id);
       const row = ws.getRow(r);
-      row.getCell(C.calz).value = x.c; row.getCell(C.b).value = x.b; row.getCell(C.a).value = x.a; row.getCell(C.k).value = x.k || null;
+      row.getCell(C.calz).value = x.c; row.getCell(C.b).value = x.b; row.getCell(C.s).value = x.s || null; row.getCell(C.s).alignment = { horizontal: "center" }; row.getCell(C.a).value = x.a; row.getCell(C.k).value = x.k || null;
       if (x.d && /^\d{4}-\d\d-\d\d$/.test(x.d)) { row.getCell(C.d).value = new Date(x.d + "T12:00:00"); row.getCell(C.d).numFmt = "dd/mm/yy"; }
       else row.getCell(C.d).value = x.d || null;
       row.getCell(C.bl).value = x.bl ? (isNaN(+x.bl) ? x.bl : +x.bl) : null;
@@ -3744,7 +3744,7 @@ async function exportPianoXlsx({ name, rows, calzs, weeks, info, daysOf, capOf, 
   }
 
   // larghezze, filtro, stampa
-  const widths = { [C.calz]: 9, [C.b]: 11, [C.a]: 20, [C.k]: 18, [C.d]: 10, [C.bl]: 9, [C.r]: 4, [C.matS]: 10, [C.q]: 7, [C.sp]: 7, [C.g]: 7, [C.p]: 10, [C.saldo]: 7, [C.check]: 7, [cTot]: 10 };
+  const widths = { [C.calz]: 9, [C.b]: 11, [C.s]: 7, [C.a]: 20, [C.k]: 18, [C.d]: 10, [C.bl]: 9, [C.r]: 4, [C.matS]: 10, [C.q]: 7, [C.sp]: 7, [C.g]: 7, [C.p]: 10, [C.saldo]: 7, [C.check]: 7, [cTot]: 10 };
   for (let c = 1; c <= lastC; c++) ws.getColumn(c).width = widths[c] || (c >= C.mat0 && c < C.matS ? 7 : 8);
   ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: lastC } };
   ws.pageSetup = { orientation: "landscape", paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: "3:4", margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } };
@@ -3824,8 +3824,28 @@ function PianoTab({ pia, vers, wide }) {
   const righe = view ? view.rows : (pia.righe || {});
   const meta = view ? { name: view.name, week: view.week } : liveMeta;
   const cfg = pia.cfg || {};
+  // una tantum: riporta la stagione dal foglio Excel Mosaicon 1 (W 45.2026) sulle righe che non ce l'hanno
+  useEffect(() => {
+    if (view || !pia.righe || cfg.stagSeed) return;
+    let stop = false;
+    (async () => {
+      const seed = (await import("./stagioniSeed.json")).default;
+      const N = (x) => String(x ?? "").trim().toUpperCase().replace(/\s+/g, " ");
+      const keys = [(b, c, a, k, bl, r) => [b, c, a, k, bl, r], (b, c, a, k, bl) => [b, a, k, bl], (b, c, a, k) => [b, a, k], (b, c, a) => [b, a]];
+      const maps = keys.map((f) => { const m = new Map(); seed.forEach(([b, c, st, a, k, bl, r]) => { const key = f(b, c, a, k, bl, r).map(N).join("|"); const v = m.get(key); m.set(key, v === undefined || v === st ? st : null); }); return m; });
+      const upd = {};
+      Object.entries(pia.righe).forEach(([id, x]) => {
+        if (String(x.s || "").trim()) return;
+        for (let i = 0; i < keys.length; i++) { const st = maps[i].get(keys[i](x.b, x.c, x.a, x.k, x.bl, x.r).map(N).join("|")); if (st) { upd[`righe/${id}/s`] = st; break; } }
+      });
+      if (stop) return;
+      upd["cfg/stagSeed"] = new Date().toISOString().slice(0, 10);
+      await update(ref(db, "piano"), upd);
+    })().catch((e) => console.error("stagioni", e));
+    return () => { stop = true; };
+  }, [view, !!pia.righe, cfg.stagSeed]);
   const [q, setQ] = useState("");
-  const [cf, setCf] = useState({ b: [], a: [], d: [], bl: [] });   // filtri a tendina per colonna
+  const [cf, setCf] = useState({ b: [], s: [], a: [], d: [], bl: [] });   // filtri a tendina per colonna
   const [onlyMiss, setOnlyMiss] = useState(false);
   const [sel, setSel] = useState({});
   const [edit, setEdit] = useState(null);      // riga in modifica / nuova ({} = nuova)
@@ -3884,11 +3904,11 @@ function PianoTab({ pia, vers, wide }) {
   };
   const addWeeks = () => set(ref(db, "piano/cfg/ext"), ext + 4).catch((e) => window.alert("Operazione non riuscita: " + e.message));
   const NW = weeks.length;
-  const COLS_L = 19; // colonne prima delle settimane: sel, brand, articolo, cons, blocco, R, 6 materiali, mat, qnt, sped, giac, prezzo, saldo, check
+  const COLS_L = 20; // colonne prima delle settimane: sel, brand, stagione, articolo, cons, blocco, R, 6 materiali, mat, qnt, sped, giac, prezzo, saldo, check
   const capOf = (c) => +(cfg.cap && cfg.cap[c]) || 0;
   const daysOf = (w) => (cfg.days && +cfg.days[w.k]) || w.days;
   // larghezza colonne e altezza righe regolabili col mouse (come in Excel), salvate nel browser
-  const [colW, setColW] = useState(() => { try { return JSON.parse(localStorage.getItem("piano_colw") || "null"); } catch (e) { return null; } });
+  const [colW, setColW] = useState(() => { try { return JSON.parse(localStorage.getItem("piano_colw2") || "null"); } catch (e) { return null; } });
   const [rowH, setRowH] = useState(() => { try { return JSON.parse(localStorage.getItem("piano_rowh") || "{}") || {}; } catch (e) { return {}; } });
   const tableRef = useRef(null);
   const colKeys = [...Array.from({ length: COLS_L }, (_, i) => "L" + i), ...weeks.map((w) => w.k), "S"];
@@ -3906,7 +3926,7 @@ function PianoTab({ pia, vers, wide }) {
     if (!base) { base = {}; colKeys.forEach((k, i) => { base[k] = ths[i] ? Math.round(ths[i].offsetWidth) : 54; }); }
     const key = colKeys[idx], w0 = base[key] || th0.offsetWidth, x0 = e.clientX;
     dragStart(e, (ev) => { const nw = Math.max(18, Math.round(w0 + (ev.clientX - x0) / sc)); setColW((p) => ({ ...(p || base), [key]: nw })); },
-      () => setColW((p) => { try { localStorage.setItem("piano_colw", JSON.stringify(p)); } catch (er) {} return p; }));
+      () => setColW((p) => { try { localStorage.setItem("piano_colw2", JSON.stringify(p)); } catch (er) {} return p; }));
   };
   const startRowDrag = (e, id) => {
     const tr = e.currentTarget.closest("tr"); if (!tr) return;
@@ -3915,7 +3935,7 @@ function PianoTab({ pia, vers, wide }) {
     dragStart(e, (ev) => { const nh = Math.max(16, Math.round(h0 + (ev.clientY - y0) / sc)); setRowH((p) => (all ? { all: nh } : { ...p, [id]: nh })); },
       () => setRowH((p) => { try { localStorage.setItem("piano_rowh", JSON.stringify(p)); } catch (er) {} return p; }));
   };
-  const resetSizes = () => { setColW(null); setRowH({}); try { localStorage.removeItem("piano_colw"); localStorage.removeItem("piano_rowh"); } catch (er) {} };
+  const resetSizes = () => { setColW(null); setRowH({}); try { localStorage.removeItem("piano_colw2"); localStorage.removeItem("piano_rowh"); } catch (er) {} };
   const rzH = (idx) => <div onMouseDown={(e) => startColDrag(e, idx)} title="Trascina per allargare o stringere la colonna" style={{ position: "absolute", top: 0, right: -3, bottom: 0, width: 7, cursor: "col-resize", zIndex: 3 }} />;
   const sumW = colW ? colKeys.reduce((a, k) => a + (colW[k] || 54), 0) : 0;
 
@@ -3937,8 +3957,8 @@ function PianoTab({ pia, vers, wide }) {
   const ql = q.trim().toUpperCase();
   const shown = rows.filter((r) => {
     if (onlyMiss && !(info.get(r.id).plan > 0 && info.get(r.id).miss > 0)) return false;
-    if (ql && ![r.b, r.c, r.a, r.k, r.bl].some((x) => String(x || "").toUpperCase().includes(ql))) return false;
-    for (const f of ["b", "a", "d", "bl"]) if (cf[f].length && !cf[f].includes(cfKey(f, r))) return false;
+    if (ql && ![r.b, r.c, r.s, r.a, r.k, r.bl].some((x) => String(x || "").toUpperCase().includes(ql))) return false;
+    for (const f of ["b", "s", "a", "d", "bl"]) if (cf[f].length && !cf[f].includes(cfKey(f, r))) return false;
     return true;
   });
   const cfOpts = (f) => { const m = new Map(); rows.forEach((r) => { const k = cfKey(f, r); m.set(k, (m.get(k) || 0) + 1); }); return [...m.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0]), "it", { numeric: true })).map(([k, n]) => ({ key: k, label: k === "" ? "(vuoto)" : f === "d" && /^\d{4}-\d\d-\d\d$/.test(k) ? k.slice(8) + "/" + k.slice(5, 7) + "/" + k.slice(0, 4) : k, n })); };
@@ -4072,9 +4092,9 @@ function PianoTab({ pia, vers, wide }) {
       {rows.length > 0 && (
         <>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px", marginBottom: 10 }}>
-            <input type="text" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca marchio, articolo, colore o blocco" aria-label="Cerca nel piano"
+            <input type="text" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca marchio, stagione, articolo, colore o blocco" aria-label="Cerca nel piano"
               style={{ flex: "1 1 220px", maxWidth: 360, boxSizing: "border-box", background: S0, border: `1.5px solid ${BRD2}`, borderRadius: 12, padding: "0 12px", minHeight: 28, fontFamily: FONT, fontSize: 14, color: TXT, outline: "none" }} />
-            {cfActive && <button onClick={() => setCf({ b: [], a: [], d: [], bl: [] })} style={{ background: M, color: "#fff", border: "none", borderRadius: 9, padding: "0 10px", minHeight: 28, fontFamily: FONT, fontWeight: 800, fontSize: 11, cursor: "pointer" }}>Azzera filtri colonna ({shown.length} righe)</button>}
+            {cfActive && <button onClick={() => setCf({ b: [], s: [], a: [], d: [], bl: [] })} style={{ background: M, color: "#fff", border: "none", borderRadius: 9, padding: "0 10px", minHeight: 28, fontFamily: FONT, fontWeight: 800, fontSize: 11, cursor: "pointer" }}>Azzera filtri colonna ({shown.length} righe)</button>}
             <button onClick={() => setOnlyMiss((v) => !v)} style={{ background: onlyMiss ? ACC : "#FFF7E0", color: onlyMiss ? "#fff" : "#854D0E", border: "1.5px solid #E8D9A8", borderRadius: 9, padding: "0 10px", minHeight: 28, fontFamily: FONT, fontWeight: 800, fontSize: 11, cursor: "pointer" }}>
               {onlyMiss ? "Mostra tutte le righe" : "Solo righe con materiali mancanti"}
             </button>
@@ -4120,18 +4140,19 @@ function PianoTab({ pia, vers, wide }) {
                 <tr>
                   <th style={{ ...th, width: 26 }}>{rzH(0)}</th>
                   <FilterTh label="Marchio" style={{ ...th, textAlign: "left", minWidth: 62 }} values={cfOpts("b")} selected={cf.b} onChange={(v) => setCf((c) => ({ ...c, b: v }))} extra={rzH(1)} />
-                  <FilterTh label="Articolo · colore" style={{ ...th, textAlign: "left", minWidth: 160 }} values={cfOpts("a")} selected={cf.a} onChange={(v) => setCf((c) => ({ ...c, a: v }))} extra={rzH(2)} />
-                  <FilterTh label="Consegna" style={{ ...th, minWidth: 48 }} values={cfOpts("d")} selected={cf.d} onChange={(v) => setCf((c) => ({ ...c, d: v }))} extra={rzH(3)} />
-                  <FilterTh label="Blocco ordine" style={{ ...th, minWidth: 64 }} values={cfOpts("bl")} selected={cf.bl} onChange={(v) => setCf((c) => ({ ...c, bl: v }))} extra={rzH(4)} />
-                  <th style={{ ...th, minWidth: 24 }}>R{rzH(5)}</th>
-                  {PI_MAT.map(([k, l], j) => <th key={k} style={{ ...thWrap, background: "#FFF7E0", color: "#854D0E", minWidth: k === "fm" ? 46 : 48 }}>{l}{rzH(6 + j)}</th>)}
-                  <th style={{ ...thWrap, background: "#FFF7E0", color: "#854D0E", minWidth: 52 }}>Materiali{rzH(12)}</th>
-                  <th style={{ ...th, minWidth: 44 }}>Qnt{rzH(13)}</th>
-                  <th style={{ ...th, minWidth: 44 }}>Sped.{rzH(14)}</th>
-                  <th style={{ ...th, minWidth: 44, background: "#C9CED6", color: "#4B5563" }}>Giac.{rzH(15)}</th>
-                  <th style={{ ...thWrap, minWidth: 54 }}>Prezzo medio (€){rzH(16)}</th>
-                  <th style={{ ...th, minWidth: 46, background: "#DCE5F3" }}>Saldo{rzH(17)}</th>
-                  <th style={{ ...th, minWidth: 44 }}>Check{rzH(18)}</th>
+                  <FilterTh label="Stag." style={{ ...th, minWidth: 46 }} values={cfOpts("s")} selected={cf.s} onChange={(v) => setCf((c) => ({ ...c, s: v }))} extra={rzH(2)} />
+                  <FilterTh label="Articolo · colore" style={{ ...th, textAlign: "left", minWidth: 160 }} values={cfOpts("a")} selected={cf.a} onChange={(v) => setCf((c) => ({ ...c, a: v }))} extra={rzH(3)} />
+                  <FilterTh label="Consegna" style={{ ...th, minWidth: 48 }} values={cfOpts("d")} selected={cf.d} onChange={(v) => setCf((c) => ({ ...c, d: v }))} extra={rzH(4)} />
+                  <FilterTh label="Blocco ordine" style={{ ...th, minWidth: 64 }} values={cfOpts("bl")} selected={cf.bl} onChange={(v) => setCf((c) => ({ ...c, bl: v }))} extra={rzH(5)} />
+                  <th style={{ ...th, minWidth: 24 }}>R{rzH(6)}</th>
+                  {PI_MAT.map(([k, l], j) => <th key={k} style={{ ...thWrap, background: "#FFF7E0", color: "#854D0E", minWidth: k === "fm" ? 46 : 48 }}>{l}{rzH(7 + j)}</th>)}
+                  <th style={{ ...thWrap, background: "#FFF7E0", color: "#854D0E", minWidth: 52 }}>Materiali{rzH(13)}</th>
+                  <th style={{ ...th, minWidth: 44 }}>Qnt{rzH(14)}</th>
+                  <th style={{ ...th, minWidth: 44 }}>Sped.{rzH(15)}</th>
+                  <th style={{ ...th, minWidth: 44, background: "#C9CED6", color: "#4B5563" }}>Giac.{rzH(16)}</th>
+                  <th style={{ ...thWrap, minWidth: 54 }}>Prezzo medio (€){rzH(17)}</th>
+                  <th style={{ ...th, minWidth: 46, background: "#DCE5F3" }}>Saldo{rzH(18)}</th>
+                  <th style={{ ...th, minWidth: 44 }}>Check{rzH(19)}</th>
                   {weeks.map((w, i) => (
                     <th key={w.k} style={{ ...th, minWidth: 54, ...wlOf(i), ...(w.k === baseKey ? { background: "#D7E3FF", color: M } : {}) }}>{rzH(COLS_L + i)}{w.n}<div style={{ fontWeight: 600, fontSize: 11 }}>{w.cal}</div>{!usedW[w.k] && <button onClick={() => hideWeek(w.k)} title="Nascondi questa settimana (vuota)" aria-label={`Nascondi settimana ${w.n}`} style={{ border: "none", background: "transparent", color: T3, cursor: "pointer", fontSize: 11, lineHeight: 1, padding: "2px 4px" }}>×</button>}</th>
                   ))}
@@ -4164,6 +4185,9 @@ function PianoTab({ pia, vers, wide }) {
                             <tr key={r.id} style={(rowH[r.id] || rowH.all) ? { height: rowH[r.id] || rowH.all } : undefined}>
                               <td style={{ ...bt, textAlign: "center", padding: "0 4px", position: "relative" }}><div onMouseDown={(e) => startRowDrag(e, r.id)} title="Trascina per cambiare l'altezza (Maiusc = tutte le righe)" style={{ position: "absolute", left: 0, right: 0, bottom: -3, height: 7, cursor: "row-resize", zIndex: 2 }} /><input type="checkbox" checked={isSel} onChange={(e) => setSel((p) => ({ ...p, [r.id]: e.target.checked }))} aria-label={`Seleziona ${r.a} ${r.k}`} style={{ width: 16, height: 16, accentColor: M }} /></td>
                               <td style={{ ...bt, padding: "2px 6px", fontWeight: 800, fontSize: 12, color: TXT }}>{r.b}</td>
+                              <td style={cell()}>
+                                <RCell readOnly={ro} kind="txt" align="center" g={`${rg}:-1`} value={r.s} onCommit={(v) => piWrite(`righe/${r.id}/s`, v == null ? v : String(v).trim().toUpperCase())} pad="3px 1px" fs={11} bold />
+                              </td>
                               <td style={{ ...bt, padding: "2px 6px", lineHeight: 1.15, cursor: "pointer" }} onClick={() => { if (!ro) setEdit({ id: r.id, ...r }); }} title="Modifica la riga">
                                 <div style={{ fontWeight: 800, fontSize: 12, color: TXT }}>{r.a}</div>
                                 <div style={{ fontSize: 10, color: T2 }}>{r.k}</div>
@@ -4240,7 +4264,7 @@ function PianoTab({ pia, vers, wide }) {
             </table>
           </div>
           <div style={{ fontSize: 11, color: T2, marginTop: 8, lineHeight: 1.5, maxWidth: 900 }}>
-            Saldo = Qnt − Sped. − Giac.; il Check è verde quando le paia pianificate coincidono con il saldo. Materiali (PE · FO · SO · SU · TA · Tot. forme, li compila Luca): «OK» arrivato, «WK40» atteso in quella settimana, «/» non serve; vuoto, «DA AGG» o un arrivo dopo la prima settimana di piano della riga sono segnalati in arancio. Clicca sul nome di una riga per modificarne marchio, articolo, colore, blocco, R e consegna.
+            Saldo = Qnt − Sped. − Giac.; il Check è verde quando le paia pianificate coincidono con il saldo. Materiali (PE · FO · SO · SU · TA · Tot. forme, li compila Luca): «OK» arrivato, «WK40» atteso in quella settimana, «/» non serve; vuoto, «DA AGG» o un arrivo dopo la prima settimana di piano della riga sono segnalati in arancio. Stag. = stagione della riga (es. AH26, PE27), si scrive direttamente nella cella. Clicca sul nome di una riga per modificarne marchio, stagione, articolo, colore, blocco, R e consegna.
           </div>
         </>
       )}
