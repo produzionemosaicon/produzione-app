@@ -3532,6 +3532,41 @@ const piFmtN = (n) => String(n).replace(".", ",");
 const piEur = (x) => "€ " + Math.round(x).toLocaleString("it-IT");
 const piK = (x) => (x ? (Math.round(x / 100) / 10).toLocaleString("it-IT") + "k" : "");
 const piRowKey = (r) => [r.b, r.c, r.a, r.k, r.bl, r.r].map((x) => String(x || "").trim().toUpperCase()).join("|");
+// stagioni che non fanno gruppo a sé (seguono la stagione del blocco precedente): niente riga rossa
+const PI_STAG_NEUTRE = ["PES", "AJOUTS", "UNIFOR", "UNIFORM"];
+const piStag = (r) => String(r.s || "").trim().toUpperCase();
+const piBlKey = (r) => {
+  const m = String(r.bl || "").match(/(\d+)\s*\/\s*(\d+)/);
+  return [m ? 0 : 1, m ? +m[1] : 0, m ? +m[2] : 0, parseInt(r.r, 10) || 0, r.o || 0];
+};
+// stagione in ordine di tempo: AH26/FW26/INV26 = autunno 2026, PE27/SS27/PS27 = primavera 2027; altre (MAIN, 27C…) null
+const piStagTime = (st) => {
+  const m = String(st || "").match(/^(AH|FW|AI|INV|PE|SS|PS|PRE)\s*(\d{2})$/);
+  if (!m) return null;
+  return +m[2] * 2 + (["AH", "FW", "AI", "INV"].includes(m[1]) ? 1 : 0);
+};
+const piCmpKey = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] - b[i]; return 0; };
+// ordine del piano: per calzaturificio e marchio (come prima), dentro il marchio per stagione e poi per blocco crescente.
+// Le stagioni neutre (PES, AJOUTS, UNIFOR) e le righe senza stagione prendono la stagione del blocco precedente (o del successivo).
+// Restituisce le righe ordinate con _st = stagione effettiva.
+function piOrder(rows) {
+  const grp = new Map();
+  rows.forEach((r) => { const k = `${r.c}|${r.b}`; if (!grp.has(k)) grp.set(k, { o: r.o || 0, list: [] }); const g = grp.get(k); g.o = Math.min(g.o, r.o || 0); g.list.push(r); });
+  const out = [];
+  [...grp.values()].sort((a, b) => a.o - b.o).forEach(({ list }) => {
+    const byBl = list.map((r) => ({ r, k: piBlKey(r) })).sort((a, b) => piCmpKey(a.k, b.k));
+    const real = (x) => { const s = piStag(x.r); return s && !PI_STAG_NEUTRE.includes(s) ? s : ""; };
+    let prev = "";
+    byBl.forEach((x) => { const s = real(x); x.st = s || prev; if (s) prev = s; });
+    let next = "";
+    for (let i = byBl.length - 1; i >= 0; i--) { if (!byBl[i].st) byBl[i].st = next; else if (real(byBl[i])) next = byBl[i].st; }
+    const first = new Map(); byBl.forEach((x) => { if (!first.has(x.st)) first.set(x.st, first.size); });
+    const sk = (st) => { const t = piStagTime(st); return t === null ? [1, first.get(st)] : [0, t]; };
+    byBl.sort((a, b) => piCmpKey(sk(a.st), sk(b.st)) || piCmpKey(a.k, b.k));
+    byBl.forEach((x) => out.push({ ...x.r, _st: x.st }));
+  });
+  return out;
+}
 // settimana media (pesata sulle paia) del piano di una riga
 const piMass = (r) => { const e = Object.entries(r.w || {}).filter(([, v]) => +v > 0); const t = e.reduce((s, [, v]) => s + +v, 0); return t ? e.reduce((s, [k, v]) => s + piIdx(k) * +v, 0) / t : null; };
 // stato di un materiale: ok / na / soon (atteso prima dell'inizio del piano) / late (dopo) / miss (manca)
@@ -3558,7 +3593,7 @@ const piSlug = (s) => String(s).replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g,
 const piWrite = (path, v) => set(ref(db, `piano/${path}`), v === undefined || v === "" ? null : v);
 // materiale/data in forma da salvare: tolgo i vuoti
 const piCleanRow = (r) => {
-  const o = { ...r }; delete o.id;
+  const o = { ...r }; delete o.id; delete o._st;
   const m = {}; Object.entries(o.m || {}).forEach(([k, v]) => { if (String(v ?? "").trim() !== "") m[k] = String(v).trim(); });
   o.m = Object.keys(m).length ? m : null;
   const w = {}; Object.entries(o.w || {}).forEach(([k, v]) => { if (+v > 0) w[k] = +v; });
@@ -3853,7 +3888,7 @@ function PianoTab({ pia, vers, wide }) {
   const [showCfg, setShowCfg] = useState(false);
   const [busy, setBusy] = useState("");
 
-  const rows = useMemo(() => Object.entries(righe).map(([id, r]) => ({ id, ...r })).sort((a, b) => (a.o || 0) - (b.o || 0)), [righe]);
+  const rows = useMemo(() => piOrder(Object.entries(righe).map(([id, r]) => ({ id, ...r })).sort((a, b) => (a.o || 0) - (b.o || 0))), [righe]);
   const liveRows = useMemo(() => Object.entries(pia.righe || {}).map(([id, r]) => ({ id, ...r })).sort((a, b) => (a.o || 0) - (b.o || 0)), [pia.righe]);
   const baseKey = meta.week || piToday();
   const hideMap = cfg.hide || {};
@@ -3895,7 +3930,7 @@ function PianoTab({ pia, vers, wide }) {
     setBusy("w");
     try {
       const vid = piSlug(cur);
-      const clean = {}; rows.forEach((r) => { const { id, ...rest } = r; clean[id] = rest; });
+      const clean = {}; rows.forEach((r) => { const { id, _st, ...rest } = r; clean[id] = rest; });
       await set(ref(db, `pianoVersRighe/${vid}`), clean);
       await set(ref(db, `pianoVers/${vid}`), { name: cur, week: baseKey, weekStart: piMonday(baseKey).toISOString().slice(0, 10), savedAt: Date.now(), n: rows.length });
       await set(ref(db, "piano/meta"), { name: nxt, week: nextKey, savedName: cur });
@@ -4176,9 +4211,10 @@ function PianoTab({ pia, vers, wide }) {
                           const nf = info.get(r.id);
                           const rg = gi++;
                           const newB = zi > 0 && list[zi - 1].b !== r.b;
+                          const newS = !newB && zi > 0 && list[zi - 1]._st !== r._st;   // cambio stagione nello stesso marchio (PES, AJOUTS, UNIFOR non separano)
                           const isSel = !!sel[r.id];
                           const bg = isSel ? "#C9DBFF" : zi % 2 === 0 ? "#EAF1FF" : "#FFFFFF";
-                          const bt = { background: bg, borderBottom: `1px solid ${BRD}`, borderRight: grid, ...(newB ? { borderTop: `3px double ${RED}` } : {}) };
+                          const bt = { background: bg, borderBottom: `1px solid ${BRD}`, borderRight: grid, ...(newB ? { borderTop: `3px double ${RED}` } : newS ? { borderTop: `3px solid ${RED}` } : {}) };
                           const cell = (n) => ({ ...bt, padding: 0, textAlign: "center" });
                           const nums = [["q", r.q, "num"], ["sp", r.sp, "num"], ["g", r.g, "num"], ["p", r.p, "dec"]];
                           return (
@@ -4362,7 +4398,7 @@ function PianoVersModal({ vers, rows, righe, meta, weeks, mode, onView, onClose 
     if (vers[vid] && !window.confirm(`Esiste già una versione «${nm}». Sostituirla con il piano attuale?`)) return;
     setBusy(true);
     try {
-      const clean = {}; rows.forEach((r) => { const { id, ...rest } = r; clean[id] = rest; });
+      const clean = {}; rows.forEach((r) => { const { id, _st, ...rest } = r; clean[id] = rest; });
       await set(ref(db, `pianoVersRighe/${vid}`), clean);
       await set(ref(db, `pianoVers/${vid}`), { name: nm, week: meta.week || piToday(), weekStart: piMonday(meta.week || piToday()).toISOString().slice(0, 10), savedAt: Date.now(), n: rows.length });
       await set(ref(db, "piano/meta/savedName"), nm);
