@@ -4336,9 +4336,10 @@ function PianoTab({ pia, vers, wide }) {
                               </td>
                               {weeks.map((w, i) => {
                                 const v = piPn(r, w.k);
+                                const late = !!v && /^\d{4}-\d\d-\d\d$/.test(r.d || "") && piMonday(w.k).toISOString().slice(0, 10) > r.d;
                                 return (
                                   <td key={w.k} style={{ ...cell(), ...wlOf(i) }}>
-                                    <RCell readOnly={ro} kind="num" align="center" g={`${rg}:${10 + i}`} value={v || ""} onCommit={(nv) => piWrite(`righe/${r.id}/w/${w.k}`, nv)} pad="3px 0" fs={12} bold bg={v ? "#BBD0FF" : undefined} fg={v ? "#1A3FA0" : undefined} />
+                                    <RCell readOnly={ro} kind="num" align="center" g={`${rg}:${10 + i}`} value={v || ""} onCommit={(nv) => piWrite(`righe/${r.id}/w/${w.k}`, nv)} pad="3px 0" fs={12} bold bg={v ? (late ? "#C62828" : "#BBD0FF") : undefined} fg={v ? (late ? "#FFFFFF" : "#1A3FA0") : undefined} />
                                   </td>
                                 );
                               })}
