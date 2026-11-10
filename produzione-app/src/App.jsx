@@ -3812,7 +3812,7 @@ async function exportPianoXlsx({ name, rows, calzs, weeks, info, daysOf, capOf, 
       const tp = nf.plan, sal = piSaldo(x);
       row.getCell(C.saldo).value = { formula: `${L(C.q)}${r}-${L(C.sp)}${r}-${L(C.g)}${r}`, result: sal };
       row.getCell(C.saldo).fill = fill("DCE5F3");
-      weeks.forEach((w, i) => { const v = piPn(x, w.k); const c = row.getCell(C.w0 + i); c.value = v || null; if (v) { c.fill = fill("BBD0FF"); c.font = { bold: true, color: { argb: "FF1A3FA0" } }; } });
+      weeks.forEach((w, i) => { const v = piPn(x, w.k); const c = row.getCell(C.w0 + i); c.value = v || null; if (v) { const late = /^\d{4}-\d\d-\d\d$/.test(x.d || "") && piMonday(w.k).toISOString().slice(0, 10) > x.d; c.fill = fill(late ? "C62828" : "BBD0FF"); c.font = { bold: true, color: { argb: late ? "FFFFFFFF" : "FF1A3FA0" } }; } });
       row.getCell(cTot).value = { formula: `SUM(${L(C.w0)}${r}:${L(cTot - 1)}${r})`, result: tp };
       row.getCell(cTot).font = { bold: true };
       const d = `${L(cTot)}${r}-${L(C.saldo)}${r}`;
