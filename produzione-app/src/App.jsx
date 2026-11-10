@@ -3746,6 +3746,15 @@ async function exportPianoXlsx({ name, rows, calzs, weeks, info, daysOf, capOf, 
   const NW = weeks.length;
   const C = { calz: 1, b: 2, s: 3, a: 4, k: 5, d: 6, bl: 7, r: 8, mat0: 9, matS: 15, q: 16, sp: 17, g: 18, p: 19, saldo: 20, check: 21, w0: 22 };
   const cTot = C.w0 + NW, lastC = cTot;
+  const redLine = (style) => ({ style, color: { argb: "FFE53E3E" } });
+  const monthLine = { style: "medium", color: { argb: "FF5A7494" } };
+  // linee verticali tra le settimane (come a schermo): rossa a inizio piano e al cambio anno, blu-grigia al cambio mese
+  const weekLeft = (i) => {
+    if (i <= 0 || weeks[i].k.slice(0, 4) !== weeks[i - 1].k.slice(0, 4)) return redLine("medium");
+    if (weeks[i].month !== weeks[i - 1].month) return monthLine;
+    return null;
+  };
+  const lineRows = [];
   const MATFILL = { ok: "DCFCE7", na: "F1F5F9", soon: "E0F2FE", late: "FFD9B8", miss: "FFF1E6" };
 
   // riga 1: titolo · riga 2: note · riga 3: mesi · riga 4: intestazioni
@@ -3770,6 +3779,7 @@ async function exportPianoXlsx({ name, rows, calzs, weeks, info, daysOf, capOf, 
     c.fill = fill(i + 1 >= C.mat0 && i + 1 <= C.matS ? "FFF7E0" : i + 1 === C.g ? "C9CED6" : i + 1 === C.saldo ? "DCE5F3" : "EEF3FF");
   });
   ws.getRow(4).height = 42;
+  lineRows.push(4);
 
   let r = 5;
   const dataFirst = r;
@@ -3808,7 +3818,11 @@ async function exportPianoXlsx({ name, rows, calzs, weeks, info, daysOf, capOf, 
       const d = `${L(cTot)}${r}-${L(C.saldo)}${r}`;
       row.getCell(C.check).value = { formula: `IF(${d}=0,"ok",${d})`, result: tp - sal === 0 ? "ok" : tp - sal };
       row.getCell(C.check).font = { bold: true, color: { argb: tp - sal === 0 ? "FF166534" : "FFC2410C" } };
-      for (let c = 1; c <= lastC; c++) { const cc = row.getCell(c); cc.border = box; if (c >= C.d && !cc.alignment) cc.alignment = { horizontal: "center" }; if (!cc.fill && zi % 2 === 0) cc.fill = fill("F5F8FF"); }
+      const prevX = zi > 0 ? list[zi - 1] : null;
+      const newB = !!prevX && prevX.b !== x.b;
+      const newS = !!prevX && !newB && prevX._st !== x._st;   // cambio stagione nello stesso marchio (PES, AJOUTS, UNIFOR non separano)
+      for (let c = 1; c <= lastC; c++) { const cc = row.getCell(c); cc.border = newB ? { ...box, top: redLine("double") } : newS ? { ...box, top: redLine("medium") } : box; if (c >= C.d && !cc.alignment) cc.alignment = { horizontal: "center" }; if (!cc.fill && zi % 2 === 0) cc.fill = fill("F5F8FF"); }
+      lineRows.push(r);
       r++;
     });
     const last = r - 1;
@@ -3827,6 +3841,7 @@ async function exportPianoXlsx({ name, rows, calzs, weeks, info, daysOf, capOf, 
     ws.getCell(r, cTot).value = { formula: `SUM(${L(cTot)}${first}:${L(cTot)}${last})`, result: list.reduce((s, x) => s + info.get(x.id).plan, 0) };
     [r, r + 1].forEach((rr) => { const row = ws.getRow(rr); for (let c = 1; c <= lastC; c++) { const cc = row.getCell(c); cc.border = box; cc.font = { bold: true }; if (!cc.fill) cc.fill = fill("EEF2F8"); if (c >= C.w0) cc.alignment = { horizontal: "center" }; } });
     paiaRowsAt.push(r);
+    lineRows.push(r, r + 1);
     r += 3;
   });
   const dataLast = r - 1;
@@ -3845,6 +3860,19 @@ async function exportPianoXlsx({ name, rows, calzs, weeks, info, daysOf, capOf, 
     if (i < NW) { ws.getCell(tr2, c).value = { formula: `SUMPRODUCT(${rng(c)},${rng(C.p)})` }; ws.getCell(tr2, c).numFmt = "€ #,##0"; }
   }
   [tr1, tr2].forEach((rr) => { const row = ws.getRow(rr); for (let c = 1; c <= lastC; c++) { const cc = row.getCell(c); cc.border = box; cc.font = { bold: true, color: { argb: "FF1A3FA0" } }; cc.fill = fill("D7E3FF"); if (c >= C.q) cc.alignment = { horizontal: "center" }; } });
+
+  lineRows.push(tr1, tr2);
+  // linee verticali tra le settimane su intestazione, righe dati, paia settimanali e totali
+  lineRows.forEach((rr) => {
+    for (let i = 0; i < NW; i++) {
+      const ln = weekLeft(i); if (!ln) continue;
+      const cc = ws.getCell(rr, C.w0 + i); cc.border = { ...(cc.border || {}), left: ln };
+    }
+  });
+  for (let i = 0; i < NW; i++) {   // riga dei mesi (3): solo dove inizia un mese o un anno
+    const ln = weekLeft(i); if (!ln) continue;
+    const cc = ws.getCell(3, C.w0 + i); cc.border = { ...(cc.border || {}), left: ln };
+  }
 
   // fatturato previsto per mese (sotto i totali)
   let mr = tr2 + 2;
