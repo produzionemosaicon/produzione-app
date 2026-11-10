@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { Fragment, useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from "react";
 import {
   BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -4018,7 +4018,9 @@ function PianoTab({ pia, vers, wide }) {
   // quando scorrendo si arriva al piano EMOS, in alto si bloccano le righe di EMOS al posto di quelle MOS
   const [stickC, setStickC] = useState("MOS");
   const scrollRef = useRef(null), theadRef = useRef(null), emosBarRef = useRef(null);
+  const mirrorRef = useRef(null), mirrorIn = useRef(null);
   const onPianoScroll = () => {
+    if (mirrorRef.current && scrollRef.current && mirrorRef.current.scrollLeft !== scrollRef.current.scrollLeft) mirrorRef.current.scrollLeft = scrollRef.current.scrollLeft;
     const h = theadRef.current, e = emosBarRef.current;
     if (!h || !e) { if (stickC !== "MOS") setStickC("MOS"); return; }
     const nc = e.getBoundingClientRect().top < h.getBoundingClientRect().bottom - 1 ? "EMOS" : "MOS";
@@ -4056,6 +4058,39 @@ function PianoTab({ pia, vers, wide }) {
   const [colW, setColW] = useState(() => { try { return JSON.parse(localStorage.getItem("piano_colw2") || "null"); } catch (e) { return null; } });
   const [rowH, setRowH] = useState(() => { try { return JSON.parse(localStorage.getItem("piano_rowh") || "{}") || {}; } catch (e) { return {}; } });
   const tableRef = useRef(null);
+  // barra di scorrimento orizzontale in alto (sempre raggiungibile) + colonne fino a Check bloccate: scorrono solo le settimane
+  useLayoutEffect(() => { try {
+    const sc = scrollRef.current, tb = tableRef.current, th = theadRef.current;
+    if (!sc || !tb || !th) return;
+    if (mirrorRef.current) mirrorRef.current.style.width = sc.clientWidth + "px";
+    if (mirrorIn.current) mirrorIn.current.style.width = sc.scrollWidth + "px";
+    const hr = th.lastElementChild; if (!hr) return;
+    const ws = Array.from(hr.children).slice(0, COLS_L).map((c) => c.offsetWidth);
+    if (ws.length < COLS_L) return;
+    const lefts = []; let acc = 0; ws.forEach((w) => { lefts.push(acc); acc += w; });
+    const freeze = acc < sc.clientWidth * 0.7;   // schermo troppo stretto: niente blocco
+    const busy = [];
+    Array.from(tb.rows).forEach((tr) => {
+      const inHead = !!tr.closest("thead");
+      let col = 0;
+      Array.from(tr.cells).forEach((td) => {
+        while (busy[col] > 0) col++;
+        const cs = td.colSpan || 1, rs = td.rowSpan || 1;
+        for (let k = 0; k < cs; k++) busy[col + k] = rs;
+        const fz = freeze && col + cs <= COLS_L;
+        if (fz) {
+          if (!td.dataset.fz) { td.dataset.fz = "1"; td.dataset.fzp = td.style.position || ""; }
+          td.style.position = "sticky"; td.style.left = lefts[col] + "px"; td.style.zIndex = inHead ? "7" : "3";
+          if (getComputedStyle(td).backgroundColor === "rgba(0, 0, 0, 0)") td.style.backgroundColor = S0;
+        } else if (td.dataset.fz) {
+          td.style.position = td.dataset.fzp || ""; td.style.left = ""; td.style.zIndex = "";
+          delete td.dataset.fz; delete td.dataset.fzp;
+        }
+        col += cs;
+      });
+      for (let k = 0; k < busy.length; k++) if (busy[k] > 0) busy[k]--;
+    });
+  } catch (e) { console.error("Blocco colonne piano:", e); } });
   const colKeys = [...Array.from({ length: COLS_L }, (_, i) => "L" + i), ...weeks.map((w) => w.k), "S"];
   const dragStart = (e, onMove, onEnd) => {
     e.preventDefault(); e.stopPropagation();
@@ -4262,6 +4297,9 @@ function PianoTab({ pia, vers, wide }) {
             </div>
           )}
 
+          <div ref={mirrorRef} onScroll={(e) => { if (scrollRef.current && scrollRef.current.scrollLeft !== e.currentTarget.scrollLeft) scrollRef.current.scrollLeft = e.currentTarget.scrollLeft; }} style={{ overflowX: "scroll", overflowY: "hidden", height: 18, marginBottom: 4 }} aria-label="Scorri il piano in orizzontale">
+            <div ref={mirrorIn} style={{ height: 1 }} />
+          </div>
           <div ref={scrollRef} onScroll={onPianoScroll} style={{ overflow: "auto", maxHeight: `calc((100vh - 150px) / ${zm})`, background: S0, border: `1px solid ${BRD2}`, borderRadius: 14 }}>
             <table ref={tableRef} style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 12, minWidth: "max-content", width: "100%", ...(colW ? { tableLayout: "fixed", width: sumW, minWidth: sumW } : {}) }}>
               {colW && <colgroup>{colKeys.map((k) => <col key={k} style={{ width: colW[k] || 54 }} />)}</colgroup>}
