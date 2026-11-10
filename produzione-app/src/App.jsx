@@ -260,6 +260,9 @@ export default function App() {
   const [stNewName, setStNewName] = useState("");
   const [addModal, setAddModal] = useState(null);
   const [addName, setAddName] = useState("");
+  const [assentiAll, setAssentiAll] = useState({});
+  const [absModal, setAbsModal] = useState(false);
+  const [absName, setAbsName] = useState("");
 
   const [anBrands, setAnBrands] = useState({
     MOSAICON: true,
@@ -378,6 +381,39 @@ export default function App() {
     });
   }, []);
 
+  useEffect(() => {
+    return onValue(ref(db, "assenti"), (snap) => setAssentiAll(snap.exists() ? snap.val() : {}));
+  }, []);
+
+  const assenti = useMemo(
+    () => Object.entries(assentiAll[date] || {})
+      .map(([id, v]) => ({ id, ...v }))
+      .sort((a, b) => (a.ts || 0) - (b.ts || 0)),
+    [assentiAll, date]
+  );
+
+  async function addAssente() {
+    const name = absName.trim();
+    if (!name) return;
+    try {
+      await set(ref(db, `assenti/${date}/${uid()}${uid()}`), { name, ts: Date.now() });
+      setAbsModal(false);
+      setAbsName("");
+    } catch (e) {
+      console.error(e);
+      alert("Errore nel salvataggio dell'assente.");
+    }
+  }
+
+  async function removeAssente(id) {
+    try {
+      await remove(ref(db, `assenti/${date}/${id}`));
+    } catch (e) {
+      console.error(e);
+      alert("Errore durante l'eliminazione dell'assente.");
+    }
+  }
+
   const saveGoal = useCallback(async (brand, sid, value) => {
     const key = `${brand}::${sid}`;
     const newGoals = { ...goals };
@@ -493,6 +529,7 @@ export default function App() {
     if (!ok) return;
     try {
       await remove(ref(db, `reports/${day}`));
+      await remove(ref(db, `assenti/${day}`));
     } catch (e) {
       console.error(e);
       alert("Errore durante l'eliminazione del report.");
@@ -845,6 +882,7 @@ export default function App() {
         {tab === "foglio" && (
           <FoglioTab
             wide={wide} stations={stations} getV={getV} getN={getN} openCell={openCell} savedKeys={savedKeys}
+            assenti={assenti} onAddAbs={() => { setAbsName(""); setAbsModal(true); }} onRemoveAbs={removeAssente}
             onEditSt={(brand, st) => { setStModal({ brand, st }); setStNewName(st.name); }}
             onAddSt={(brand, afterId) => { setAddModal({ brand, afterId }); setAddName(""); setAddPosition(afterId || ""); }}
           />
@@ -894,7 +932,7 @@ export default function App() {
       )}
       {!wide && <div className="no-print" style={{ height:76, flexShrink:0 }} />}
       <div id="print-doc" style={{ display:"none", padding:"30px", background:"#fff" }}>
-        <PrintDoc date={date} stations={stations} getV={getV} getN={getN} goals={goals} />
+        <PrintDoc date={date} stations={stations} getV={getV} getN={getN} goals={goals} assenti={assenti} />
       </div>
 
       <div id="analysis-print-doc" style={{ display:"none", padding:"30px", background:"#EAF0F8" }}>
@@ -949,6 +987,21 @@ export default function App() {
             </Btn>
           )}
           <Btn color={BG} textColor={T3} style={{ marginTop:8 }} onClick={() => setStModal(null)}>Annulla</Btn>
+        </Modal>
+      )}
+
+      {absModal && (
+        <Modal onClose={() => setAbsModal(false)}>
+          <div style={{ fontSize:9, fontWeight:700, color:T3, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:3 }}>Assenti · {fmtD(date)}</div>
+          <div style={{ fontSize:18, fontWeight:800, color:TXT, marginBottom:14 }}>Aggiungi assente</div>
+          <input
+            autoFocus value={absName} onChange={(e) => setAbsName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") addAssente(); }}
+            placeholder="Nome e cognome…"
+            style={{ width:"100%", background:BG, border:`2px solid ${M}`, borderRadius:10, padding:"11px 12px", fontSize:15, color:TXT, outline:"none", marginBottom:14, fontFamily:FONT }}
+          />
+          <Btn color={M} onClick={addAssente}>+ AGGIUNGI</Btn>
+          <Btn color={BG} textColor={T3} style={{ marginTop:8 }} onClick={() => setAbsModal(false)}>Annulla</Btn>
         </Modal>
       )}
 
@@ -1127,7 +1180,7 @@ function HomeTab({ date, reports, stations, onGoFoglio, wide }) {
 }
 
 /* ═══ FOGLIO TAB ═══ */
-function FoglioTab({ wide, stations, getV, getN, openCell, savedKeys, onEditSt, onAddSt }) {
+function FoglioTab({ wide, stations, getV, getN, openCell, savedKeys, onEditSt, onAddSt, assenti = [], onAddAbs, onRemoveAbs }) {
   return (
     <div style={wide ? { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 20, alignItems: "start", padding: "0 14px" } : undefined}>
       {["MOSAICON", "EMOS"].map((brand) => (
@@ -1183,6 +1236,22 @@ function FoglioTab({ wide, stations, getV, getN, openCell, savedKeys, onEditSt, 
           </button>
         </div>
       ))}
+      <div style={{ gridColumn:"1 / -1", marginTop:16 }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 16px", background:S2, borderBottom:`2px solid ${T2}`, borderLeft:`5px solid ${T2}` }}>
+          <span style={{ fontSize:17, fontWeight:900, color:TXT, letterSpacing:"0.12em" }}>ASSENTI</span>
+          <span style={{ fontFamily:MONO, fontSize:13, fontWeight:800, background:`${T2}20`, color:T2, padding:"4px 14px", borderRadius:20 }}>{assenti.length}</span>
+        </div>
+        {assenti.map((a, idx) => (
+          <div key={a.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 16px", background: idx%2===0 ? S0 : S1, borderBottom:`1px solid ${BRD}`, minHeight:48 }}>
+            <span style={{ flex:1, fontSize:14, fontWeight:700, color:TXT }}>{a.name}</span>
+            <button onClick={() => onRemoveAbs(a.id)} aria-label="Rimuovi assente" style={{ background:"#FEE2E2", color:RED, border:"none", borderRadius:8, width:30, height:30, cursor:"pointer", fontSize:13 }}>✕</button>
+          </div>
+        ))}
+        <button onClick={onAddAbs} style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 16px", margin:"8px 12px", background:S0, border:`1.5px dashed ${BRD2}`, borderRadius:10, cursor:"pointer", fontFamily:FONT, width:"calc(100% - 24px)" }}>
+          <span style={{ width:20, height:20, borderRadius:5, background:S2, color:T2, display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, fontWeight:900, flexShrink:0 }}>+</span>
+          <span style={{ fontSize:11, fontWeight:600, color:T2 }}>Aggiungi assente</span>
+        </button>
+      </div>
       <div style={{ height:24 }} />
     </div>
   );
@@ -1381,7 +1450,7 @@ function AnalisiTab({ wide, stations, anBrands, toggleBrand, anSids, toggleStati
 }
 
 /* ═══ PRINT DOC PRODUZIONE ═══ */
-function PrintDoc({ date, stations, getV, getN, goals = {} }) {
+function PrintDoc({ date, stations, getV, getN, goals = {}, assenti = [] }) {
   const COL = "340px repeat(4, 1fr)";
   const mosaiconTargets = { "10:00": 75, "12:00": 150, "15:00": 225, "17:00": 300 };
   const getHighlightStationId = (brand) => {
@@ -1460,6 +1529,19 @@ function PrintDoc({ date, stations, getV, getN, goals = {} }) {
           </div>
         );
       })}
+      {assenti.length > 0 && (
+        <div style={{ marginBottom: 18, background: "#fff", borderRadius: 18, overflow: "hidden", boxShadow: "0 4px 14px rgba(13,27,42,0.06)", border: `1px solid ${BRD}` }}>
+          <div data-print-row="true" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px", background: "linear-gradient(135deg, #5B6B8014, #ffffff 78%)", borderBottom: `1px solid ${BRD}`, borderLeft: `6px solid ${T2}` }}>
+            <div style={{ fontSize: 30, fontWeight: 900, color: T2, letterSpacing: "0.10em", lineHeight: 1 }}>ASSENTI</div>
+            <div style={{ fontFamily: MONO, fontSize: 28, fontWeight: 900, color: T2 }}>{assenti.length}</div>
+          </div>
+          {assenti.map((a, i) => (
+            <div key={a.id} data-print-row="true" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "16px 20px", background: i % 2 === 0 ? "#FFFFFF" : "#F6F8FC", borderBottom: `1px solid ${BRD}`, borderLeft: "6px solid transparent" }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: TXT, lineHeight: 1.1 }}>{a.name}</div>
+            </div>
+          ))}
+        </div>
+      )}
       <div data-print-row="true" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 4px 0" }}>
         <span style={{ fontSize: 10, fontWeight: 700, color: T2, letterSpacing: "0.08em", textTransform: "uppercase" }}>Ricevere Qualità · Fare Qualità · Consegnare Qualità</span>
         <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: T2 }}>{fmtD(date)}</span>
