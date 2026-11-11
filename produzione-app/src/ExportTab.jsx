@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { calcolaAlert } from "./alerts.js";
 
 /* ═══ PER CLAUDE: estrae gli avanzamenti dell'app in un unico testo da incollare a Claude ═══
@@ -12,6 +12,35 @@ const iso = (d) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())
 const csv = (rows) => rows.map((r) => r.map((x) => String(x ?? "").replace(/[;\n\r]+/g, " ").trim()).join(";")).join("\n");
 const n = (v) => { const s = String(v ?? "").replace(/^[=+\s]+/, ""); return /^\d+(\s*\+\s*\d+)*$/.test(s) ? s.split("+").reduce((a, x) => a + parseInt(x, 10), 0) : 0; };
 
+/* Lettura del testo dei PDF direttamente nel browser (pdf.js, caricato solo quando serve): niente viene inviato altrove.
+   Le righe si ricostruiscono dalla posizione verticale; le celle di una tabella restano separate da « | ». */
+async function leggiPdf(file) {
+  const pdfjs = await import("pdfjs-dist/build/pdf.js");
+  const worker = (await import("pdfjs-dist/build/pdf.worker.min.js?url")).default;
+  pdfjs.GlobalWorkerOptions.workerSrc = worker;
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  const pagine = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const tc = await (await doc.getPage(i)).getTextContent();
+    const righe = new Map();
+    tc.items.forEach((it) => {
+      if (!String(it.str).trim()) return;
+      const y = Math.round(it.transform[5] / 3);
+      if (!righe.has(y)) righe.set(y, []);
+      righe.get(y).push({ x: it.transform[4], w: it.width || 0, t: it.str });
+    });
+    const out = [...righe.keys()].sort((a, b) => b - a).map((y) => {
+      const r = righe.get(y).sort((a, b) => a.x - b.x);
+      let l = "";
+      r.forEach((c, k) => { if (k) { const gap = c.x - (r[k - 1].x + r[k - 1].w); l += gap > 6 ? " | " : gap > 1 ? " " : ""; } l += c.t; });
+      return l.trim();
+    }).filter(Boolean);
+    pagine.push(out.join("\n"));
+  }
+  const testo = pagine.map((t, i) => (doc.numPages > 1 ? `--- pagina ${i + 1} ---\n` : "") + t).join("\n");
+  return { pagine: doc.numPages, testo };
+}
+
 export default function ExportTab({ pia, sbl, man, tg, giac, manCols }) {
   const manDays = useMemo(() => Object.keys(man || {}).sort(), [man]);
   const fridays = manDays.filter((d) => new Date(d + "T12:00:00").getDay() === 5);
@@ -23,6 +52,24 @@ export default function ExportTab({ pia, sbl, man, tg, giac, manCols }) {
   const [tgDays, setTgDays] = useState(30);
   const [richiesta, setRichiesta] = useState("Elabora la proposta di piano per le prossime settimane: riparti dal piano attuale, tieni conto di quanto già prodotto (Manovia, Giacenza, Taglio e giunteria), degli sblocchi mancanti e degli ordini scaduti. Segnala i conflitti di capacità e le righe a rischio, e restituiscimi il piano nello stesso formato.");
   const [msg, setMsg] = useState("");
+  const [pdfs, setPdfs] = useState([]);        // { id, nome, pagine, testo, errore, on }
+  const [over, setOver] = useState(false);
+  const fileRef = useRef(null);
+  const aggiungiPdf = async (files) => {
+    const list = [...files].filter((f) => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
+    if (!list.length) { setMsg("Trascina file PDF."); return; }
+    for (const f of list) {
+      const id = f.name + f.size + Math.random();
+      setPdfs((p) => [...p, { id, nome: f.name, pagine: 0, testo: "", errore: "", on: true, leggo: true }]);
+      try {
+        const r = await leggiPdf(f);
+        const senzaTesto = r.testo.replace(/--- pagina \d+ ---/g, "").trim().length < 20 * r.pagine;
+        setPdfs((p) => p.map((x) => (x.id === id ? { ...x, ...r, leggo: false, errore: senzaTesto ? "Quasi nessun testo: probabilmente è una scansione. Allegalo direttamente in chat." : "", on: !senzaTesto } : x)));
+      } catch (e) {
+        setPdfs((p) => p.map((x) => (x.id === id ? { ...x, leggo: false, on: false, errore: "Lettura non riuscita: " + (e.message || e) } : x)));
+      }
+    }
+  };
 
   const testo = useMemo(() => {
     const oggi = new Date();
@@ -71,8 +118,9 @@ export default function ExportTab({ pia, sbl, man, tg, giac, manCols }) {
       const days = Object.keys(tg || {}).filter((d) => d >= iso(from)).sort();
       out.push(`## TAGLIO E GIUNTERIA — ultimi ${tgDays} giorni (paia al giorno)\n` + csv([["data", "taglio", "giunteria", "note"], ...days.map((d) => [d, tg[d].taglio, tg[d].giunteria, tg[d].note])]) + "\n");
     }
+    pdfs.filter((x) => x.on && x.testo).forEach((x) => out.push(`## PDF ALLEGATO: ${x.nome} (${x.pagine} ${x.pagine === 1 ? "pagina" : "pagine"}; celle di tabella separate da « | »)\n${x.testo}\n`));
     return out.join("\n");
-  }, [sel, mDays, tgDays, richiesta, pia, sbl, man, tg, giac, manCols]);
+  }, [sel, mDays, tgDays, richiesta, pia, sbl, man, tg, giac, manCols, pdfs]);
 
   const copia = async () => {
     try { await navigator.clipboard.writeText(testo); setMsg("Copiato: incollalo nella chat con Claude."); }
@@ -130,6 +178,29 @@ export default function ExportTab({ pia, sbl, man, tg, giac, manCols }) {
       </div>
 
       <div style={card}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: T2, marginBottom: 6 }}>Avanzamenti in PDF</div>
+        <div
+          onDragOver={(e) => { e.preventDefault(); setOver(true); }}
+          onDragLeave={() => setOver(false)}
+          onDrop={(e) => { e.preventDefault(); setOver(false); aggiungiPdf(e.dataTransfer.files); }}
+          onClick={() => fileRef.current && fileRef.current.click()}
+          style={{ border: `2px dashed ${over ? M : BRD2}`, background: over ? "#EEF3FF" : "#F8FAFC", borderRadius: 12, padding: "18px 14px", textAlign: "center", cursor: "pointer", fontSize: 14, fontWeight: 600, color: T2 }}
+        >
+          Trascina qui i PDF degli avanzamenti, oppure clicca per sceglierli
+          <input ref={fileRef} type="file" accept="application/pdf,.pdf" multiple style={{ display: "none" }} aria-label="Scegli PDF" onChange={(e) => { aggiungiPdf(e.target.files); e.target.value = ""; }} />
+        </div>
+        <div style={{ fontSize: 12, color: T3, marginTop: 6 }}>Il testo viene letto qui nel browser: i file non vengono inviati a nessuno. Funziona con PDF generati dai programmi, non con scansioni.</div>
+        {pdfs.map((x) => (
+          <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: `1px solid ${S2}`, fontSize: 13 }}>
+            <input type="checkbox" checked={x.on} disabled={!x.testo} onChange={(e) => setPdfs((p) => p.map((y) => (y.id === x.id ? { ...y, on: e.target.checked } : y)))} aria-label={`Includi ${x.nome}`} />
+            <span style={{ flex: 1, fontWeight: 600, color: TXT, wordBreak: "break-all" }}>{x.nome}</span>
+            <span style={{ color: x.errore ? "#B45309" : T3, fontSize: 12 }}>{x.leggo ? "lettura…" : x.errore || `${x.pagine} pag. · ${x.testo.length.toLocaleString("it-IT")} caratteri`}</span>
+            <button onClick={() => setPdfs((p) => p.filter((y) => y.id !== x.id))} style={{ background: "none", border: "none", color: T3, cursor: "pointer", fontSize: 16 }} aria-label={`Rimuovi ${x.nome}`}>×</button>
+          </div>
+        ))}
+      </div>
+
+      <div style={card}>
         <div style={{ fontSize: 13, fontWeight: 800, color: T2, marginBottom: 6 }}>Cosa chiedi a Claude</div>
         <textarea value={richiesta} onChange={(e) => setRichiesta(e.target.value)} rows={3} style={{ width: "100%", boxSizing: "border-box", border: `1.5px solid ${BRD2}`, borderRadius: 10, padding: "10px 12px", fontFamily: FONT, fontSize: 14, color: TXT, resize: "vertical" }} />
       </div>
@@ -137,7 +208,7 @@ export default function ExportTab({ pia, sbl, man, tg, giac, manCols }) {
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
         <button onClick={copia} style={btn(M, "#fff")}>Copia per Claude</button>
         <button onClick={scarica} style={btn(S2, TXT)}>Scarica .txt</button>
-        <span style={{ fontSize: 12, color: T3 }}>{testo.length.toLocaleString("it-IT")} caratteri</span>
+        <span style={{ fontSize: 12, color: testo.length > 150000 ? "#B45309" : T3, fontWeight: testo.length > 150000 ? 700 : 400 }}>{testo.length.toLocaleString("it-IT")} caratteri{testo.length > 150000 ? " · molto lungo: togli qualche blocco o allega il PDF direttamente in chat" : ""}</span>
         {msg && <span style={{ fontSize: 13, fontWeight: 700, color: GRN }}>{msg}</span>}
       </div>
       <textarea readOnly value={testo} style={{ width: "100%", boxSizing: "border-box", height: 360, border: `1px solid ${BRD}`, borderRadius: 12, padding: 12, fontFamily: MONO, fontSize: 11, color: T2, background: "#F8FAFC" }} />
