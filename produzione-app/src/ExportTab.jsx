@@ -154,7 +154,7 @@ export default function ExportTab({ pia, sbl, man, tg, giac, manCols }) {
     <div style={{ padding: "18px 14px 24px", fontFamily: FONT, maxWidth: 1100, margin: "0 auto" }}>
       <div style={{ fontSize: 22, fontWeight: 800, color: TXT, marginBottom: 4 }}>Per Claude</div>
       <div style={{ fontSize: 13, color: T2, marginBottom: 14, lineHeight: 1.5 }}>
-        Scegli cosa includere, controlla l'anteprima e premi «Copia»: incolla il testo nella chat con Claude, che elabora il piano e te lo restituisce. Questa pagina legge soltanto, non modifica nulla.
+        Scegli cosa includere e premi «Copia»: incolla il testo nella chat con Claude, che elabora il piano e te lo restituisce. Questa pagina legge soltanto, non modifica nulla.
       </div>
 
       <div style={card}>
@@ -216,7 +216,6 @@ export default function ExportTab({ pia, sbl, man, tg, giac, manCols }) {
         <span style={{ fontSize: 12, color: testo.length > 150000 ? "#B45309" : T3, fontWeight: testo.length > 150000 ? 700 : 400 }}>{testo.length.toLocaleString("it-IT")} caratteri{testo.length > 150000 ? " · molto lungo: togli qualche blocco o allega il PDF direttamente in chat" : ""}</span>
         {msg && <span style={{ fontSize: 13, fontWeight: 700, color: GRN }}>{msg}</span>}
       </div>
-      <textarea readOnly value={testo} style={{ width: "100%", boxSizing: "border-box", height: 360, border: `1px solid ${BRD}`, borderRadius: 12, padding: 12, fontFamily: MONO, fontSize: 11, color: T2, background: "#F8FAFC" }} />
     </div>
   );
 }
