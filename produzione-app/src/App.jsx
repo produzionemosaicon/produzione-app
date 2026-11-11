@@ -9,6 +9,8 @@ import { signOut } from "firebase/auth";
 import { remove } from "firebase/database";
 import SbloccoTab from "./SbloccoTab.jsx";
 import SaldiChTab from "./SaldiChTab.jsx";
+import AlertCard from "./AlertCard.jsx";
+import ExportTab from "./ExportTab.jsx";
 /* ═══ COLORI ═══ */
 const M = "#2F5BFF", ML = "#EEF3FF";
 const E = "#0E7490", EL = "#E6F6FA";
@@ -36,6 +38,7 @@ const TABS = [
   { id: "piano",    icon: "M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM4 10h16M8 2v4M16 2v4", label: "Piano" },
   { id: "sblocchi",  icon: "M7 11V8a5 5 0 0 1 9.6-2M5 11h14a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1zM12 15v2", label: "Sblocchi" },
   { id: "saldich",  icon: "M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9", label: "Saldi Chrome" },
+  { id: "export",   icon: "M12 3v12M7 10l5 5 5-5M5 21h14", label: "Per Claude" },
   { id: "rientri",  icon: "M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3", label: "Rientri" },
   { id: "setting",  icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12h2M3 12h2M12 3v2M12 19v2M17 7l1.5-1.5M5.5 18.5 7 17M17 17l1.5 1.5M5.5 5.5 7 7", label: "Setting" },
 ];
@@ -877,7 +880,7 @@ export default function App() {
 
       <div className="no-print" style={{ flex:1, overflowY:"auto" }}>
         {tab === "home" && (
-          <HomeTab date={date} reports={reports} stations={stations} onGoFoglio={() => setTab("foglio")} wide={wide} />
+          <HomeTab date={date} reports={reports} stations={stations} onGoFoglio={() => setTab("foglio")} wide={wide} pia={pia} sbl={sbl} onGoPiano={() => setTab("piano")} onGoSblocchi={() => setTab("sblocchi")} />
         )}
         {tab === "foglio" && (
           <FoglioTab
@@ -914,6 +917,7 @@ export default function App() {
         {tab === "rientri" && <RientriTab rie={rie} wide={wide} />}
         {tab === "sblocchi" && <SbloccoTab sbl={sbl} foto={sblFoto} />}
         {tab === "saldich" && <SaldiChTab data={sch} />}
+        {tab === "export" && <ExportTab pia={pia} sbl={sbl} man={man} tg={tg} giac={giac} manCols={MAN_COLS} />}
       </div>
 
       {!wide && (
@@ -1033,7 +1037,7 @@ export default function App() {
 }
 
 /* ═══ HOME TAB ═══ */
-function HomeTab({ date, reports, stations, onGoFoglio, wide }) {
+function HomeTab({ date, reports, stations, onGoFoglio, wide, pia, sbl, onGoPiano, onGoSblocchi }) {
   const getPacking17 = (rDay, brand) => {
     const sid = getPackingStationId(brand, stations);
     return sid ? getNumericCell(rDay, brand, sid, "17:00") : null;
@@ -1120,6 +1124,8 @@ function HomeTab({ date, reports, stations, onGoFoglio, wide }) {
         </div>
       </div>
 
+      <AlertCard pia={pia} sbl={sbl} onGoPiano={onGoPiano} onGoSblocchi={onGoSblocchi} />
+
       <div style={wide ? { display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.5fr)", gap: 14, alignItems: "stretch" } : undefined}>
       <div style={{ ...card, padding: "20px 20px 22px", marginBottom: 14 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: T2 }}>Paia inscatolate alle 17:00</div>
@@ -1140,8 +1146,8 @@ function HomeTab({ date, reports, stations, onGoFoglio, wide }) {
         </div>
       </div>
 
-      <div style={{ ...card, padding: "18px 12px 12px", marginBottom: 14 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "0 8px", marginBottom: 14, flexWrap: "wrap", gap: 6 }}>
+      <div style={{ ...card, padding: "12px 12px 6px", marginBottom: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "0 8px", marginBottom: 6, flexWrap: "wrap", gap: 6 }}>
           <div style={{ fontSize: 16, fontWeight: 800, color: TXT }}>Ultimi 7 giorni</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, fontSize: 12, fontWeight: 600, color: T2 }}>
             {avg7 > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: ACC }}><span style={{ width: 14, borderTop: `2px dashed ${ACC}` }} />media {avg7}</span>}
@@ -1149,7 +1155,7 @@ function HomeTab({ date, reports, stations, onGoFoglio, wide }) {
             <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: E }} />EMOS</span>
           </div>
         </div>
-        <ResponsiveContainer width="100%" height={176}>
+        <ResponsiveContainer width="100%" height={112}>
           <BarChart data={last7} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barCategoryGap="28%">
             <CartesianGrid strokeDasharray="3 3" stroke={BRD} vertical={false} />
             <XAxis dataKey="label" tick={{ fontSize: 11, fill: T2, fontFamily: FONT }} axisLine={false} tickLine={false} />
