@@ -11,6 +11,7 @@ import SbloccoTab from "./SbloccoTab.jsx";
 import SaldiChTab from "./SaldiChTab.jsx";
 import AlertCard from "./AlertCard.jsx";
 import ExportTab from "./ExportTab.jsx";
+import VerificaTab from "./VerificaTab.jsx";
 /* ═══ COLORI ═══ */
 const M = "#2F5BFF", ML = "#EEF3FF";
 const E = "#0E7490", EL = "#E6F6FA";
@@ -38,6 +39,7 @@ const TABS = [
   { id: "piano",    icon: "M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM4 10h16M8 2v4M16 2v4", label: "Piano" },
   { id: "sblocchi",  icon: "M7 11V8a5 5 0 0 1 9.6-2M5 11h14a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1zM12 15v2", label: "Sblocchi" },
   { id: "saldich",  icon: "M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9", label: "Saldi Chrome" },
+  { id: "verifica", icon: "M9 12l2 2 4-4M12 3l8 3v6c0 4.5-3.2 8.2-8 9-4.8-.8-8-4.5-8-9V6z", label: "Verifica piano" },
   { id: "export",   icon: "M12 3v12M7 10l5 5 5-5M5 21h14", label: "Per Claude" },
   { id: "rientri",  icon: "M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3", label: "Rientri" },
   { id: "setting",  icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12h2M3 12h2M12 3v2M12 19v2M17 7l1.5-1.5M5.5 18.5 7 17M17 17l1.5 1.5M5.5 5.5 7 7", label: "Setting" },
@@ -917,6 +919,7 @@ export default function App() {
         {tab === "rientri" && <RientriTab rie={rie} wide={wide} />}
         {tab === "sblocchi" && <SbloccoTab sbl={sbl} foto={sblFoto} />}
         {tab === "saldich" && <SaldiChTab data={sch} />}
+        {tab === "verifica" && <VerificaTab pia={pia} sbl={sbl} tg={tg} />}
         {tab === "export" && <ExportTab pia={pia} sbl={sbl} man={man} tg={tg} giac={giac} manCols={MAN_COLS} />}
       </div>
 
