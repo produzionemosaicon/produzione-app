@@ -179,6 +179,11 @@ export default function ExportTab({ pia, sbl, man, tg, giac, manCols }) {
           <input ref={fileRef} type="file" accept="application/pdf,.pdf" multiple style={{ display: "none" }} aria-label="Scegli PDF" onChange={(e) => { aggiungiPdf(e.target.files); e.target.value = ""; }} />
         </div>
         <div style={{ fontSize: 12, color: T3, marginTop: 6 }}>Il testo viene letto qui nel browser: i file non vengono inviati a nessuno. Funziona con PDF generati dai programmi, non con scansioni.</div>
+        {pdfs.some((x) => x.on && x.testo) && (
+          <div style={{ marginTop: 10, background: "#DCFCE7", color: "#166534", borderRadius: 10, padding: "9px 12px", fontSize: 13, fontWeight: 700 }}>
+            PDF letto. Ora scorri in basso, premi «Copia per Claude» e incolla il testo nella chat con Claude: da lì lo elaboro io.
+          </div>
+        )}
         {pdfs.map((x) => (
           <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: `1px solid ${S2}`, fontSize: 13 }}>
             <input type="checkbox" checked={x.on} disabled={!x.testo} onChange={(e) => setPdfs((p) => p.map((y) => (y.id === x.id ? { ...y, on: e.target.checked } : y)))} aria-label={`Includi ${x.nome}`} />
