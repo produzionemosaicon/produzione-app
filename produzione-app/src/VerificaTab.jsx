@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { verificaPiano } from "./verifica.js";
+import AvanzamentoPdf from "./AvanzamentoPdf.jsx";
 
 /* ═══ VERIFICA PIANO: si possono fare le paia pianificate nelle prossime settimane? (regole in verifica.js) ═══ */
 const M = "#2F5BFF", BRD = "#E2E8F0", TXT = "#0B1220", T2 = "#475569", T3 = "#64748B", S0 = "#fff", S2 = "#F1F5F9";
@@ -33,6 +34,8 @@ export default function VerificaTab({ pia, sbl, tg }) {
       <div style={{ fontSize: 13, color: T2, lineHeight: 1.5, marginBottom: 14 }}>
         Per le paia pianificate nelle prossime settimane controlla materiali, sblocchi e consegne, e confronta il piano con il ritmo di taglio e giunteria. Si aggiorna da solo con i dati dell'app.
       </div>
+
+      <AvanzamentoPdf righe={pia?.righe} />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10, marginBottom: 14 }}>
         {kpi(`Pianificate (W${v.finestra[0].slice(5)}–W${v.finestra[v.finestra.length - 1].slice(5)})`, v.paiaTot, S2, TXT)}
