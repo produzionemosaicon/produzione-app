@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { calcolaAlert } from "./alerts.js";
+import { db, ref, set } from "./firebase.js";
 
 /* ═══ PER CLAUDE: estrae gli avanzamenti dell'app in un unico testo da incollare a Claude ═══
    L'utente sceglie i blocchi, controlla l'anteprima, preme «Copia» (o «Scarica») e lo incolla in chat.
@@ -62,7 +63,13 @@ export default function ExportTab({ pia, sbl, man, tg, giac, manCols }) {
       try {
         const r = await leggiPdf(f);
         const senzaTesto = r.testo.replace(/--- pagina \d+ ---/g, "").trim().length < 20 * r.pagine;
-        setPdfs((p) => p.map((x) => (x.id === id ? { ...x, ...r, leggo: false, errore: senzaTesto ? "Quasi nessun testo: probabilmente è una scansione. Allegalo direttamente in chat." : "", on: !senzaTesto } : x)));
+        let salvato = false;
+        if (!senzaTesto) {
+          // il testo letto resta salvato nell'app (nodo avanzamentiPdf): da lì lo legge Claude, senza copia e incolla
+          const slug = f.name.replace(/\.pdf$/i, "").replace(/[^A-Za-z0-9]+/g, "_").slice(0, 60);
+          try { await set(ref(db, `avanzamentiPdf/${iso(new Date())}_${slug}`), { nome: f.name, pagine: r.pagine, testo: r.testo, savedAt: Date.now() }); salvato = true; } catch (e) { /* resta comunque nell'anteprima */ }
+        }
+        setPdfs((p) => p.map((x) => (x.id === id ? { ...x, ...r, salvato, leggo: false, errore: senzaTesto ? "Quasi nessun testo: probabilmente è una scansione. Allegalo direttamente in chat." : "", on: !senzaTesto } : x)));
       } catch (e) {
         setPdfs((p) => p.map((x) => (x.id === id ? { ...x, leggo: false, on: false, errore: "Lettura non riuscita: " + (e.message || e) } : x)));
       }
@@ -178,10 +185,10 @@ export default function ExportTab({ pia, sbl, man, tg, giac, manCols }) {
           Trascina qui i PDF degli avanzamenti, oppure clicca per sceglierli
           <input ref={fileRef} type="file" accept="application/pdf,.pdf" multiple style={{ display: "none" }} aria-label="Scegli PDF" onChange={(e) => { aggiungiPdf(e.target.files); e.target.value = ""; }} />
         </div>
-        <div style={{ fontSize: 12, color: T3, marginTop: 6 }}>Il testo viene letto qui nel browser: i file non vengono inviati a nessuno. Funziona con PDF generati dai programmi, non con scansioni.</div>
+        <div style={{ fontSize: 12, color: T3, marginTop: 6 }}>Il testo viene letto qui nel browser e salvato nell'app: il file in sé non viene inviato a nessuno. Funziona con PDF generati dai programmi, non con scansioni.</div>
         {pdfs.some((x) => x.on && x.testo) && (
           <div style={{ marginTop: 10, background: "#DCFCE7", color: "#166534", borderRadius: 10, padding: "9px 12px", fontSize: 13, fontWeight: 700 }}>
-            PDF letto. Ora scorri in basso, premi «Copia per Claude» e incolla il testo nella chat con Claude: da lì lo elaboro io.
+            {pdfs.every((x) => !x.on || !x.testo || x.salvato) ? "PDF letto e salvato nell'app: non devi copiare né incollare niente. Claude lo legge da qui." : "PDF letto ma non salvato nell'app (controlla la connessione). Puoi comunque usare «Copia per Claude»."}
           </div>
         )}
         {pdfs.map((x) => (
