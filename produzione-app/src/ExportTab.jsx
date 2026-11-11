@@ -45,10 +45,8 @@ export default function ExportTab({ pia, sbl, man, tg, giac, manCols }) {
   const manDays = useMemo(() => Object.keys(man || {}).sort(), [man]);
   const fridays = manDays.filter((d) => new Date(d + "T12:00:00").getDay() === 5);
   const [sel, setSel] = useState({ piano: true, alert: true, sblocchi: true, manovia: true, giacenza: true, taglio: true });
-  const [mDays, setMDays] = useState(() => {
-    const f = fridays.slice(-2), last = manDays.slice(-1);
-    return [...new Set([...f, ...last])];
-  });
+  // Manovia: sempre gli ultimi due venerdì più l'ultimo giorno salvato (si aggiorna da sola con i dati)
+  const mDays = useMemo(() => [...new Set([...fridays.slice(-2), ...manDays.slice(-1)])], [manDays]);
   const [tgDays, setTgDays] = useState(30);
   const [richiesta, setRichiesta] = useState("Elabora la proposta di piano per le prossime settimane: riparti dal piano attuale, tieni conto di quanto già prodotto (Manovia, Giacenza, Taglio e giunteria), degli sblocchi mancanti e degli ordini scaduti. Segnala i conflitti di capacità e le righe a rischio, e restituiscimi il piano nello stesso formato.");
   const [msg, setMsg] = useState("");
@@ -154,19 +152,10 @@ export default function ExportTab({ pia, sbl, man, tg, giac, manCols }) {
           {chk("piano", "Piano attuale (righe, saldi, settimane)")}
           {chk("alert", "Allarmi: ordini scaduti e sblocchi")}
           {chk("sblocchi", "Sblocchi attivi (dettaglio componenti)")}
-          {chk("manovia", "Manovia (giorni scelti sotto)")}
+          {chk("manovia", "Manovia (ultimi due venerdì e ultimo giorno)")}
           {chk("giacenza", "Giacenza dell'ultimo venerdì")}
           {chk("taglio", "Taglio e giunteria")}
         </div>
-        {sel.manovia && (
-          <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: T2 }}>Giorni Manovia:</span>
-            {manDays.slice(-10).map((d) => {
-              const on = mDays.includes(d);
-              return <button key={d} onClick={() => setMDays((x) => (on ? x.filter((y) => y !== d) : [...x, d]))} style={{ background: on ? M : S2, color: on ? "#fff" : T2, border: "none", borderRadius: 8, padding: "5px 9px", fontFamily: MONO, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{d.slice(8)}/{d.slice(5, 7)}</button>;
-            })}
-          </div>
-        )}
         {sel.taglio && (
           <div style={{ marginTop: 10, fontSize: 12, fontWeight: 700, color: T2 }}>
             Taglio e giunteria, ultimi{" "}
