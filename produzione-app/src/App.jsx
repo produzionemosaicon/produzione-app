@@ -40,7 +40,7 @@ const TABS = [
   { id: "sblocchi",  icon: "M7 11V8a5 5 0 0 1 9.6-2M5 11h14a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1zM12 15v2", label: "Sblocchi" },
   { id: "saldich",  icon: "M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9", label: "Saldi Chrome" },
   { id: "verifica", icon: "M9 12l2 2 4-4M12 3l8 3v6c0 4.5-3.2 8.2-8 9-4.8-.8-8-4.5-8-9V6z", label: "Verifica piano" },
-  { id: "export",   icon: "M12 3v12M7 10l5 5 5-5M5 21h14", label: "Per Claude" },
+  { id: "export",   icon: "M3 12h18M4.2 7.5l15.6 9M7.5 4.2l9 15.6M12 3v18M16.5 4.2l-9 15.6M19.8 7.5l-15.6 9", label: "Per Claude" },
   { id: "rientri",  icon: "M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3", label: "Rientri" },
   { id: "setting",  icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12h2M3 12h2M12 3v2M12 19v2M17 7l1.5-1.5M5.5 18.5 7 17M17 17l1.5 1.5M5.5 5.5 7 7", label: "Setting" },
 ];
