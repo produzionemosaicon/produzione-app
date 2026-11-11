@@ -20,9 +20,13 @@ async function leggiPdf(file) {
   const worker = (await import("pdfjs-dist/build/pdf.worker.min.js?url")).default;
   pdfjs.GlobalWorkerOptions.workerSrc = worker;
   const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
-  const pagine = [];
+  const pagine = [], posizioni = [];
   for (let i = 1; i <= doc.numPages; i++) {
-    const tc = await (await doc.getPage(i)).getTextContent();
+    const page = await doc.getPage(i);
+    const vp = page.getViewport({ scale: 1 });
+    const tc = await page.getTextContent();
+    // posizioni di ogni parola (x da sinistra, y dall'alto, come pdfplumber): servono per leggere le tabelle a griglia
+    posizioni.push({ w: Math.round(vp.width), h: Math.round(vp.height), it: tc.items.filter((it) => String(it.str).trim()).map((it) => [it.str, Math.round(it.transform[4] * 10) / 10, Math.round((vp.height - it.transform[5]) * 10) / 10, Math.round((it.width || 0) * 10) / 10]) });
     const righe = new Map();
     tc.items.forEach((it) => {
       if (!String(it.str).trim()) return;
@@ -39,7 +43,7 @@ async function leggiPdf(file) {
     pagine.push(out.join("\n"));
   }
   const testo = pagine.map((t, i) => (doc.numPages > 1 ? `--- pagina ${i + 1} ---\n` : "") + t).join("\n");
-  return { pagine: doc.numPages, testo };
+  return { pagine: doc.numPages, testo, posizioni };
 }
 
 export default function ExportTab({ pia, sbl, man, tg, giac, manCols }) {
@@ -67,9 +71,9 @@ export default function ExportTab({ pia, sbl, man, tg, giac, manCols }) {
         if (!senzaTesto) {
           // il testo letto resta salvato nell'app (nodo avanzamentiPdf): da lì lo legge Claude, senza copia e incolla
           const slug = f.name.replace(/\.pdf$/i, "").replace(/[^A-Za-z0-9]+/g, "_").slice(0, 60);
-          try { await set(ref(db, `avanzamentiPdf/${iso(new Date())}_${slug}`), { nome: f.name, pagine: r.pagine, testo: r.testo, savedAt: Date.now() }); salvato = true; } catch (e) { /* resta comunque nell'anteprima */ }
+          try { await set(ref(db, `avanzamentiPdf/${iso(new Date())}_${slug}`), { nome: f.name, pagine: r.pagine, testo: r.testo, posizioni: JSON.stringify(r.posizioni), savedAt: Date.now() }); salvato = true; } catch (e) { /* resta comunque nell'anteprima */ }
         }
-        setPdfs((p) => p.map((x) => (x.id === id ? { ...x, ...r, salvato, leggo: false, errore: senzaTesto ? "Quasi nessun testo: probabilmente è una scansione. Allegalo direttamente in chat." : "", on: !senzaTesto } : x)));
+        setPdfs((p) => p.map((x) => (x.id === id ? { ...x, pagine: r.pagine, testo: r.testo, salvato, leggo: false, errore: senzaTesto ? "Quasi nessun testo: probabilmente è una scansione. Allegalo direttamente in chat." : "", on: !senzaTesto } : x)));
       } catch (e) {
         setPdfs((p) => p.map((x) => (x.id === id ? { ...x, leggo: false, on: false, errore: "Lettura non riuscita: " + (e.message || e) } : x)));
       }
