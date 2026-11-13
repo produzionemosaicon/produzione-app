@@ -1881,6 +1881,29 @@ function Modal({ children, onClose }) {
 }
 
 /* ═══ BTN ═══ */
+const PI_IC = {
+  minus: "M5 12h14", plus: "M12 5v14M5 12h14", fit: "M7 8l-4 4l4 4M17 8l4 4l-4 4M3 12h18",
+  sliders: "M4 6h8m4 0h4M4 12h2m4 0h10M4 18h10m4 0h2M12 6a2 2 0 1 0 4 0a2 2 0 1 0 -4 0M6 12a2 2 0 1 0 4 0a2 2 0 1 0 -4 0M14 18a2 2 0 1 0 4 0a2 2 0 1 0 -4 0",
+  history: "M12 8v4l2 2M3.05 11a9 9 0 1 1 .5 4M3 20v-5h5",
+  sheet: "M14 3v4a1 1 0 0 0 1 1h4M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2zM8 11h8v7H8zM8 15h8M11 11v7",
+  calPlus: "M12.5 21H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5M16 3v4M8 3v4M4 11h16M16 19h6M19 16v6",
+  save: "M6 4h10l4 4v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM10 14a2 2 0 1 0 4 0a2 2 0 1 0 -4 0M14 4v4H8V4",
+  search: "M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0M21 21l-6-6",
+  warn: "M12 9v4M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636-2.87L13.637 3.59a1.914 1.914 0 0 0-3.274 0zM12 16h.01",
+  eyeOff: "M10.585 10.587a2 2 0 0 0 2.829 2.828M16.681 16.67A9.5 9.5 0 0 1 12 18c-3.6 0-6.6-2-9-6c1.272-2.12 2.712-3.678 4.32-4.674m2.86-1.146A9.06 9.06 0 0 1 12 6c3.6 0 6.6 2 9 6c-.666 1.11-1.379 2.067-2.138 2.87M3 3l18 18",
+  eye: "M10 12a2 2 0 1 0 4 0a2 2 0 0 0-4 0M21 12c-2.4 4-5.4 6-9 6c-3.6 0-6.6-2-9-6c2.4-4 5.4-6 9-6c3.6 0 6.6 2 9 6",
+  help: "M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0M12 17v.01M12 13.5a1.5 1.5 0 0 1 1-1.5a2.6 2.6 0 1 0-3-4",
+  refresh: "M19.95 11a8 8 0 1 0-.5 4m.5 5v-5h-5",
+};
+function PIc({ n, s = 16 }) { return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flex: "none" }}><path d={PI_IC[n]} /></svg>; }
+function IBtn({ ic, title, onClick, children, primary, dashed, bg, fg, disabled }) {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} title={title} aria-label={title}
+      style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, height: 28, minWidth: 28, padding: children ? "0 9px" : "0 6px", background: bg || (primary ? M : S0), color: fg || (primary ? "#fff" : M), border: primary ? "none" : `1.5px ${dashed ? "dashed" : "solid"} ${BRD2}`, borderRadius: 9, fontFamily: FONT, fontWeight: 800, fontSize: 11, cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.6 : 1 }}>
+      {ic && <PIc n={ic} />}{children}
+    </button>
+  );
+}
 function Btn({ children, color = M, textColor = "#fff", onClick, style = {} }) {
   return (
     <button onClick={onClick} style={{ width:"100%", padding:13, background:color, color:textColor, border:"none", borderRadius:12, fontSize:13, fontWeight:800, cursor:"pointer", letterSpacing:"0.05em", fontFamily:FONT, ...style }}>
@@ -4272,30 +4295,26 @@ function PianoTab({ pia, vers, wide }) {
           <span style={{ opacity: 0.7, fontSize: 11 }}>{selTot.n} celle numeriche · Ctrl+clic per aggiungere · Esc per annullare</span>
         </div>
       )}
-      <div style={{ position: "sticky", top: 0, zIndex: 50, background: BG, padding: "6px 0", marginBottom: 6, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }} title="Dimensione della tabella">
-        <span style={{ fontSize: 12, color: T2, fontWeight: 700 }}>Zoom</span>
-        <Btn color={S0} textColor={M} style={{ width: 32, padding: 0, minHeight: 28, fontSize: 16, border: `1.5px solid ${BRD2}` }} onClick={() => setZoom(zm - 0.05)} aria-label="Riduci zoom">−</Btn>
-        <input type="range" min={30} max={150} step={1} value={Math.round(zm * 100)} onChange={(e) => setZoom(+e.target.value / 100)} aria-label="Zoom" style={{ width: 180, accentColor: M, cursor: "pointer" }} />
-        <Btn color={S0} textColor={M} style={{ width: 32, padding: 0, minHeight: 28, fontSize: 16, border: `1.5px solid ${BRD2}` }} onClick={() => setZoom(zm + 0.05)} aria-label="Aumenta zoom">+</Btn>
-        <span style={{ fontSize: 12, color: M, fontWeight: 800, fontFamily: MONO, minWidth: 40 }}>{Math.round(zm * 100)}%</span>
-        {[50, 70, 100].map((p) => <Btn key={p} color={Math.round(zm * 100) === p ? ML : S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28, fontSize: 11, border: `1.5px solid ${BRD2}` }} onClick={() => setZoom(p / 100)}>{p}%</Btn>)}
-        <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28, fontSize: 11, border: `1.5px solid ${BRD2}` }} onClick={fitZoom}>Adatta alla larghezza</Btn>
+      <div style={{ position: "sticky", top: 0, zIndex: 50, background: BG, padding: "6px 0", marginBottom: 6, display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 8px" }}>
+        <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+          <span style={{ fontSize: 15, fontWeight: 900, color: TXT }}>Piano <span style={{ color: M }}>{meta.name || ""}</span></span>
+          <span style={{ fontSize: 11, color: T2, marginLeft: 8 }}>{rows.length} righe{meta.savedName ? ` · ultima versione: ${meta.savedName}` : ""}</span>
+        </div>
+        <IBtn ic="minus" title="Riduci zoom" onClick={() => setZoom(zm - 0.05)} />
+        <input type="range" min={30} max={150} step={1} value={Math.round(zm * 100)} onChange={(e) => setZoom(+e.target.value / 100)} aria-label="Zoom" title="Zoom" style={{ width: 150, accentColor: M, cursor: "pointer" }} />
+        <IBtn ic="plus" title="Aumenta zoom" onClick={() => setZoom(zm + 0.05)} />
+        <span style={{ fontSize: 12, color: M, fontWeight: 800, fontFamily: MONO, minWidth: 36 }}>{Math.round(zm * 100)}%</span>
+        <IBtn ic="fit" title="Adatta alla larghezza" onClick={fitZoom} />
+        <span style={{ width: 1, height: 20, background: BRD2 }} />
+        {(colW || Object.keys(rowH).length > 0) && <IBtn ic="refresh" title="Ripristina misure" onClick={resetSizes} />}
+        <IBtn ic="sliders" title="Limiti e giorni" onClick={() => setShowCfg(true)} />
+        <IBtn ic="history" title="Versioni e confronto" onClick={() => setShowVers(true)} />
+        {rows.length > 0 && <IBtn ic="sheet" title={busy === "xls" ? "Preparo il file…" : shown.length !== rows.length ? `Esporta Excel (${shown.length} righe)` : "Esporta Excel"}
+          onClick={async () => { if (busy) return; setBusy("xls"); try { await exportPianoXlsx({ name: meta.name || wName(baseKey), rows: shown, calzs, weeks, info, daysOf, capOf, filtered: shown.length !== rows.length }); } catch (e) { console.error(e); window.alert("Esportazione non riuscita: " + e.message); } finally { setBusy(""); } }}>{busy === "xls" ? "…" : null}</IBtn>}
+        {!ro && <><IBtn ic="calPlus" title={`Salva ${meta.name || wName(baseKey)} e apri ${wName(nextKey)}`} onClick={newWeek} />
+        <IBtn ic="save" primary title="Salva versione" onClick={() => setShowVers("save")}>Salva</IBtn></>}
       </div>
       <div style={{ zoom: zm }}>
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px", marginBottom: 10 }}>
-        <div style={{ flex: "1 1 240px", minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 900, color: TXT }}>Piano settimanale <span style={{ color: M }}>{meta.name || ""}</span></div>
-          <div style={{ fontSize: 12, color: T2 }}>{rows.length} righe · tutti i calzaturifici{meta.savedName ? ` · ultima versione salvata: ${meta.savedName}` : ""}</div>
-        </div>
-        {(colW || Object.keys(rowH).length > 0) && <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28,fontSize: 11, border: `1.5px solid ${BRD2}` }} onClick={resetSizes}>Ripristina misure</Btn>}
-        <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28,fontSize: 11, border: `1.5px solid ${BRD2}` }} onClick={() => setShowCfg(true)}>Limiti e giorni</Btn>
-        <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28,fontSize: 11, border: `1.5px solid ${BRD2}` }} onClick={() => setShowVers(true)}>Versioni e confronto</Btn>
-        {rows.length > 0 && <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28,fontSize: 11, border: `1.5px solid ${BRD2}` }}
-          onClick={async () => { if (busy) return; setBusy("xls"); try { await exportPianoXlsx({ name: meta.name || wName(baseKey), rows: shown, calzs, weeks, info, daysOf, capOf, filtered: shown.length !== rows.length }); } catch (e) { console.error(e); window.alert("Esportazione non riuscita: " + e.message); } finally { setBusy(""); } }}>
-          {busy === "xls" ? "Preparo il file…" : shown.length !== rows.length ? `Esporta Excel (${shown.length} righe)` : "Esporta Excel"}</Btn>}
-        {!ro && <><Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28,fontSize: 11, border: `1.5px solid ${BRD2}` }} onClick={newWeek}>{`Salva ${meta.name || wName(baseKey)} e apri ${wName(nextKey)}`}</Btn>
-        <Btn style={{ width: "auto", padding: "0 12px", minHeight: 28, fontSize: 11 }} onClick={() => setShowVers("save")}>Salva versione</Btn></>}
-      </div>
 
       {ro && (
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px", background: "#FFF7E0", border: "1.5px solid #E8D9A8", borderRadius: 14, padding: "10px 14px", marginBottom: 10 }}>
@@ -4312,15 +4331,13 @@ function PianoTab({ pia, vers, wide }) {
             <input type="text" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca marchio, stagione, articolo, colore o blocco" aria-label="Cerca nel piano"
               style={{ flex: "1 1 220px", maxWidth: 360, boxSizing: "border-box", background: S0, border: `1.5px solid ${BRD2}`, borderRadius: 12, padding: "0 12px", minHeight: 28, fontFamily: FONT, fontSize: 14, color: TXT, outline: "none" }} />
             {cfActive && <button onClick={() => setCf({ b: [], s: [], a: [], d: [], bl: [] })} style={{ background: M, color: "#fff", border: "none", borderRadius: 9, padding: "0 10px", minHeight: 28, fontFamily: FONT, fontWeight: 800, fontSize: 11, cursor: "pointer" }}>Azzera filtri colonna ({shown.length} righe)</button>}
-            <button onClick={() => setOnlyMiss((v) => !v)} style={{ background: onlyMiss ? ACC : "#FFF7E0", color: onlyMiss ? "#fff" : "#854D0E", border: "1.5px solid #E8D9A8", borderRadius: 9, padding: "0 10px", minHeight: 28, fontFamily: FONT, fontWeight: 800, fontSize: 11, cursor: "pointer" }}>
-              {onlyMiss ? "Mostra tutte le righe" : "Solo righe con materiali mancanti"}
-            </button>
-            {!ro && <button onClick={() => setEdit({})} style={{ background: S0, color: M, border: `1.5px dashed ${BRD2}`, borderRadius: 9, padding: "0 10px", minHeight: 28, fontFamily: FONT, fontWeight: 800, fontSize: 11, cursor: "pointer" }}>+ Nuova riga</button>}
-            <button onClick={hideEmptyPast} style={{ background: S0, color: M, border: `1.5px solid ${BRD2}`, borderRadius: 9, padding: "0 10px", minHeight: 28, fontFamily: FONT, fontWeight: 800, fontSize: 11, cursor: "pointer" }}>Nascondi settimane passate vuote</button>
-            <button onClick={addWeeks} style={{ background: S0, color: M, border: `1.5px solid ${BRD2}`, borderRadius: 9, padding: "0 10px", minHeight: 28, fontFamily: FONT, fontWeight: 800, fontSize: 11, cursor: "pointer" }}>+ 4 settimane future</button>
-            {nHidden > 0 && <button onClick={showAllWeeks} style={{ background: S0, color: T2, border: `1.5px solid ${BRD2}`, borderRadius: 9, padding: "0 10px", minHeight: 28, fontFamily: FONT, fontWeight: 700, fontSize: 11, cursor: "pointer" }}>Mostra {nHidden} settimane nascoste</button>}
-            <span style={{ fontSize: 12, color: "#854D0E", fontWeight: 600 }}>Materiali: {matRows - matBad} righe in piano complete, {matBad} con materiali mancanti o in ritardo</span>
-            <span style={{ fontSize: 12, color: T2 }}>{shown.length !== rows.length ? `${shown.length} righe mostrate · ` : ""}frecce e Invio per muoversi · somme tipo 100+50</span>
+            <IBtn ic="warn" title={onlyMiss ? "Mostra tutte le righe" : `Mostra solo le ${matBad} righe con materiali mancanti o in ritardo (${matRows - matBad} complete)`} onClick={() => setOnlyMiss((v) => !v)} bg={onlyMiss ? ACC : "#FFF7E0"} fg={onlyMiss ? "#fff" : "#854D0E"}>{matBad}<span style={{ fontWeight: 600, opacity: 0.85 }}>su {matRows}</span></IBtn>
+            {!ro && <IBtn ic="plus" dashed title="Nuova riga" onClick={() => setEdit({})}>Riga</IBtn>}
+            <IBtn ic="eyeOff" title="Nascondi settimane passate vuote" onClick={hideEmptyPast} />
+            <IBtn ic="calPlus" title="Aggiungi 4 settimane future" onClick={addWeeks}>4</IBtn>
+            {nHidden > 0 && <IBtn ic="eye" title={`Mostra ${nHidden} settimane nascoste`} onClick={showAllWeeks} fg={T2}>{nHidden}</IBtn>}
+            {shown.length !== rows.length && <span style={{ fontSize: 12, color: T2 }}>{shown.length} righe mostrate</span>}
+            <span title="Frecce e Invio per muoversi · somme tipo 100+50" aria-label="Frecce e Invio per muoversi · somme tipo 100+50" style={{ display: "inline-flex", color: T2, cursor: "help" }}><PIc n="help" s={18} /></span>
           </div>
 
           {!ro && selIds.length > 0 && (
@@ -4337,7 +4354,7 @@ function PianoTab({ pia, vers, wide }) {
           <div ref={mirrorRef} onScroll={(e) => { if (scrollRef.current && scrollRef.current.scrollLeft !== e.currentTarget.scrollLeft) scrollRef.current.scrollLeft = e.currentTarget.scrollLeft; }} style={{ overflowX: "scroll", overflowY: "hidden", height: 18, marginBottom: 4 }} aria-label="Scorri il piano in orizzontale">
             <div ref={mirrorIn} style={{ height: 1 }} />
           </div>
-          <div ref={scrollRef} onScroll={onPianoScroll} style={{ overflow: "auto", maxHeight: `calc((100vh - 150px) / ${zm})`, background: S0, border: `1px solid ${BRD2}`, borderRadius: 14 }}>
+          <div ref={scrollRef} onScroll={onPianoScroll} style={{ overflow: "auto", maxHeight: `calc((100vh - 130px) / ${zm})`, background: S0, border: `1px solid ${BRD2}`, borderRadius: 14 }}>
             <table ref={tableRef} style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 12, minWidth: "max-content", width: "100%", ...(colW ? { tableLayout: "fixed", width: sumW, minWidth: sumW } : {}) }}>
               {colW && <colgroup>{colKeys.map((k) => <col key={k} style={{ width: colW[k] || 54 }} />)}</colgroup>}
               <thead ref={theadRef} style={{ position: "sticky", top: 0, zIndex: 5 }}>
