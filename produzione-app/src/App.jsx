@@ -1894,6 +1894,7 @@ const PI_IC = {
   eye: "M10 12a2 2 0 1 0 4 0a2 2 0 0 0-4 0M21 12c-2.4 4-5.4 6-9 6c-3.6 0-6.6-2-9-6c2.4-4 5.4-6 9-6c3.6 0 6.6 2 9 6",
   help: "M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0M12 17v.01M12 13.5a1.5 1.5 0 0 1 1-1.5a2.6 2.6 0 1 0-3-4",
   refresh: "M19.95 11a8 8 0 1 0-.5 4m.5 5v-5h-5",
+  truck: "M3 6h11v10H3zM14 9h4l3 3v4h-7M7 18.5a1.5 1.5 0 1 0 0-.01M17 18.5a1.5 1.5 0 1 0 0-.01",
 };
 function PIc({ n, s = 16 }) { return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flex: "none" }}><path d={PI_IC[n]} /></svg>; }
 function IBtn({ ic, title, onClick, children, primary, dashed, bg, fg, disabled }) {
@@ -3622,7 +3623,7 @@ const PI_ORD = ["MOS", "EMOS", "STIL3", "MACB", "MICM", "CINA"];
 const PI_NAMES = { MOS: "MOS · Mosaicon", EMOS: "EMOS", STIL3: "STIL3", MACB: "MACB · Macbarens", MICM: "MICM · Micmar", CINA: "CINA" };
 const PI_DAYS = { "2026-42": 4, "2026-50": 4, "2026-52": 3, "2026-53": 3, "2027-01": 4 }; // giorni lavorativi diversi da 5 (come nel foglio)
 const PI_MESI = ["GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO", "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE", "NOVEMBRE", "DICEMBRE"];
-const PI_MAT = [["pe", "PE"], ["fo", "FO"], ["so", "SO"], ["su", "SU"], ["ta", "TA"], ["fm", "Tot. forme"]];
+const PI_MAT = [["pe", "TO"], ["fo", "FO"], ["so", "SO"], ["su", "SU"], ["ta", "TA"], ["fm", "Tot. forme"]];
 const piMonday = (key) => {
   const [y, w] = key.split("-").map(Number);
   const j4 = new Date(Date.UTC(y, 0, 4)), dow = j4.getUTCDay() || 7;
@@ -3689,12 +3690,27 @@ function piOrder(rows) {
 // settimana media (pesata sulle paia) del piano di una riga
 const piMass = (r) => { const e = Object.entries(r.w || {}).filter(([, v]) => +v > 0); const t = e.reduce((s, [, v]) => s + +v, 0); return t ? e.reduce((s, [k, v]) => s + piIdx(k) * +v, 0) / t : null; };
 // stato di un materiale: ok / na / soon (atteso prima dell'inizio del piano) / late (dopo) / miss (manca)
+// "27/11" o "27/11/26" -> data (UTC); senza anno prende l'anno più vicino a oggi
+function piDateOf(t) {
+  const m = String(t || "").trim().match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
+  if (!m || +m[2] < 1 || +m[2] > 12 || +m[1] < 1 || +m[1] > 31) return null;
+  const now = Date.now();
+  if (m[3]) return new Date(Date.UTC(+m[3] < 100 ? 2000 + +m[3] : +m[3], +m[2] - 1, +m[1]));
+  const y = new Date().getFullYear();
+  return [y - 1, y, y + 1].map((yy) => new Date(Date.UTC(yy, +m[2] - 1, +m[1]))).sort((a, b) => Math.abs(a - now) - Math.abs(b - now))[0];
+}
 function piMatStat(v, j, firstKey) {
   const t = String(v ?? "").trim().toUpperCase();
   if (j === 5) return t === "" ? "miss" : "ok";
   if (t === "") return "miss";
   if (t === "OK") return "ok";
   if (t === "/") return "na";
+  const dt = piDateOf(t);
+  if (dt) {   // data di consegna gg/mm: passata e non arrivata = in ritardo; dopo l'inizio del piano = in ritardo
+    const n = new Date();
+    if (dt.getTime() < Date.UTC(n.getFullYear(), n.getMonth(), n.getDate())) return "late";
+    return firstKey && piIdx(piKey(dt)) > piIdx(firstKey) ? "late" : "soon";
+  }
   const nn = (t.match(/\d+/g) || []).map(Number);
   if (/AGG/.test(t) || !nn.length) return "miss";
   const wk = (n) => (n <= 9 ? n + 52 : n);
@@ -3939,6 +3955,91 @@ async function exportPianoXlsx({ name, rows, calzs, weeks, info, daysOf, capOf, 
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
+/* ── Date materiali dal file SITUAZIONE ORDINI FORNITORI ──
+   Prende le righe aperte del file generale, le collega ai modelli del piano tramite la colonna "Modelli collegati"
+   e scrive nelle colonne TO (pellami e tessuti), FO (fodere), SO (sottopiedi), SU (suole) la data di consegna:
+   la "DATA DI CONSEGNA COMUNICATA" se c'è, altrimenti la Scadenza dell'ordine. Se ci sono più ordini vale la data più lontana.
+   Tutto ricevuto = OK. Materiali senza ordini nel file: la cella resta com'è. */
+const PI_DM_CAT = { PE: "pe", TE: "pe", FD: "fo", SO: "so", SU: "su" };
+const PI_DM_LAB = { pe: "TO", fo: "FO", so: "SO", su: "SU" };
+const piDmNorm = (x) => String(x ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+const piDmSyn = { NOIR: "NERO", BLACK: "NERO", BLANC: "BIANCO", WHITE: "BIANCO", BRUN: "MARRONE", CHOCOLAT: "CIOCCOLATO" };
+const piDmWords = (x) => String(x ?? "").toUpperCase().split(/[^A-Z]+/).filter((w) => w.length >= 3 && !/^Z[A-Z]{2,3}$/.test(w) && !["TOP", "SOFT"].includes(w)).map((w) => piDmSyn[w] || w);
+const piDd = (d) => `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+// chiavi modello di una riga del piano: "PERIA55 27201TZ", "WS271-1025 - 1026" -> WS271-1025 e WS271-1026
+function piDmRowKeys(a) {
+  const t = String(a || "").toUpperCase().trim(), out = new Set([piDmNorm(t)]);
+  const m = t.match(/^([A-Z]+\d*)-(\d+(?:\s*-\s*\d+)+)$/);
+  if (m) m[2].split(/\s*-\s*/).forEach((n) => out.add(piDmNorm(`${m[1]}-${n}`)));
+  return out;
+}
+const piCellTxt = (v) => {
+  if (v == null) return "";
+  if (v instanceof Date) return v;
+  if (typeof v === "object") { if (v.result !== undefined) return piCellTxt(v.result); if (v.richText) return v.richText.map((x) => x.text).join(""); if (v.text) return String(v.text); }
+  return v;
+};
+async function piDateMateriali(file, rows) {
+  const ExcelJS = (await import("exceljs")).default;
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(await file.arrayBuffer());
+  const ws = wb.getWorksheet("Situazione ordini") || wb.worksheets[0];
+  let hr = 0, col = {};
+  ws.eachRow((row, rn) => {
+    if (hr) return;
+    const names = {}; row.eachCell((c, cn) => { names[String(piCellTxt(c.value)).trim().toUpperCase()] = cn; });
+    if (names["FORNITORE"] && names["MODELLI COLLEGATI"]) { hr = rn; col = names; }
+  });
+  if (!hr) throw new Error("non trovo le colonne Fornitore e Modelli collegati: è il file SITUAZIONE ORDINI FORNITORI?");
+  const get = (row, n) => (col[n] ? piCellTxt(row.getCell(col[n]).value) : "");
+  const lines = [];
+  ws.eachRow((row, rn) => {
+    if (rn <= hr) return;
+    const cod = String(get(row, "CODICE") || "").toUpperCase();
+    const cat = PI_DM_CAT[cod.split("-")[0].trim()];
+    const mods = String(get(row, "MODELLI COLLEGATI") || "").split("·").map((x) => x.trim().replace(/\s+(bloccato|sbloccato|parziale.*)$/i, "")).filter(Boolean);
+    if (!cat || !mods.length) return;
+    const left = +get(row, "DA RICEVERE") || 0;
+    const sc = get(row, "SCADENZA"), com = get(row, "DATA DI CONSEGNA COMUNICATA");
+    let when = null, lab = "";
+    if (com instanceof Date) { when = com; lab = piDd(com); }
+    else {
+      const w = String(com || "").toUpperCase().match(/\b(?:WEEK|WK|SETT\w*|S)\s*\.?\s*(\d{1,2})\b/);
+      if (w) { const tk = piToday(), y = +w[1] < +tk.slice(5) - 20 ? +tk.slice(0, 4) + 1 : +tk.slice(0, 4); const k = `${y}-${String(+w[1]).padStart(2, "0")}`; when = piMonday(k); when.setUTCDate(when.getUTCDate() + 4); lab = "S" + String(+w[1]).padStart(2, "0"); }
+      else if (sc instanceof Date) { when = sc; lab = piDd(sc); }
+    }
+    lines.push({ cat, mods: mods.map(piDmNorm), left, when, lab, desc: String(get(row, "DESCRIZIONE ARTICOLO") || ""), col: String(get(row, "DESCRIZIONE COLORE") || ""), forn: String(get(row, "FORNITORE") || "").replace(/^\d+\s*-\s*/, "") });
+  });
+  const upd = {}, changes = [];
+  let matched = 0;
+  rows.forEach((r) => {
+    const keys = piDmRowKeys(r.a);
+    const mine = lines.filter((l) => l.mods.some((m) => keys.has(m)));
+    if (!mine.length) return;
+    matched++;
+    const kw = new Set(piDmWords(r.k));
+    ["pe", "fo", "so", "su"].forEach((cat) => {
+      let ls = mine.filter((l) => l.cat === cat);
+      if (!ls.length) return;
+      // pellami e fodere: solo gli ordini del colore della riga (NERO = NOIR, ...). Se la riga ha un colore e nessun ordine lo ha, la cella resta com'è
+      if (cat === "pe" || cat === "fo") {
+        const withCol = ls.filter((l) => piDmWords(l.col).length);
+        const byCol = withCol.filter((l) => piDmWords(l.col).some((w) => kw.has(w)));
+        if (byCol.length) ls = byCol.concat(ls.filter((l) => !piDmWords(l.col).length));
+        else if (withCol.length && kw.size && !kw.has("VARI")) { ls = ls.filter((l) => !piDmWords(l.col).length); if (!ls.length) return; }
+      }
+      const open = ls.filter((l) => l.left > 0);
+      let v = "OK", src = ls;
+      if (open.length) { const dated = open.filter((l) => l.when); const last = dated.sort((a, b) => b.when - a.when)[0]; v = last ? last.lab : "AGG."; src = open; }
+      const old = String(r.m?.[cat] ?? "").trim();
+      if (old.toUpperCase() === v.toUpperCase()) return;
+      upd[`righe/${r.id}/m/${cat}`] = v;
+      changes.push({ id: r.id, row: `${r.b} · ${r.a} · ${r.k || ""}`.trim(), cat, old, v, why: [...src.reduce((mm, l) => { const k = `${l.desc}${l.col ? " " + l.col : ""} (${l.forn}`; const o = mm.get(k) || { n: 0, d: "" }; o.n += l.left; if (l.when && l.when > (o.w || 0)) { o.w = l.when; o.d = l.lab; } mm.set(k, o); return mm; }, new Map())].map(([k, o]) => `${k}${o.n > 0 ? ", " + o.n + " da ricevere" + (o.d ? " entro " + o.d : "") : ", ricevuto"})`).join(" · ") });
+    });
+  });
+  return { upd, changes, matched, lines: lines.length };
+}
+
 function PianoTab({ pia, vers, wide }) {
   const [view, setView] = useState(null);   // versione aperta in sola lettura (non tocca il piano di lavoro)
   const ro = !!view;
@@ -4043,6 +4144,8 @@ function PianoTab({ pia, vers, wide }) {
   const [showVers, setShowVers] = useState(false);
   const [showCfg, setShowCfg] = useState(false);
   const [busy, setBusy] = useState("");
+  const [dm, setDm] = useState(null);         // anteprima date materiali da applicare
+  const dmFile = useRef(null);
 
   const rows = useMemo(() => piOrder(Object.entries(righe).map(([id, r]) => ({ id, ...r })).sort((a, b) => (a.o || 0) - (b.o || 0))), [righe]);
   const liveRows = useMemo(() => Object.entries(pia.righe || {}).map(([id, r]) => ({ id, ...r })).sort((a, b) => (a.o || 0) - (b.o || 0)), [pia.righe]);
@@ -4309,11 +4412,52 @@ function PianoTab({ pia, vers, wide }) {
         {(colW || Object.keys(rowH).length > 0) && <IBtn ic="refresh" title="Ripristina misure" onClick={resetSizes} />}
         <IBtn ic="sliders" title="Limiti e giorni" onClick={() => setShowCfg(true)} />
         <IBtn ic="history" title="Versioni e confronto" onClick={() => setShowVers(true)} />
+        {!ro && rows.length > 0 && <><IBtn ic="truck" title={busy === "dm" ? "Leggo il file…" : "Date materiali (TO, FO, SO, SU) dal file SITUAZIONE ORDINI FORNITORI"} onClick={() => { if (!busy && dmFile.current) { dmFile.current.value = ""; dmFile.current.click(); } }}>{busy === "dm" ? "…" : null}</IBtn>
+        <input ref={dmFile} type="file" accept=".xlsx" style={{ display: "none" }} onChange={async (e) => { const f = e.target.files && e.target.files[0]; if (!f) return; setBusy("dm"); try { setDm(await piDateMateriali(f, liveRows)); } catch (er) { console.error(er); setDm({ err: er.message || String(er) }); } finally { setBusy(""); } }} /></>}
         {rows.length > 0 && <IBtn ic="sheet" title={busy === "xls" ? "Preparo il file…" : shown.length !== rows.length ? `Esporta Excel (${shown.length} righe)` : "Esporta Excel"}
           onClick={async () => { if (busy) return; setBusy("xls"); try { await exportPianoXlsx({ name: meta.name || wName(baseKey), rows: shown, calzs, weeks, info, daysOf, capOf, filtered: shown.length !== rows.length }); } catch (e) { console.error(e); window.alert("Esportazione non riuscita: " + e.message); } finally { setBusy(""); } }}>{busy === "xls" ? "…" : null}</IBtn>}
         {!ro && <><IBtn ic="calPlus" title={`Salva ${meta.name || wName(baseKey)} e apri ${wName(nextKey)}`} onClick={newWeek} />
         <IBtn ic="save" primary title="Salva versione" onClick={() => setShowVers("save")}>Salva</IBtn></>}
       </div>
+      {dm && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(11,18,32,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onMouseDown={(e) => { if (e.target === e.currentTarget && !dm.saving) setDm(null); }}>
+          <div style={{ background: S0, borderRadius: 16, width: "min(980px, 100%)", maxHeight: "86vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 50px rgba(0,0,0,0.25)", fontFamily: FONT }}>
+            <div style={{ padding: "14px 18px", borderBottom: `1px solid ${BRD}` }}>
+              <div style={{ fontSize: 16, fontWeight: 900, color: TXT }}>Date materiali da SITUAZIONE ORDINI FORNITORI</div>
+              {dm.err ? <div style={{ color: RED, fontSize: 13, marginTop: 6 }}>Non riesco a leggere il file: {dm.err}</div> : (
+                <div style={{ fontSize: 12, color: T2, marginTop: 4 }}>
+                  {dm.lines} ordini aperti collegati a modelli · {dm.matched} righe del piano trovate · <b style={{ color: M }}>{dm.changes.length} celle da aggiornare</b>
+                  <div style={{ marginTop: 4 }}>TO = pellami e tessuti, FO = fodere, SO = sottopiedi, SU = suole. Data comunicata dal fornitore se c'è, altrimenti scadenza ordine; con più ordini la più lontana; tutto ricevuto = OK.</div>
+                </div>
+              )}
+            </div>
+            {!dm.err && (
+              <div style={{ overflowY: "auto", padding: "4px 18px" }}>
+                {dm.changes.length === 0 ? <div style={{ padding: 20, textAlign: "center", color: T2 }}>Niente da aggiornare: le date nel piano sono già allineate al file.</div> : (
+                  <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12 }}>
+                    <thead><tr>{["Riga del piano", "Col.", "Prima", "Dopo", "Da quali ordini"].map((h) => <th key={h} style={{ position: "sticky", top: 0, background: S1, textAlign: "left", padding: "6px 6px", fontSize: 10, color: T2, borderBottom: `1px solid ${BRD}` }}>{h}</th>)}</tr></thead>
+                    <tbody>
+                      {dm.changes.map((c, i) => (
+                        <tr key={i} style={{ borderBottom: `1px solid ${BRD}` }}>
+                          <td style={{ padding: "5px 6px", fontWeight: 700 }}>{c.row}</td>
+                          <td style={{ padding: "5px 6px", fontWeight: 800, color: M }}>{PI_DM_LAB[c.cat]}</td>
+                          <td style={{ padding: "5px 6px", fontFamily: MONO, color: T3 }}>{c.old || "—"}</td>
+                          <td style={{ padding: "5px 6px", fontFamily: MONO, fontWeight: 800 }}>{c.v}</td>
+                          <td style={{ padding: "5px 6px", color: T2, fontSize: 11 }}>{c.why}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+            <div style={{ padding: "12px 18px", borderTop: `1px solid ${BRD}`, display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <IBtn title="Chiudi" onClick={() => setDm(null)} disabled={dm.saving}>{dm.err || !dm.changes.length ? "Chiudi" : "Annulla"}</IBtn>
+              {!dm.err && dm.changes.length > 0 && <IBtn primary title="Scrivi le date nel piano" disabled={dm.saving} onClick={async () => { setDm({ ...dm, saving: true }); try { await update(ref(db, "piano"), dm.upd); setDm(null); } catch (er) { setDm({ ...dm, saving: false }); window.alert("Salvataggio non riuscito: " + er.message); } }}>{dm.saving ? "Salvo…" : `Applica ${dm.changes.length} date`}</IBtn>}
+            </div>
+          </div>
+        </div>
+      )}
       <div style={{ zoom: zm }}>
 
       {ro && (
