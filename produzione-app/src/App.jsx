@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { Fragment, useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from "react";
 import {
   BarChart, Bar, LineChart, Line,
@@ -4622,11 +4623,24 @@ function PianoTab({ pia, vers, wide }) {
           <IBtn title="Non oggi" onClick={() => setDmAsk(false)}>Non oggi</IBtn>
         </div>
       )}
-      {dm && (
+      {dm && createPortal(
         <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(11,18,32,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onMouseDown={(e) => { if (e.target === e.currentTarget && !dm.saving) setDm(null); }}>
-          <div style={{ background: S0, borderRadius: 16, width: "min(980px, 100%)", maxHeight: "86vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 50px rgba(0,0,0,0.25)", fontFamily: FONT }}>
-            <div style={{ padding: "14px 18px", borderBottom: `1px solid ${BRD}` }}>
-              <div style={{ fontSize: 16, fontWeight: 900, color: TXT }}>{dm.auto ? `Aggiornamento automatico del ${["", "lunedì", "", "", "giovedì"][new Date().getDay()] || "giorno"}: date già scritte nel piano` : "Date materiali da SITUAZIONE ORDINI FORNITORI e BOLLE"}</div>
+          <div style={{ background: S0, borderRadius: 16, width: "min(980px, 100%)", maxHeight: "calc(100vh - 32px)", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 50px rgba(0,0,0,0.25)", fontFamily: FONT }}>
+            <div style={{ padding: "14px 18px", borderBottom: `1px solid ${BRD}`, flex: "0 0 auto", maxHeight: "40vh", overflowY: "auto" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ fontSize: 16, fontWeight: 900, color: TXT, flex: "1 1 300px" }}>{dm.auto ? `Aggiornamento automatico del ${["", "lunedì", "", "", "giovedì"][new Date().getDay()] || "giorno"}: date già scritte nel piano` : "Date materiali da SITUAZIONE ORDINI FORNITORI e BOLLE"}</div>
+                <div style={{ display: "flex", gap: 8 }}>
+              <IBtn title="Chiudi" onClick={() => setDm(null)} disabled={dm.saving}>{dm.err || dm.menu || dm.auto || !dm.changes.length ? "Chiudi" : "Annulla"}</IBtn>
+              {!dm.err && !dm.menu && !dm.auto && dm.changes.length > 0 && <IBtn primary title="Scrivi le date nel piano" disabled={dm.saving} onClick={async () => { setDm({ ...dm, saving: true }); try {
+                if (dm.clear) {   // versione di sicurezza prima di svuotare
+                  const n = new Date(), nm = `Prima di svuota date ${piDayStr(n).split("-").reverse().join("/")} ${String(n.getHours()).padStart(2, "0")}.${String(n.getMinutes()).padStart(2, "0")}`, vid = piSlug(nm);
+                  const clean = {}; liveRows.forEach((r) => { const { id, _st, ...rest } = r; clean[id] = rest; });
+                  await set(ref(db, `pianoVersRighe/${vid}`), clean);
+                  await set(ref(db, `pianoVers/${vid}`), { name: nm, week: baseKey, weekStart: piMonday(baseKey).toISOString().slice(0, 10), savedAt: Date.now(), n: liveRows.length });
+                }
+                await update(ref(db, "piano"), dm.upd); setDm(null); setDmClear(false); } catch (er) { setDm({ ...dm, saving: false }); window.alert("Salvataggio non riuscito: " + er.message); } }}>{dm.saving ? "Salvo…" : dm.clear ? `Salva versione, svuota e scrivi (${dm.changes.length})` : `Applica ${dm.changes.length} date`}</IBtn>}
+                </div>
+              </div>
               {dm.menu ? (
                 <div style={{ fontSize: 13, color: T2, marginTop: 8, display: "grid", gap: 10 }}>
                   <div>Scrive nelle colonne TO, FO, SO, SU, TA le date di consegna dei materiali, da SITUAZIONE ORDINI FORNITORI e dai file BOLLE.</div>
@@ -4655,7 +4669,7 @@ function PianoTab({ pia, vers, wide }) {
               )}
             </div>
             {!dm.err && !dm.menu && (
-              <div style={{ overflowY: "auto", padding: "4px 18px" }}>
+              <div style={{ overflowY: "auto", padding: "4px 18px", flex: "1 1 auto", minHeight: 0 }}>
                 {dm.changes.length === 0 ? <div style={{ padding: 20, textAlign: "center", color: T2 }}>Niente da aggiornare: le date nel piano sono già allineate al file.</div> : (
                   <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12 }}>
                     <thead><tr>{["Riga del piano", "Col.", "Prima", "Dopo", "Materiali e ordini"].map((h) => <th key={h} style={{ position: "sticky", top: 0, background: S1, textAlign: "left", padding: "6px 6px", fontSize: 10, color: T2, borderBottom: `1px solid ${BRD}` }}>{h}</th>)}</tr></thead>
@@ -4674,7 +4688,7 @@ function PianoTab({ pia, vers, wide }) {
                 )}
               </div>
             )}
-            <div style={{ padding: "12px 18px", borderTop: `1px solid ${BRD}`, display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <div style={{ padding: "12px 18px", borderTop: `1px solid ${BRD}`, flex: "0 0 auto", display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <IBtn title="Chiudi" onClick={() => setDm(null)} disabled={dm.saving}>{dm.err || dm.menu || dm.auto || !dm.changes.length ? "Chiudi" : "Annulla"}</IBtn>
               {!dm.err && !dm.menu && !dm.auto && dm.changes.length > 0 && <IBtn primary title="Scrivi le date nel piano" disabled={dm.saving} onClick={async () => { setDm({ ...dm, saving: true }); try {
                 if (dm.clear) {   // versione di sicurezza prima di svuotare
@@ -4686,8 +4700,8 @@ function PianoTab({ pia, vers, wide }) {
                 await update(ref(db, "piano"), dm.upd); setDm(null); setDmClear(false); } catch (er) { setDm({ ...dm, saving: false }); window.alert("Salvataggio non riuscito: " + er.message); } }}>{dm.saving ? "Salvo…" : dm.clear ? `Salva versione, svuota e scrivi (${dm.changes.length})` : `Applica ${dm.changes.length} date`}</IBtn>}
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+        document.body)}
       <div style={{ zoom: zm }}>
 
       {ro && (
