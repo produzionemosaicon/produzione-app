@@ -4019,6 +4019,24 @@ const piDmCatOfBolla = (cod, tipo) => {
   if (/FODERA|CAMOSCINA/.test(t)) return "fo"; if (/^TOM/.test(t)) return "pe";
   return null;
 };
+// forma senza "Modelli collegati" (es. già consegnata): "DOMI 50 SC M2" -> chiave DOMI50 (+ SC); il modello la usa se
+// sottopiede o suola della sua bolla contengono DOMI50 (e, se c'è, la stessa variante SA/INF/SC/SAB e non un'altra)
+const PI_FM_SUF = ["SAB", "INF", "SA", "SC", "CB", "TU"];
+function piFormaHit(desc, mats) {
+  if (!mats.length) return false;
+  let t = String(desc || "").toUpperCase();
+  const par = t.match(/\(([^)]*)\)/); if (par && /[A-Z]{3,}\s*\d/.test(par[1])) t = par[1];
+  t = piDmNorm(t.replace(/^\s*FORMA\b/, ""));
+  const m = t.match(/^([A-Z]{3,}?)(\d{2,3})(SAB|INF|SA|SC|CB|TU)?/);
+  if (!m) return false;
+  const key = m[1] + m[2], suf = m[3] || "";
+  const after = (x) => { const i = x.indexOf(key); return i < 0 ? null : x.slice(i + key.length); };
+  const withKey = mats.map(after).filter((a) => a !== null);
+  if (!withKey.length) return false;
+  const sufs = new Set(withKey.map((a) => PI_FM_SUF.find((sf) => a.startsWith(sf))).filter(Boolean));
+  // se i materiali del modello dicono la variante (SA/INF/SC...), deve essere la stessa della forma
+  return !suf || !sufs.size || sufs.has(suf) || (suf === "SAB" && sufs.has("SA"));
+}
 // righe che non si toccano mai: Hermes AH26 e PE27 (le compila l'ufficio a mano)
 const piDmSkip = (r) => /HERMES/i.test(String(r.b || "")) && ["AH26", "PE27"].includes(piStag(r));
 // opts.clear = prima svuota TO, FO, SO, SU, TA (le righe escluse restano come sono)
@@ -4038,7 +4056,7 @@ async function piDateMateriali(files, rows, opts = {}) {
           if (!String(o["FORNITORE"] || "").trim()) return;
           if (cod.split("-")[0].trim() === "FM") {   // forme: paia ordinate per modello collegato -> Tot. forme
             const mods = String(o["MODELLI COLLEGATI"] || "").split("·").map((x) => piDmNorm(x.trim().replace(/\s+(bloccato|sbloccato|parziale.*)$/i, ""))).filter(Boolean);
-            if (mods.length) forme.push({ mods, n: +o["ORDINATO"] || 0, desc: String(o["DESCRIZIONE ARTICOLO"] || "") });
+            forme.push({ mods, n: +o["ORDINATO"] || 0, desc: String(o["DESCRIZIONE ARTICOLO"] || ""), ord: String(o["ORDINE"] || ""), chiusa: false });
             return;
           }
           if (!cat) return;
@@ -4050,7 +4068,13 @@ async function piDateMateriali(files, rows, opts = {}) {
         continue;
       }
       const chi = piDmSheet(ws, ["CHIUSA IL", "DESCRIZIONE ARTICOLO"]);
-      if (chi) { chi.forEach((o) => { const desc = String(o["DESCRIZIONE ARTICOLO"] || ""), colr = String(o["DESCRIZIONE COLORE"] || ""); if (desc) closed.push({ d: piDmNorm(desc), full: piDmNorm(desc + colr), col: colr }); }); continue; }
+      if (chi) { chi.forEach((o) => {
+        const desc = String(o["DESCRIZIONE ARTICOLO"] || ""), colr = String(o["DESCRIZIONE COLORE"] || "");
+        if (!desc) return;
+        closed.push({ d: piDmNorm(desc), full: piDmNorm(desc + colr), col: colr });
+        // forme già consegnate (righe chiuse): servono per Tot. forme
+        if (/FORMIFICIO/i.test(String(o["FORNITORE"] || "")) || /^\s*FORMA\b/i.test(desc)) forme.push({ mods: [], n: +o["ORDINATO"] || 0, desc, ord: String(o["ORDINE"] || ""), chiusa: true });
+      }); continue; }
       const bo = piDmSheet(ws, ["ARTICOLO", "VARIANTE", "TIPO COMPONENTE", "DESCRIZIONE MATERIALE"]);
       if (bo) {
         // stagione dal titolo ("HERMES - AH27 - componenti ..." / "DRIES VAN NOTEN - MAIN SS27 - ...") o dal nome del file
@@ -4140,9 +4164,16 @@ async function piDateMateriali(files, rows, opts = {}) {
     });
     // Tot. forme: solo se vuota (una volta scritta non si tocca più) = paia di forme ordinate per il modello
     if (String(r.m?.fm ?? "").trim() === "") {
-      const keys = piDmRowKeys(r.a), fl = forme.filter((f) => f.mods.some((m) => keys.has(m)));
+      const keys = piDmRowKeys(r.a);
+      const soSu = bolle.filter((b) => keys.has(b.mod) && (b.cat === "so" || b.cat === "su")).map((b) => b.mn);
+      const seen = new Set(), fl = [];
+      forme.forEach((f) => {
+        const hit = f.mods.length ? f.mods.some((m) => keys.has(m)) : piFormaHit(f.desc, soSu);
+        const k = f.ord || f.desc;
+        if (hit && !seen.has(k)) { seen.add(k); fl.push(f); }
+      });
       const tot = fl.reduce((t, f) => t + f.n, 0);
-      if (tot > 0) { upd[`righe/${r.id}/m/fm`] = String(tot); changes.push({ id: r.id, row: label, cat: "fm", old: "", v: String(tot), why: fl.map((f) => `${f.desc}: ${f.n} paia`).join(" · ") }); }
+      if (tot > 0) { upd[`righe/${r.id}/m/fm`] = String(tot); changes.push({ id: r.id, row: label, cat: "fm", old: "", v: String(tot), why: fl.map((f) => `${f.desc}: ${f.n} paia${f.chiusa ? " (consegnata)" : ""}`).join(" · ") }); }
     }
   });
   return { upd, changes, matched, viaBolle, lines: lines.length, bolle: bolleMods.size, used, cleared, skipped, clear: !!opts.clear };
