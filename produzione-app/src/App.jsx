@@ -4115,6 +4115,36 @@ async function piDateMateriali(files, rows) {
   return { upd, changes, matched, viaBolle, lines: lines.length, bolle: bolleMods.size, used };
 }
 
+/* ── Cartella SOLLECITI FORNITORI collegata al Piano (solo Chrome/Edge sul PC) ──
+   La cartella scelta si ricorda in questo browser (IndexedDB). Lunedì e giovedì, alla prima apertura del Piano,
+   l'app legge SITUAZIONE ORDINI FORNITORI + tutti i file BOLLE (anche nelle sottocartelle) e scrive le date. */
+const PI_DIR_OK = typeof window !== "undefined" && "showDirectoryPicker" in window && (() => { try { return window.self === window.top; } catch (e) { return false; } })();   // non dentro iframe (es. anteprime)
+const PI_DM_DAYS = [1, 4];   // lunedì, giovedì
+const piIdb = (mode, fn) => new Promise((res, rej) => {
+  const o = indexedDB.open("piano_dm", 1);
+  o.onupgradeneeded = () => o.result.createObjectStore("kv");
+  o.onerror = () => rej(o.error);
+  o.onsuccess = () => { const tx = o.result.transaction("kv", mode); const r = fn(tx.objectStore("kv")); tx.oncomplete = () => res(r && r.result); tx.onerror = () => rej(tx.error); };
+});
+const piDirGet = () => piIdb("readonly", (st) => st.get("dir")).catch(() => null);
+const piDirSet = (h) => piIdb("readwrite", (st) => st.put(h, "dir"));
+const piDayStr = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+async function piDirFiles(dir) {
+  const sit = [], bol = [];
+  const walk = async (d, depth) => {
+    for await (const [name, h] of d.entries()) {
+      if (h.kind === "directory") { if (depth < 3) await walk(h, depth + 1); continue; }
+      if (!/\.xlsx$/i.test(name) || name.startsWith("~$")) continue;
+      if (/BOLLE/i.test(name)) bol.push(await h.getFile());
+      else if (depth === 0 && /SITUAZIONE.*ORDINI/i.test(name)) sit.push(await h.getFile());
+    }
+  };
+  await walk(dir, 0);
+  if (!sit.length) throw new Error(`nella cartella "${dir.name}" non trovo il file SITUAZIONE ORDINI FORNITORI`);
+  sit.sort((a, b) => b.lastModified - a.lastModified);
+  return [sit[0], ...bol];
+}
+
 function PianoTab({ pia, vers, wide }) {
   const [view, setView] = useState(null);   // versione aperta in sola lettura (non tocca il piano di lavoro)
   const ro = !!view;
@@ -4221,9 +4251,34 @@ function PianoTab({ pia, vers, wide }) {
   const [busy, setBusy] = useState("");
   const [dm, setDm] = useState(null);         // anteprima date materiali da applicare
   const dmFile = useRef(null);
+  const [dmDir, setDmDir] = useState(null);    // cartella collegata (handle) in questo browser
+  const [dmAsk, setDmAsk] = useState(false);   // giorno di aggiornamento ma serve il "Consenti" del browser
+  const dmRows = useRef([]);
+  const dmDone = useRef("");
+  useEffect(() => { if (PI_DIR_OK) piDirGet().then((h) => h && setDmDir(h)); }, []);
+  const dmRun = async (h, auto) => {
+    setBusy("dm"); setDmAsk(false);
+    try {
+      const res = await piDateMateriali(await piDirFiles(h), dmRows.current);
+      if (auto) {
+        if (Object.keys(res.upd).length) await update(ref(db, "piano"), res.upd);
+        await set(ref(db, "piano/cfg/dmLast"), { d: piDayStr(), n: res.changes.length, ts: Date.now() });
+        if (res.changes.length) setDm({ ...res, auto: true });
+      } else setDm(res);
+    } catch (er) { console.error(er); setDm({ err: er.message || String(er) }); }
+    finally { setBusy(""); }
+  };
 
   const rows = useMemo(() => piOrder(Object.entries(righe).map(([id, r]) => ({ id, ...r })).sort((a, b) => (a.o || 0) - (b.o || 0))), [righe]);
   const liveRows = useMemo(() => Object.entries(pia.righe || {}).map(([id, r]) => ({ id, ...r })).sort((a, b) => (a.o || 0) - (b.o || 0)), [pia.righe]);
+  dmRows.current = liveRows;
+  // lunedì e giovedì: aggiornamento automatico alla prima apertura del giorno (una volta sola, per tutti)
+  const dmToday = piDayStr(), dmLastD = cfg.dmLast && cfg.dmLast.d;
+  useEffect(() => {
+    if (view || !pia.righe || !dmDir || !PI_DM_DAYS.includes(new Date().getDay()) || dmLastD === dmToday || dmDone.current === dmToday) return;
+    dmDone.current = dmToday;
+    dmDir.queryPermission({ mode: "read" }).then((p) => { if (p === "granted") dmRun(dmDir, true); else setDmAsk(true); }).catch(() => setDmAsk(true));
+  }, [view, !!pia.righe, dmDir, dmLastD, dmToday]);
   const baseKey = meta.week || piToday();
   const hideMap = cfg.hide || {};
   const ext = +cfg.ext || 0;
@@ -4487,27 +4542,50 @@ function PianoTab({ pia, vers, wide }) {
         {(colW || Object.keys(rowH).length > 0) && <IBtn ic="refresh" title="Ripristina misure" onClick={resetSizes} />}
         <IBtn ic="sliders" title="Limiti e giorni" onClick={() => setShowCfg(true)} />
         <IBtn ic="history" title="Versioni e confronto" onClick={() => setShowVers(true)} />
-        {!ro && rows.length > 0 && <><IBtn ic="truck" title={busy === "dm" ? "Leggo i file…" : "Date materiali (TO, FO, SO, SU, TA): scegli SITUAZIONE ORDINI FORNITORI e i file BOLLE componenti"} onClick={() => { if (!busy && dmFile.current) { dmFile.current.value = ""; dmFile.current.click(); } }}>{busy === "dm" ? "…" : null}</IBtn>
-        <input ref={dmFile} type="file" accept=".xlsx" multiple style={{ display: "none" }} onChange={async (e) => { const fs = [...(e.target.files || [])]; if (!fs.length) return; setBusy("dm"); try { setDm(await piDateMateriali(fs, liveRows)); } catch (er) { console.error(er); setDm({ err: er.message || String(er) }); } finally { setBusy(""); } }} /></>}
+        {!ro && rows.length > 0 && <><IBtn ic="truck" title={busy === "dm" ? "Leggo i file…" : "Date materiali (TO, FO, SO, SU, TA) da SITUAZIONE ORDINI FORNITORI e BOLLE"} onClick={() => { if (!busy) setDm({ menu: true }); }}>{busy === "dm" ? "…" : null}</IBtn>
+        <input ref={dmFile} type="file" accept=".xlsx" multiple style={{ display: "none" }} onChange={async (e) => { const fs = [...(e.target.files || [])]; if (!fs.length) return; setDm(null); setBusy("dm"); try { setDm(await piDateMateriali(fs, liveRows)); } catch (er) { console.error(er); setDm({ err: er.message || String(er) }); } finally { setBusy(""); } }} /></>}
         {rows.length > 0 && <IBtn ic="sheet" title={busy === "xls" ? "Preparo il file…" : shown.length !== rows.length ? `Esporta Excel (${shown.length} righe)` : "Esporta Excel"}
           onClick={async () => { if (busy) return; setBusy("xls"); try { await exportPianoXlsx({ name: meta.name || wName(baseKey), rows: shown, calzs, weeks, info, daysOf, capOf, filtered: shown.length !== rows.length }); } catch (e) { console.error(e); window.alert("Esportazione non riuscita: " + e.message); } finally { setBusy(""); } }}>{busy === "xls" ? "…" : null}</IBtn>}
         {!ro && <><IBtn ic="calPlus" title={`Salva ${meta.name || wName(baseKey)} e apri ${wName(nextKey)}`} onClick={newWeek} />
         <IBtn ic="save" primary title="Salva versione" onClick={() => setShowVers("save")}>Salva</IBtn></>}
       </div>
+      {dmAsk && !ro && (
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px", background: "#E0F2FE", border: "1.5px solid #7DD3FC", borderRadius: 14, padding: "10px 14px", marginBottom: 8 }}>
+          <PIc n="truck" /><b style={{ fontSize: 13, color: "#075985" }}>Oggi è giorno di aggiornamento delle date materiali.</b>
+          <span style={{ fontSize: 12, color: "#075985" }}>Il browser chiede il permesso di leggere la cartella {dmDir ? `"${dmDir.name}"` : ""}.</span>
+          <IBtn primary title="Consenti e aggiorna" onClick={async () => { try { const p = await dmDir.requestPermission({ mode: "read" }); if (p === "granted") dmRun(dmDir, true); } catch (er) { setDm({ err: er.message || String(er) }); } }}>Consenti e aggiorna</IBtn>
+          <IBtn title="Non oggi" onClick={() => setDmAsk(false)}>Non oggi</IBtn>
+        </div>
+      )}
       {dm && (
         <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(11,18,32,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onMouseDown={(e) => { if (e.target === e.currentTarget && !dm.saving) setDm(null); }}>
           <div style={{ background: S0, borderRadius: 16, width: "min(980px, 100%)", maxHeight: "86vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 50px rgba(0,0,0,0.25)", fontFamily: FONT }}>
             <div style={{ padding: "14px 18px", borderBottom: `1px solid ${BRD}` }}>
-              <div style={{ fontSize: 16, fontWeight: 900, color: TXT }}>Date materiali da SITUAZIONE ORDINI FORNITORI</div>
-              {dm.err ? <div style={{ color: RED, fontSize: 13, marginTop: 6 }}>Non riesco a leggere il file: {dm.err}</div> : (
+              <div style={{ fontSize: 16, fontWeight: 900, color: TXT }}>{dm.auto ? `Aggiornamento automatico del ${["", "lunedì", "", "", "giovedì"][new Date().getDay()] || "giorno"}: date già scritte nel piano` : "Date materiali da SITUAZIONE ORDINI FORNITORI e BOLLE"}</div>
+              {dm.menu ? (
+                <div style={{ fontSize: 13, color: T2, marginTop: 8, display: "grid", gap: 10 }}>
+                  <div>Scrive nelle colonne TO, FO, SO, SU, TA le date di consegna dei materiali, da SITUAZIONE ORDINI FORNITORI e dai file BOLLE.</div>
+                  {PI_DIR_OK ? (
+                    <div style={{ background: S1, border: `1px solid ${BRD}`, borderRadius: 12, padding: "10px 12px", display: "grid", gap: 8 }}>
+                      <div><b style={{ color: TXT }}>Cartella collegata:</b> {dmDir ? `"${dmDir.name}"` : "nessuna"} · aggiornamento automatico <b>lunedì e giovedì</b> alla prima apertura del Piano
+                        {cfg.dmLast ? <> · ultimo: {cfg.dmLast.d.slice(8)}/{cfg.dmLast.d.slice(5, 7)} ({cfg.dmLast.n} celle)</> : null}</div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {dmDir && <IBtn primary title="Leggi la cartella adesso (con anteprima)" onClick={async () => { try { const p = (await dmDir.queryPermission({ mode: "read" })) === "granted" ? "granted" : await dmDir.requestPermission({ mode: "read" }); if (p === "granted") dmRun(dmDir, false); } catch (er) { setDm({ err: er.message || String(er) }); } }}>Aggiorna adesso dalla cartella</IBtn>}
+                        <IBtn title="Scegli la cartella SOLLECITI FORNITORI" onClick={async () => { try { const h = await window.showDirectoryPicker({ id: "solleciti", mode: "read" }); await piDirSet(h); setDmDir(h); } catch (er) { if (er.name !== "AbortError") setDm({ err: er.message || String(er) }); } }}>{dmDir ? "Cambia cartella" : "Collega la cartella SOLLECITI FORNITORI"}</IBtn>
+                      </div>
+                    </div>
+                  ) : <div style={{ fontSize: 12 }}>Questo browser non può collegare una cartella (serve Chrome o Edge sul PC): scegli i file a mano.</div>}
+                  <div><IBtn title="Scegli i file a mano" onClick={() => { if (dmFile.current) { dmFile.current.value = ""; dmFile.current.click(); } }}>Scegli i file a mano…</IBtn></div>
+                </div>
+              ) : dm.err ? <div style={{ color: RED, fontSize: 13, marginTop: 6 }}>Non riesco a leggere il file: {dm.err}</div> : (
                 <div style={{ fontSize: 12, color: T2, marginTop: 4 }}>
-                  {dm.lines} righe ordine · bolle di {dm.bolle} modelli · {dm.matched} righe del piano trovate ({dm.viaBolle} con la bolla) · <b style={{ color: M }}>{dm.changes.length} celle da aggiornare</b>
+                  {dm.lines} righe ordine · bolle di {dm.bolle} modelli · {dm.matched} righe del piano trovate ({dm.viaBolle} con la bolla) · <b style={{ color: M }}>{dm.changes.length} celle {dm.auto ? "aggiornate" : "da aggiornare"}</b>
                   <div style={{ marginTop: 4 }}>File letti: {dm.used.map((u) => `${u.name} (${u.kind})`).join(", ")}</div>
                   <div style={{ marginTop: 4 }}>TO = pellami e tessuti, FO = fodere, SO = sottopiedi, SU = suole, TA = tacchi e sottotacchi. Data comunicata dal fornitore se c'è, altrimenti scadenza ordine; con più ordini la più lontana; tutto ricevuto = OK.</div>
                 </div>
               )}
             </div>
-            {!dm.err && (
+            {!dm.err && !dm.menu && (
               <div style={{ overflowY: "auto", padding: "4px 18px" }}>
                 {dm.changes.length === 0 ? <div style={{ padding: 20, textAlign: "center", color: T2 }}>Niente da aggiornare: le date nel piano sono già allineate al file.</div> : (
                   <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12 }}>
@@ -4528,8 +4606,8 @@ function PianoTab({ pia, vers, wide }) {
               </div>
             )}
             <div style={{ padding: "12px 18px", borderTop: `1px solid ${BRD}`, display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <IBtn title="Chiudi" onClick={() => setDm(null)} disabled={dm.saving}>{dm.err || !dm.changes.length ? "Chiudi" : "Annulla"}</IBtn>
-              {!dm.err && dm.changes.length > 0 && <IBtn primary title="Scrivi le date nel piano" disabled={dm.saving} onClick={async () => { setDm({ ...dm, saving: true }); try { await update(ref(db, "piano"), dm.upd); setDm(null); } catch (er) { setDm({ ...dm, saving: false }); window.alert("Salvataggio non riuscito: " + er.message); } }}>{dm.saving ? "Salvo…" : `Applica ${dm.changes.length} date`}</IBtn>}
+              <IBtn title="Chiudi" onClick={() => setDm(null)} disabled={dm.saving}>{dm.err || dm.menu || dm.auto || !dm.changes.length ? "Chiudi" : "Annulla"}</IBtn>
+              {!dm.err && !dm.menu && !dm.auto && dm.changes.length > 0 && <IBtn primary title="Scrivi le date nel piano" disabled={dm.saving} onClick={async () => { setDm({ ...dm, saving: true }); try { await update(ref(db, "piano"), dm.upd); setDm(null); } catch (er) { setDm({ ...dm, saving: false }); window.alert("Salvataggio non riuscito: " + er.message); } }}>{dm.saving ? "Salvo…" : `Applica ${dm.changes.length} date`}</IBtn>}
             </div>
           </div>
         </div>
