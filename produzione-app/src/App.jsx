@@ -2795,6 +2795,10 @@ function RCell({ value, onCommit, kind = "num", g, bold, warn, width, align, pad
   const [v, setV] = useState(null);
   const base = value === undefined || value === null ? "" : String(value);
   const shown = v === null ? (fmt && base !== "" ? fmt(base) : base) : v;
+  // cancellazione di più celle selezionate insieme (Canc/Backspace sulla selezione): evento "rc-clear" sull'input
+  const elRef = useRef(null), clr = useRef(null);
+  clr.current = () => { if (readOnly) return; setV(null); if (base !== "") onCommit(null); };
+  useEffect(() => { const el = elRef.current; if (!el) return; const h = () => clr.current(); el.addEventListener("rc-clear", h); return () => el.removeEventListener("rc-clear", h); }, []);
   const commit = () => {
     if (v === null) return;
     const raw = v; setV(null);
@@ -2818,6 +2822,7 @@ function RCell({ value, onCommit, kind = "num", g, bold, warn, width, align, pad
   };
   return (
     <input
+      ref={elRef}
       type={kind === "date" ? "date" : "text"} inputMode={kind === "num" ? "text" : undefined}
       value={shown} data-g={g} readOnly={readOnly} size={pad ? 1 : undefined}
       onFocus={(e) => { if (v === null) setV(base); if (kind !== "date") e.target.select(); }}
@@ -3965,6 +3970,15 @@ function PianoTab({ pia, vers, wide }) {
     const ds = (e) => { if (e.target && e.target.tagName === "INPUT") e.preventDefault(); };   // niente trascinamento del testo selezionato
     const key = (e) => {
       if (e.key === "Escape") clear();
+      const ae = document.activeElement;
+      const typing = ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable) && !(ae.dataset && ae.dataset.g && cur.has(ae.dataset.g));
+      if ((e.key === "Delete" || e.key === "Backspace") && cur.size > 1 && !e.ctrlKey && !e.metaKey && !e.altKey && !typing && root.offsetParent !== null) {
+        e.preventDefault();
+        if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+        root.querySelectorAll("input[data-g]").forEach((el) => { if (cur.has(el.dataset.g) && !el.readOnly) el.dispatchEvent(new Event("rc-clear")); });
+        setTimeout(paint, 300);
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c" && cur.size > 1) {
         const rows = {}; root.querySelectorAll("input[data-g]").forEach((el) => { if (cur.has(el.dataset.g)) { const q = pos(el); (rows[q.r] = rows[q.r] || []).push([q.c, el.value]); } });
         const txt = Object.keys(rows).map(Number).sort((a, b) => a - b).map((r) => rows[r].sort((a, b) => a[0] - b[0]).map((x) => x[1]).join("\t")).join("\n");
