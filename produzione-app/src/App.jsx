@@ -3955,18 +3955,20 @@ async function exportPianoXlsx({ name, rows, calzs, weeks, info, daysOf, capOf, 
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
-/* ── Date materiali dal file SITUAZIONE ORDINI FORNITORI ──
-   Prende le righe aperte del file generale, le collega ai modelli del piano tramite la colonna "Modelli collegati"
-   e scrive nelle colonne TO (pellami e tessuti), FO (fodere), SO (sottopiedi), SU (suole) la data di consegna:
-   la "DATA DI CONSEGNA COMUNICATA" se c'è, altrimenti la Scadenza dell'ordine. Se ci sono più ordini vale la data più lontana.
-   Tutto ricevuto = OK. Materiali senza ordini nel file: la cella resta com'è. */
-const PI_DM_CAT = { PE: "pe", TE: "pe", FD: "fo", SO: "so", SU: "su" };
-const PI_DM_LAB = { pe: "TO", fo: "FO", so: "SO", su: "SU" };
+/* ── Date materiali (TO, FO, SO, SU, TA) dal file SITUAZIONE ORDINI FORNITORI + file BOLLE componenti ──
+   Con le bolle: per ogni riga del piano (modello + variante) prendo i suoi materiali e cerco gli ordini aperti di quei materiali.
+   Senza bolle per quel modello: uso la colonna "Modelli collegati" del file generale (pellami e fodere filtrati per colore).
+   Data = "DATA DI CONSEGNA COMUNICATA" se c'è (WEEK 48 -> S48), altrimenti Scadenza; più ordini = la data più lontana.
+   Nessun ordine aperto e materiale ricevuto (o riga chiusa) = OK. Nessuna informazione: la cella resta com'è. */
+const PI_DM_CAT = { PE: "pe", TE: "pe", FD: "fo", SO: "so", SU: "su", TA: "ta" };
+const PI_DM_LAB = { pe: "TO", fo: "FO", so: "SO", su: "SU", ta: "TA" };
+const PI_DM_COLS = ["pe", "fo", "so", "su", "ta"];
 const piDmNorm = (x) => String(x ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 const piDmSyn = { NOIR: "NERO", BLACK: "NERO", BLANC: "BIANCO", WHITE: "BIANCO", BRUN: "MARRONE", CHOCOLAT: "CIOCCOLATO" };
-const piDmWords = (x) => String(x ?? "").toUpperCase().split(/[^A-Z]+/).filter((w) => w.length >= 3 && !/^Z[A-Z]{2,3}$/.test(w) && !["TOP", "SOFT"].includes(w)).map((w) => piDmSyn[w] || w);
+const piDmWords = (x) => String(x ?? "").toUpperCase().split(/[^A-Z]+/).filter((w) => w.length >= 3 && !/^Z[A-Z]{2,3}$/.test(w) && !["TOP", "SOFT", "VARI"].includes(w)).map((w) => piDmSyn[w] || w);
+// pezzi ricavati dallo stesso materiale: "LISTINO VELUKID ...", "ELASTICO RAZZA ..." -> stesso ordine del materiale
+const piDmMat = (x) => piDmNorm(String(x ?? "").toUpperCase().replace(/^\s*(\d+\s*MM\s+)?(LISTINO|ELASTICO|INFRADITO|TIRALAMPO|TRASPARENTE|SALVABUCHI|TOMAIA|TUBOLARE|PROFILO|CINTURINO|TUB\.?)\s*(\d+\s*MM)?\s+/, ""));
 const piDd = (d) => `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-// chiavi modello di una riga del piano: "PERIA55 27201TZ", "WS271-1025 - 1026" -> WS271-1025 e WS271-1026
 function piDmRowKeys(a) {
   const t = String(a || "").toUpperCase().trim(), out = new Set([piDmNorm(t)]);
   const m = t.match(/^([A-Z]+\d*)-(\d+(?:\s*-\s*\d+)+)$/);
@@ -3979,65 +3981,138 @@ const piCellTxt = (v) => {
   if (typeof v === "object") { if (v.result !== undefined) return piCellTxt(v.result); if (v.richText) return v.richText.map((x) => x.text).join(""); if (v.text) return String(v.text); }
   return v;
 };
-async function piDateMateriali(file, rows) {
-  const ExcelJS = (await import("exceljs")).default;
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(await file.arrayBuffer());
-  const ws = wb.getWorksheet("Situazione ordini") || wb.worksheets[0];
+// legge un foglio a partire dalla riga di intestazione che contiene tutte le colonne richieste
+function piDmSheet(ws, need) {
   let hr = 0, col = {};
   ws.eachRow((row, rn) => {
     if (hr) return;
     const names = {}; row.eachCell((c, cn) => { names[String(piCellTxt(c.value)).trim().toUpperCase()] = cn; });
-    if (names["FORNITORE"] && names["MODELLI COLLEGATI"]) { hr = rn; col = names; }
+    if (need.every((n) => names[n])) { hr = rn; col = names; }
   });
-  if (!hr) throw new Error("non trovo le colonne Fornitore e Modelli collegati: è il file SITUAZIONE ORDINI FORNITORI?");
-  const get = (row, n) => (col[n] ? piCellTxt(row.getCell(col[n]).value) : "");
-  const lines = [];
-  ws.eachRow((row, rn) => {
-    if (rn <= hr) return;
-    const cod = String(get(row, "CODICE") || "").toUpperCase();
-    const cat = PI_DM_CAT[cod.split("-")[0].trim()];
-    const mods = String(get(row, "MODELLI COLLEGATI") || "").split("·").map((x) => x.trim().replace(/\s+(bloccato|sbloccato|parziale.*)$/i, "")).filter(Boolean);
-    if (!cat || !mods.length) return;
-    const left = +get(row, "DA RICEVERE") || 0;
-    const sc = get(row, "SCADENZA"), com = get(row, "DATA DI CONSEGNA COMUNICATA");
-    let when = null, lab = "";
-    if (com instanceof Date) { when = com; lab = piDd(com); }
-    else {
-      const w = String(com || "").toUpperCase().match(/\b(?:WEEK|WK|SETT\w*|S)\s*\.?\s*(\d{1,2})\b/);
-      if (w) { const tk = piToday(), y = +w[1] < +tk.slice(5) - 20 ? +tk.slice(0, 4) + 1 : +tk.slice(0, 4); const k = `${y}-${String(+w[1]).padStart(2, "0")}`; when = piMonday(k); when.setUTCDate(when.getUTCDate() + 4); lab = "S" + String(+w[1]).padStart(2, "0"); }
-      else if (sc instanceof Date) { when = sc; lab = piDd(sc); }
+  if (!hr) return null;
+  const out = [];
+  ws.eachRow((row, rn) => { if (rn > hr) { const o = {}; Object.entries(col).forEach(([n, cn]) => { o[n] = piCellTxt(row.getCell(cn).value); }); out.push(o); } });
+  return out;
+}
+const piDmWhen = (sc, com) => {
+  if (com instanceof Date) return { when: com, lab: piDd(com) };
+  const w = String(com || "").toUpperCase().match(/\b(?:WEEK|WK|SETT\w*|S)\s*\.?\s*(\d{1,2})\b/);
+  if (w) { const tk = piToday(), y = +w[1] < +tk.slice(5) - 20 ? +tk.slice(0, 4) + 1 : +tk.slice(0, 4); const d = piMonday(`${y}-${String(+w[1]).padStart(2, "0")}`); d.setUTCDate(d.getUTCDate() + 4); return { when: d, lab: "S" + String(+w[1]).padStart(2, "0") }; }
+  if (sc instanceof Date) return { when: sc, lab: piDd(sc) };
+  return { when: null, lab: "" };
+};
+const piDmCatOfBolla = (cod, tipo) => {
+  const c = PI_DM_CAT[String(cod || "").toUpperCase().split("-")[0].trim()];
+  if (c) return c;
+  const t = String(tipo || "").toUpperCase();
+  if (/SUOLA/.test(t)) return "su"; if (/SOTTOPIEDE/.test(t)) return "so"; if (/TACCO/.test(t)) return "ta";
+  if (/FODERA|CAMOSCINA/.test(t)) return "fo"; if (/^TOM/.test(t)) return "pe";
+  return null;
+};
+async function piDateMateriali(files, rows) {
+  const ExcelJS = (await import("exceljs")).default;
+  const lines = [], closed = [], bolle = [], used = [];
+  for (const file of files) {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(await file.arrayBuffer());
+    let kind = "";
+    for (const ws of wb.worksheets) {
+      const sit = piDmSheet(ws, ["FORNITORE", "DESCRIZIONE ARTICOLO", "DA RICEVERE", "MODELLI COLLEGATI"]);
+      if (sit) {
+        kind = "situazione";
+        sit.forEach((o) => {
+          const cod = String(o["CODICE"] || "").toUpperCase(), cat = PI_DM_CAT[cod.split("-")[0].trim()];
+          if (!cat || !String(o["FORNITORE"] || "").trim()) return;
+          const desc = String(o["DESCRIZIONE ARTICOLO"] || ""), colr = String(o["DESCRIZIONE COLORE"] || "");
+          lines.push({ cat, desc, col: colr, d: piDmNorm(desc), full: piDmNorm(desc + colr), left: +o["DA RICEVERE"] || 0, ...piDmWhen(o["SCADENZA"], o["DATA DI CONSEGNA COMUNICATA"]),
+            forn: String(o["FORNITORE"] || "").replace(/^\d+\s*-\s*/, ""),
+            mods: String(o["MODELLI COLLEGATI"] || "").split("·").map((x) => piDmNorm(x.trim().replace(/\s+(bloccato|sbloccato|parziale.*)$/i, ""))).filter(Boolean) });
+        });
+        continue;
+      }
+      const chi = piDmSheet(ws, ["CHIUSA IL", "DESCRIZIONE ARTICOLO"]);
+      if (chi) { chi.forEach((o) => { const desc = String(o["DESCRIZIONE ARTICOLO"] || ""), colr = String(o["DESCRIZIONE COLORE"] || ""); if (desc) closed.push({ d: piDmNorm(desc), full: piDmNorm(desc + colr), col: colr }); }); continue; }
+      const bo = piDmSheet(ws, ["ARTICOLO", "VARIANTE", "TIPO COMPONENTE", "DESCRIZIONE MATERIALE"]);
+      if (bo) {
+        // stagione dal titolo ("HERMES - AH27 - componenti ..." / "DRIES VAN NOTEN - MAIN SS27 - ...") o dal nome del file
+        const title = `${String(piCellTxt(ws.getCell(1, 1).value) || "")} ${file.name}`.toUpperCase();
+        const bst = new Set((title.match(/\b(MAIN|(?:AH|FW|AI|INV|PE|SS|PS|PRE)\s?\d{2})\b/g) || []).map((x) => x.replace(/\s/g, "")));
+        kind = kind || `bolle ${[...bst].join(" ")}`.trim();
+        bo.forEach((o) => { const cat = piDmCatOfBolla(o["CODICE"], o["TIPO COMPONENTE"]); if (cat && String(o["ARTICOLO"] || "").trim()) bolle.push({ mod: piDmNorm(o["ARTICOLO"]), st: bst, varr: String(o["VARIANTE"] || "").toUpperCase(), cat, mat: String(o["DESCRIZIONE MATERIALE"] || ""), mn: piDmMat(o["DESCRIZIONE MATERIALE"]) }); });
+      }
     }
-    lines.push({ cat, mods: mods.map(piDmNorm), left, when, lab, desc: String(get(row, "DESCRIZIONE ARTICOLO") || ""), col: String(get(row, "DESCRIZIONE COLORE") || ""), forn: String(get(row, "FORNITORE") || "").replace(/^\d+\s*-\s*/, "") });
-  });
+    used.push({ name: file.name, kind: kind || "non riconosciuto" });
+  }
+  if (!lines.length) throw new Error("tra i file scelti manca SITUAZIONE ORDINI FORNITORI (servono le colonne Fornitore, Da ricevere e Modelli collegati)");
+  // ordini di un materiale della bolla: stessa descrizione + colore (la bolla può aggiungere dettagli in coda)
+  // oppure stessa descrizione e tutti i codici/parole del colore presenti (l'ordine delle parole può cambiare: "ZAS3 - (ST 32157) ROUGE H")
+  const toks = (x) => String(x ?? "").toUpperCase().split(/[^A-Z0-9]+/).filter((w) => w.length >= 2);
+  const same = (mn, mt, l) => mn === l.full || mn.startsWith(l.full) || (l.d && mn.startsWith(l.d) && (!l.col.trim() || toks(l.col).every((w) => mt.has(w))));
+  const tokSet = (b) => new Set(toks(b.mat));
+  const ordersOf = (b) => { const mt = tokSet(b); return lines.filter((l) => same(b.mn, mt, l)); };
+  const isClosed = (b) => { const mt = tokSet(b); return closed.some((c) => same(b.mn, mt, c)); };
+  const bolleMods = new Set(bolle.map((b) => b.mod));
   const upd = {}, changes = [];
-  let matched = 0;
+  let matched = 0, viaBolle = 0;
   rows.forEach((r) => {
     const keys = piDmRowKeys(r.a);
-    const mine = lines.filter((l) => l.mods.some((m) => keys.has(m)));
-    if (!mine.length) return;
-    matched++;
     const kw = new Set(piDmWords(r.k));
-    ["pe", "fo", "so", "su"].forEach((cat) => {
-      let ls = mine.filter((l) => l.cat === cat);
-      if (!ls.length) return;
-      // pellami e fodere: solo gli ordini del colore della riga (NERO = NOIR, ...). Se la riga ha un colore e nessun ordine lo ha, la cella resta com'è
-      if (cat === "pe" || cat === "fo") {
-        const withCol = ls.filter((l) => piDmWords(l.col).length);
-        const byCol = withCol.filter((l) => piDmWords(l.col).some((w) => kw.has(w)));
-        if (byCol.length) ls = byCol.concat(ls.filter((l) => !piDmWords(l.col).length));
-        else if (withCol.length && kw.size && !kw.has("VARI")) { ls = ls.filter((l) => !piDmWords(l.col).length); if (!ls.length) return; }
-      }
-      const open = ls.filter((l) => l.left > 0);
-      let v = "OK", src = ls;
-      if (open.length) { const dated = open.filter((l) => l.when); const last = dated.sort((a, b) => b.when - a.when)[0]; v = last ? last.lab : "AGG."; src = open; }
+    const res = {};   // cat -> { v, why }
+    // stessa stagione della bolla (le stagioni neutre come PES, AJOUTS, MAIN o vuote vanno bene con tutte)
+    const rst = piStag(r);
+    const okSt = (b) => !rst || !b.st.size || b.st.has(rst) || piStagTime(rst) === null;
+    const allB = bolle.filter((b) => keys.has(b.mod));
+    const myB = allB.filter(okSt);
+    if (allB.length && !myB.length) return;   // il modello ha la bolla di un'altra stagione: non tocco la riga
+    if (myB.length) {
+      // variante: codice finale della riga (es. "... AD") = inizio della variante della bolla; altrimenti parole del colore; altrimenti tutte
+      const code = (String(r.k || "").trim().toUpperCase().match(/\b([A-Z]{2})$/) || [])[1];
+      let vb = code ? myB.filter((b) => b.varr.split(/\s+/)[0] === code) : [];
+      if (!vb.length && kw.size) vb = myB.filter((b) => piDmWords(b.varr).some((w) => kw.has(w)));
+      if (!vb.length) vb = myB;
+      viaBolle++; matched++;
+      PI_DM_COLS.forEach((cat) => {
+        const mats = [...new Map(vb.filter((b) => b.cat === cat).map((b) => [b.mn, b])).values()];
+        if (!mats.length) return;
+        const open = [], why = [];
+        let known = 0;
+        mats.forEach((b) => {
+          const os = ordersOf(b), op = os.filter((l) => l.left > 0);
+          if (op.length) { open.push(...op); const last = op.filter((l) => l.when).sort((a, z) => z.when - a.when)[0]; why.push(`${b.mat.slice(0, 60)}: ${op.reduce((t, l) => t + l.left, 0)} da ricevere${last ? " entro " + last.lab : ""} (${op[0].forn})`); }
+          else if (os.length || isClosed(b)) { known++; why.push(`${b.mat.slice(0, 60)}: ricevuto`); }
+          else why.push(`${b.mat.slice(0, 60)}: nessun ordine nel file`);
+        });
+        if (open.length) { const last = open.filter((l) => l.when).sort((a, z) => z.when - a.when)[0]; res[cat] = { v: last ? last.lab : "AGG.", why }; }
+        else if (known) res[cat] = { v: "OK", why };
+      });
+    } else {
+      const mine = lines.filter((l) => l.mods.some((m) => keys.has(m)));
+      if (!mine.length) return;
+      matched++;
+      PI_DM_COLS.forEach((cat) => {
+        let ls = mine.filter((l) => l.cat === cat);
+        if (!ls.length) return;
+        if (cat === "pe" || cat === "fo") {
+          const withCol = ls.filter((l) => piDmWords(l.col).length);
+          const byCol = withCol.filter((l) => piDmWords(l.col).some((w) => kw.has(w)));
+          if (byCol.length) ls = byCol.concat(ls.filter((l) => !piDmWords(l.col).length));
+          else if (withCol.length && kw.size) { ls = ls.filter((l) => !piDmWords(l.col).length); if (!ls.length) return; }
+        }
+        const open = ls.filter((l) => l.left > 0);
+        const grp = [...ls.reduce((mm, l) => { const k = `${l.desc}${l.col ? " " + l.col : ""}`.slice(0, 70); const o = mm.get(k) || { n: 0, f: l.forn }; o.n += l.left; if (l.when && (!o.w || l.when > o.w)) { o.w = l.when; o.d = l.lab; } mm.set(k, o); return mm; }, new Map())];
+        const why = grp.map(([k, o]) => `${k}: ${o.n > 0 ? o.n + " da ricevere" + (o.d ? " entro " + o.d : "") : "ricevuto"} (${o.f})`);
+        if (open.length) { const last = open.filter((l) => l.when).sort((a, z) => z.when - a.when)[0]; res[cat] = { v: last ? last.lab : "AGG.", why }; }
+        else res[cat] = { v: "OK", why };
+      });
+    }
+    Object.entries(res).forEach(([cat, { v, why }]) => {
       const old = String(r.m?.[cat] ?? "").trim();
       if (old.toUpperCase() === v.toUpperCase()) return;
       upd[`righe/${r.id}/m/${cat}`] = v;
-      changes.push({ id: r.id, row: `${r.b} · ${r.a} · ${r.k || ""}`.trim(), cat, old, v, why: [...src.reduce((mm, l) => { const k = `${l.desc}${l.col ? " " + l.col : ""} (${l.forn}`; const o = mm.get(k) || { n: 0, d: "" }; o.n += l.left; if (l.when && l.when > (o.w || 0)) { o.w = l.when; o.d = l.lab; } mm.set(k, o); return mm; }, new Map())].map(([k, o]) => `${k}${o.n > 0 ? ", " + o.n + " da ricevere" + (o.d ? " entro " + o.d : "") : ", ricevuto"})`).join(" · ") });
+      changes.push({ id: r.id, row: `${r.b} · ${r.a} · ${r.k || ""}`.trim(), cat, old, v, why: why.join(" · "), src: myB.length ? "bolla" : "modelli collegati" });
     });
   });
-  return { upd, changes, matched, lines: lines.length };
+  return { upd, changes, matched, viaBolle, lines: lines.length, bolle: bolleMods.size, used };
 }
 
 function PianoTab({ pia, vers, wide }) {
@@ -4412,8 +4487,8 @@ function PianoTab({ pia, vers, wide }) {
         {(colW || Object.keys(rowH).length > 0) && <IBtn ic="refresh" title="Ripristina misure" onClick={resetSizes} />}
         <IBtn ic="sliders" title="Limiti e giorni" onClick={() => setShowCfg(true)} />
         <IBtn ic="history" title="Versioni e confronto" onClick={() => setShowVers(true)} />
-        {!ro && rows.length > 0 && <><IBtn ic="truck" title={busy === "dm" ? "Leggo il file…" : "Date materiali (TO, FO, SO, SU) dal file SITUAZIONE ORDINI FORNITORI"} onClick={() => { if (!busy && dmFile.current) { dmFile.current.value = ""; dmFile.current.click(); } }}>{busy === "dm" ? "…" : null}</IBtn>
-        <input ref={dmFile} type="file" accept=".xlsx" style={{ display: "none" }} onChange={async (e) => { const f = e.target.files && e.target.files[0]; if (!f) return; setBusy("dm"); try { setDm(await piDateMateriali(f, liveRows)); } catch (er) { console.error(er); setDm({ err: er.message || String(er) }); } finally { setBusy(""); } }} /></>}
+        {!ro && rows.length > 0 && <><IBtn ic="truck" title={busy === "dm" ? "Leggo i file…" : "Date materiali (TO, FO, SO, SU, TA): scegli SITUAZIONE ORDINI FORNITORI e i file BOLLE componenti"} onClick={() => { if (!busy && dmFile.current) { dmFile.current.value = ""; dmFile.current.click(); } }}>{busy === "dm" ? "…" : null}</IBtn>
+        <input ref={dmFile} type="file" accept=".xlsx" multiple style={{ display: "none" }} onChange={async (e) => { const fs = [...(e.target.files || [])]; if (!fs.length) return; setBusy("dm"); try { setDm(await piDateMateriali(fs, liveRows)); } catch (er) { console.error(er); setDm({ err: er.message || String(er) }); } finally { setBusy(""); } }} /></>}
         {rows.length > 0 && <IBtn ic="sheet" title={busy === "xls" ? "Preparo il file…" : shown.length !== rows.length ? `Esporta Excel (${shown.length} righe)` : "Esporta Excel"}
           onClick={async () => { if (busy) return; setBusy("xls"); try { await exportPianoXlsx({ name: meta.name || wName(baseKey), rows: shown, calzs, weeks, info, daysOf, capOf, filtered: shown.length !== rows.length }); } catch (e) { console.error(e); window.alert("Esportazione non riuscita: " + e.message); } finally { setBusy(""); } }}>{busy === "xls" ? "…" : null}</IBtn>}
         {!ro && <><IBtn ic="calPlus" title={`Salva ${meta.name || wName(baseKey)} e apri ${wName(nextKey)}`} onClick={newWeek} />
@@ -4426,8 +4501,9 @@ function PianoTab({ pia, vers, wide }) {
               <div style={{ fontSize: 16, fontWeight: 900, color: TXT }}>Date materiali da SITUAZIONE ORDINI FORNITORI</div>
               {dm.err ? <div style={{ color: RED, fontSize: 13, marginTop: 6 }}>Non riesco a leggere il file: {dm.err}</div> : (
                 <div style={{ fontSize: 12, color: T2, marginTop: 4 }}>
-                  {dm.lines} ordini aperti collegati a modelli · {dm.matched} righe del piano trovate · <b style={{ color: M }}>{dm.changes.length} celle da aggiornare</b>
-                  <div style={{ marginTop: 4 }}>TO = pellami e tessuti, FO = fodere, SO = sottopiedi, SU = suole. Data comunicata dal fornitore se c'è, altrimenti scadenza ordine; con più ordini la più lontana; tutto ricevuto = OK.</div>
+                  {dm.lines} righe ordine · bolle di {dm.bolle} modelli · {dm.matched} righe del piano trovate ({dm.viaBolle} con la bolla) · <b style={{ color: M }}>{dm.changes.length} celle da aggiornare</b>
+                  <div style={{ marginTop: 4 }}>File letti: {dm.used.map((u) => `${u.name} (${u.kind})`).join(", ")}</div>
+                  <div style={{ marginTop: 4 }}>TO = pellami e tessuti, FO = fodere, SO = sottopiedi, SU = suole, TA = tacchi e sottotacchi. Data comunicata dal fornitore se c'è, altrimenti scadenza ordine; con più ordini la più lontana; tutto ricevuto = OK.</div>
                 </div>
               )}
             </div>
@@ -4435,7 +4511,7 @@ function PianoTab({ pia, vers, wide }) {
               <div style={{ overflowY: "auto", padding: "4px 18px" }}>
                 {dm.changes.length === 0 ? <div style={{ padding: 20, textAlign: "center", color: T2 }}>Niente da aggiornare: le date nel piano sono già allineate al file.</div> : (
                   <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12 }}>
-                    <thead><tr>{["Riga del piano", "Col.", "Prima", "Dopo", "Da quali ordini"].map((h) => <th key={h} style={{ position: "sticky", top: 0, background: S1, textAlign: "left", padding: "6px 6px", fontSize: 10, color: T2, borderBottom: `1px solid ${BRD}` }}>{h}</th>)}</tr></thead>
+                    <thead><tr>{["Riga del piano", "Col.", "Prima", "Dopo", "Materiali e ordini"].map((h) => <th key={h} style={{ position: "sticky", top: 0, background: S1, textAlign: "left", padding: "6px 6px", fontSize: 10, color: T2, borderBottom: `1px solid ${BRD}` }}>{h}</th>)}</tr></thead>
                     <tbody>
                       {dm.changes.map((c, i) => (
                         <tr key={i} style={{ borderBottom: `1px solid ${BRD}` }}>
