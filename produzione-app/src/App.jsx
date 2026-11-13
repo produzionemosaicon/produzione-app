@@ -4037,7 +4037,7 @@ function PianoTab({ pia, vers, wide }) {
   const weeks = useMemo(() => allWeeks.filter((w) => !hideMap[w.k] || usedW[w.k]), [allWeeks, cfg.hide, usedW]);
   const nHidden = allWeeks.filter((w) => hideMap[w.k] && !usedW[w.k]).length;
   const nEmpty = weeks.filter((w) => !usedW[w.k]).length;
-  const [zm, setZm] = useState(() => { try { const v = parseFloat(localStorage.getItem("piano_zoom")); return v >= 0.4 && v <= 1.3 ? v : 0.7; } catch (e) { return 0.7; } });
+  const [zm, setZm] = useState(() => { try { const v = parseFloat(localStorage.getItem("piano_zoom")); return v >= 0.3 && v <= 1.5 ? v : 0.7; } catch (e) { return 0.7; } });
   // quando scorrendo si arriva al piano EMOS, in alto si bloccano le righe di EMOS al posto di quelle MOS
   const [stickC, setStickC] = useState("MOS");
   const scrollRef = useRef(null), theadRef = useRef(null), emosBarRef = useRef(null);
@@ -4049,7 +4049,17 @@ function PianoTab({ pia, vers, wide }) {
     const nc = e.getBoundingClientRect().top < h.getBoundingClientRect().bottom - 1 ? "EMOS" : "MOS";
     if (nc !== stickC) setStickC(nc);
   };
-  const setZoom = (v) => { setZm(v); try { localStorage.setItem("piano_zoom", String(v)); } catch (e) {} };
+  const setZoom = (v) => { v = Math.round(Math.min(1.5, Math.max(0.3, v)) * 100) / 100; setZm(v); try { localStorage.setItem("piano_zoom", String(v)); } catch (e) {} };
+  const zmRef = useRef(zm); zmRef.current = zm;
+  // adatta alla larghezza: se la tabella è più larga dello schermo, riduce lo zoom in proporzione
+  const fitZoom = () => { const sc = scrollRef.current; if (sc && sc.scrollWidth > sc.clientWidth + 1) setZoom(zm * sc.clientWidth / sc.scrollWidth); };
+  // Ctrl + rotellina = zoom del piano (invece dello zoom del browser)
+  useEffect(() => {
+    const el = rootRef.current; if (!el) return;
+    const h = (e) => { if (!e.ctrlKey) return; e.preventDefault(); setZoom(zmRef.current + (e.deltaY < 0 ? 0.05 : -0.05)); };
+    el.addEventListener("wheel", h, { passive: false });
+    return () => el.removeEventListener("wheel", h);
+  });
   const hideWeek = (k) => set(ref(db, `piano/cfg/hide/${k}`), true).catch((e) => window.alert("Operazione non riuscita: " + e.message));
   const hideEmptyPast = () => {
     const o = { ...hideMap };
@@ -4262,16 +4272,20 @@ function PianoTab({ pia, vers, wide }) {
           <span style={{ opacity: 0.7, fontSize: 11 }}>{selTot.n} celle numeriche · Ctrl+clic per aggiungere · Esc per annullare</span>
         </div>
       )}
+      <div style={{ position: "sticky", top: 0, zIndex: 50, background: BG, padding: "6px 0", marginBottom: 6, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }} title="Dimensione della tabella">
+        <span style={{ fontSize: 12, color: T2, fontWeight: 700 }}>Zoom</span>
+        <Btn color={S0} textColor={M} style={{ width: 32, padding: 0, minHeight: 28, fontSize: 16, border: `1.5px solid ${BRD2}` }} onClick={() => setZoom(zm - 0.05)} aria-label="Riduci zoom">−</Btn>
+        <input type="range" min={30} max={150} step={1} value={Math.round(zm * 100)} onChange={(e) => setZoom(+e.target.value / 100)} aria-label="Zoom" style={{ width: 180, accentColor: M, cursor: "pointer" }} />
+        <Btn color={S0} textColor={M} style={{ width: 32, padding: 0, minHeight: 28, fontSize: 16, border: `1.5px solid ${BRD2}` }} onClick={() => setZoom(zm + 0.05)} aria-label="Aumenta zoom">+</Btn>
+        <span style={{ fontSize: 12, color: M, fontWeight: 800, fontFamily: MONO, minWidth: 40 }}>{Math.round(zm * 100)}%</span>
+        {[50, 70, 100].map((p) => <Btn key={p} color={Math.round(zm * 100) === p ? ML : S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28, fontSize: 11, border: `1.5px solid ${BRD2}` }} onClick={() => setZoom(p / 100)}>{p}%</Btn>)}
+        <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28, fontSize: 11, border: `1.5px solid ${BRD2}` }} onClick={fitZoom}>Adatta alla larghezza</Btn>
+      </div>
       <div style={{ zoom: zm }}>
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px", marginBottom: 10 }}>
         <div style={{ flex: "1 1 240px", minWidth: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 900, color: TXT }}>Piano settimanale <span style={{ color: M }}>{meta.name || ""}</span></div>
           <div style={{ fontSize: 12, color: T2 }}>{rows.length} righe · tutti i calzaturifici{meta.savedName ? ` · ultima versione salvata: ${meta.savedName}` : ""}</div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }} title="Dimensione della tabella">
-          <span style={{ fontSize: 11, color: T2, fontWeight: 700 }}>Zoom</span>
-          <input type="range" min={40} max={130} step={5} value={Math.round(zm * 100)} onChange={(e) => setZoom(+e.target.value / 100)} aria-label="Zoom" style={{ width: 130, accentColor: M, cursor: "pointer" }} />
-          <span style={{ fontSize: 12, color: M, fontWeight: 800, fontFamily: MONO, minWidth: 38 }}>{Math.round(zm * 100)}%</span>
         </div>
         {(colW || Object.keys(rowH).length > 0) && <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28,fontSize: 11, border: `1.5px solid ${BRD2}` }} onClick={resetSizes}>Ripristina misure</Btn>}
         <Btn color={S0} textColor={M} style={{ width: "auto", padding: "0 10px", minHeight: 28,fontSize: 11, border: `1.5px solid ${BRD2}` }} onClick={() => setShowCfg(true)}>Limiti e giorni</Btn>
