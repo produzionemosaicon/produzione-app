@@ -2820,12 +2820,21 @@ function RCell({ value, onCommit, kind = "num", g, bold, warn, width, align, pad
   const base = value === undefined || value === null ? "" : String(value);
   const shown = v === null ? (fmt && base !== "" ? fmt(base) : base) : v;
   // cancellazione di più celle selezionate insieme (Canc/Backspace sulla selezione): evento "rc-clear" sull'input
-  const elRef = useRef(null), clr = useRef(null);
+  const elRef = useRef(null), clr = useRef(null), bset = useRef(null);
   clr.current = () => { if (readOnly) return; setV(null); if (base !== "") onCommit(null); };
-  useEffect(() => { const el = elRef.current; if (!el) return; const h = () => clr.current(); el.addEventListener("rc-clear", h); return () => el.removeEventListener("rc-clear", h); }, []);
+  // scrittura dello stesso valore su più celle selezionate: evento "rc-set" con detail = testo
+  bset.current = (raw) => { if (readOnly) return; setV(null); apply(String(raw ?? "")); };
+  useEffect(() => {
+    const el = elRef.current; if (!el) return;
+    const h = () => clr.current(), hs = (e) => bset.current(e.detail);
+    el.addEventListener("rc-clear", h); el.addEventListener("rc-set", hs);
+    return () => { el.removeEventListener("rc-clear", h); el.removeEventListener("rc-set", hs); };
+  }, []);
   const commit = () => {
     if (v === null) return;
-    const raw = v; setV(null);
+    const raw = v; setV(null); apply(raw);
+  };
+  function apply(raw) {
     if (kind === "dec") {
       const t = raw.trim().replace(",", ".");
       if (t !== "" && !/^\d+(\.\d+)?$/.test(t)) return;
@@ -4144,6 +4153,21 @@ async function piDirFiles(dir) {
   sit.sort((a, b) => b.lastModified - a.lastModified);
   return [sit[0], ...bol];
 }
+// data di consegna scritta a mano: gg/mm, gg/mm/aa, gg/mm/aaaa (anche con - o .) oppure AAAA-MM-GG -> AAAA-MM-GG; altro testo resta com'e'
+function piParseCons(t) {
+  const s = String(t ?? "").trim();
+  if (!s) return null;
+  if (/^\d{4}-\d\d-\d\d$/.test(s)) return s;
+  const m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})(?:[\/.\-](\d{2}|\d{4}))?$/);
+  if (!m) return s;
+  const d = +m[1], mo = +m[2];
+  if (d < 1 || d > 31 || mo < 1 || mo > 12) return undefined;
+  let y;
+  if (m[3]) y = m[3].length === 2 ? 2000 + +m[3] : +m[3];
+  else { const now = new Date(); y = now.getFullYear(); if (mo < now.getMonth() + 1 - 2) y++; }   // senza anno: la data piu' vicina in avanti
+  return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+const piItDate = (d) => (d && /^\d{4}-\d\d-\d\d$/.test(d) ? `${d.slice(8)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : d || "");
 
 function PianoTab({ pia, vers, wide }) {
   const [view, setView] = useState(null);   // versione aperta in sola lettura (non tocca il piano di lavoro)
@@ -4151,6 +4175,15 @@ function PianoTab({ pia, vers, wide }) {
   // selezione stile Excel: trascinamento = rettangolo, Ctrl/Cmd+clic = aggiunge/toglie celle, Maiusc+clic = estende
   const rootRef = useRef(null);
   const [selTot, setSelTot] = useState(null);
+  const selRef = useRef(new Set());
+  const [bulk, setBulk] = useState("");
+  const applyBulk = () => {
+    const root = rootRef.current; if (!root) return;
+    const cells = Array.from(root.querySelectorAll("input[data-g]")).filter((el) => selRef.current.has(el.dataset.g) && !el.readOnly);
+    if (!cells.length) return;
+    cells.forEach((el) => el.dispatchEvent(new CustomEvent("rc-set", { detail: bulk })));
+    setBulk("");
+  };
   useEffect(() => {
     const root = rootRef.current; if (!root) return;
     let anchor = null, drag = false, active = false, base = new Set(), cur = new Set(), add = false;
@@ -4165,6 +4198,7 @@ function PianoTab({ pia, vers, wide }) {
           if (t !== "" && !Number.isNaN(x)) { sum += x; n++; }
         } else el.removeAttribute("data-sel");
       });
+      selRef.current = cur;
       setSelTot(cur.size ? { sum, n, cells: cur.size } : null);
     };
     const clear = () => { cur = new Set(); base = new Set(); paint(); };
@@ -4176,6 +4210,7 @@ function PianoTab({ pia, vers, wide }) {
     };
     const down = (e) => {
       if (e.button !== 0) return;
+      if (e.target && e.target.closest && e.target.closest("[data-selbar]")) return;   // barra della selezione: non perdere la selezione
       const t = inp(e.target); const q = t ? pos(t) : null;
       const multi = e.ctrlKey || e.metaKey;
       if (!q) { drag = false; if (!multi) clear(); return; }
@@ -4522,10 +4557,16 @@ function PianoTab({ pia, vers, wide }) {
   return (
     <div ref={rootRef} style={{ fontFamily: FONT, padding: "14px 14px", paddingBottom: 40 }} onKeyDown={rieNav}>
       <style>{`input[data-sel="1"]{box-shadow:inset 0 0 0 100px rgba(47,91,255,.22) !important}`}</style>
-      {selTot && selTot.n > 0 && (
-        <div style={{ position: "fixed", bottom: 16, left: "50%", transform: "translateX(-50%)", zIndex: 60, background: TXT, color: "#fff", borderRadius: 12, padding: "8px 16px", fontSize: 13, fontWeight: 700, display: "flex", gap: 14, alignItems: "center", boxShadow: "0 6px 20px rgba(11,18,32,0.25)" }}>
-          <span>Totale selezionato: <span style={{ fontFamily: MONO, fontSize: 16 }}>{Number.isInteger(selTot.sum) ? selTot.sum.toLocaleString("it-IT") : selTot.sum.toLocaleString("it-IT", { maximumFractionDigits: 2 })}</span></span>
-          <span style={{ opacity: 0.7, fontSize: 11 }}>{selTot.n} celle numeriche · Ctrl+clic per aggiungere · Esc per annullare</span>
+      {selTot && (selTot.n > 0 || selTot.cells > 1) && (
+        <div data-selbar="1" style={{ position: "fixed", bottom: 16, left: "50%", transform: "translateX(-50%)", zIndex: 60, background: TXT, color: "#fff", borderRadius: 12, padding: "8px 16px", fontSize: 13, fontWeight: 700, display: "flex", gap: 14, alignItems: "center", boxShadow: "0 6px 20px rgba(11,18,32,0.25)" }}>
+          {selTot.n > 0 && <span>Totale selezionato: <span style={{ fontFamily: MONO, fontSize: 16 }}>{Number.isInteger(selTot.sum) ? selTot.sum.toLocaleString("it-IT") : selTot.sum.toLocaleString("it-IT", { maximumFractionDigits: 2 })}</span></span>}
+          <span style={{ opacity: 0.7, fontSize: 11 }}>{selTot.cells} celle · Ctrl+clic per aggiungere · Canc per svuotare · Esc per annullare</span>
+          {!ro && selTot.cells > 1 && (
+            <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input value={bulk} onChange={(e) => setBulk(e.target.value)} onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); applyBulk(); } }} placeholder="valore per tutte (es. 18/12)" aria-label="Valore da scrivere in tutte le celle selezionate" style={{ width: 170, borderRadius: 8, border: "none", padding: "5px 8px", fontFamily: MONO, fontSize: 12 }} />
+              <button onClick={applyBulk} style={{ background: M, color: "#fff", border: "none", borderRadius: 8, padding: "5px 10px", fontFamily: FONT, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>Scrivi in tutte</button>
+            </span>
+          )}
         </div>
       )}
       <div style={{ position: "sticky", top: 0, zIndex: 50, background: BG, padding: "6px 0", marginBottom: 6, display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 8px" }}>
@@ -4728,7 +4769,9 @@ function PianoTab({ pia, vers, wide }) {
                                 <div style={{ fontWeight: 800, fontSize: 12, color: TXT }}>{r.a}</div>
                                 <div style={{ fontSize: 10, color: T2 }}>{r.k}</div>
                               </td>
-                              <td style={{ ...bt, textAlign: "center", fontFamily: MONO, fontSize: 11, padding: "2px 4px" }}>{r.d && /^\d{4}-\d\d-\d\d$/.test(r.d) ? r.d.slice(8) + "/" + r.d.slice(5, 7) : r.d || ""}</td>
+                              <td style={cell()} title="Consegna: scrivi gg/mm o gg/mm/aa">
+                                <RCell readOnly={ro} kind="txt" align="center" g={`${rg}:-0.5`} value={piItDate(r.d)} fmt={(x) => (/^\d\d\/\d\d\/\d{4}$/.test(x) ? x.slice(0, 5) : x)} onCommit={(v) => { const nv = piParseCons(v); if (nv === undefined) { window.alert("Data non valida: scrivi gg/mm oppure gg/mm/aa"); return; } if (nv !== (r.d ?? null)) piWrite(`righe/${r.id}/d`, nv); }} pad="3px 1px" fs={11} />
+                              </td>
                               <td style={{ ...bt, textAlign: "center", fontFamily: MONO, fontSize: 11, fontWeight: 700, padding: "2px 4px" }}>{r.bl}</td>
                               <td style={{ ...bt, textAlign: "center", fontFamily: MONO, fontSize: 12, fontWeight: 700, padding: "2px 2px" }}>{r.r}</td>
                               {PI_MAT.map(([k], j) => {
