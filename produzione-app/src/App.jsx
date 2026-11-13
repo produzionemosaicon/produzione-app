@@ -3970,7 +3970,7 @@ async function exportPianoXlsx({ name, rows, calzs, weeks, info, daysOf, capOf, 
    Data = "DATA DI CONSEGNA COMUNICATA" se c'è (WEEK 48 -> S48), altrimenti Scadenza; più ordini = la data più lontana.
    Nessun ordine aperto e materiale ricevuto (o riga chiusa) = OK. Nessuna informazione: la cella resta com'è. */
 const PI_DM_CAT = { PE: "pe", TE: "pe", FD: "fo", SO: "so", SU: "su", TA: "ta" };
-const PI_DM_LAB = { pe: "TO", fo: "FO", so: "SO", su: "SU", ta: "TA" };
+const PI_DM_LAB = { pe: "TO", fo: "FO", so: "SO", su: "SU", ta: "TA", fm: "Forme" };
 const PI_DM_COLS = ["pe", "fo", "so", "su", "ta"];
 const piDmNorm = (x) => String(x ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 const piDmSyn = { NOIR: "NERO", BLACK: "NERO", BLANC: "BIANCO", WHITE: "BIANCO", BRUN: "MARRONE", CHOCOLAT: "CIOCCOLATO" };
@@ -4018,9 +4018,12 @@ const piDmCatOfBolla = (cod, tipo) => {
   if (/FODERA|CAMOSCINA/.test(t)) return "fo"; if (/^TOM/.test(t)) return "pe";
   return null;
 };
-async function piDateMateriali(files, rows) {
+// righe che non si toccano mai: Hermes AH26 e PE27 (le compila l'ufficio a mano)
+const piDmSkip = (r) => /HERMES/i.test(String(r.b || "")) && ["AH26", "PE27"].includes(piStag(r));
+// opts.clear = prima svuota TO, FO, SO, SU, TA (le righe escluse restano come sono)
+async function piDateMateriali(files, rows, opts = {}) {
   const ExcelJS = (await import("exceljs")).default;
-  const lines = [], closed = [], bolle = [], used = [];
+  const lines = [], closed = [], bolle = [], used = [], forme = [];
   for (const file of files) {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(await file.arrayBuffer());
@@ -4031,7 +4034,13 @@ async function piDateMateriali(files, rows) {
         kind = "situazione";
         sit.forEach((o) => {
           const cod = String(o["CODICE"] || "").toUpperCase(), cat = PI_DM_CAT[cod.split("-")[0].trim()];
-          if (!cat || !String(o["FORNITORE"] || "").trim()) return;
+          if (!String(o["FORNITORE"] || "").trim()) return;
+          if (cod.split("-")[0].trim() === "FM") {   // forme: paia ordinate per modello collegato -> Tot. forme
+            const mods = String(o["MODELLI COLLEGATI"] || "").split("·").map((x) => piDmNorm(x.trim().replace(/\s+(bloccato|sbloccato|parziale.*)$/i, ""))).filter(Boolean);
+            if (mods.length) forme.push({ mods, n: +o["ORDINATO"] || 0, desc: String(o["DESCRIZIONE ARTICOLO"] || "") });
+            return;
+          }
+          if (!cat) return;
           const desc = String(o["DESCRIZIONE ARTICOLO"] || ""), colr = String(o["DESCRIZIONE COLORE"] || "");
           lines.push({ cat, desc, col: colr, d: piDmNorm(desc), full: piDmNorm(desc + colr), left: +o["DA RICEVERE"] || 0, ...piDmWhen(o["SCADENZA"], o["DATA DI CONSEGNA COMUNICATA"]),
             forn: String(o["FORNITORE"] || "").replace(/^\d+\s*-\s*/, ""),
@@ -4063,15 +4072,19 @@ async function piDateMateriali(files, rows) {
   const bolleMods = new Set(bolle.map((b) => b.mod));
   const upd = {}, changes = [];
   let matched = 0, viaBolle = 0;
+  let cleared = 0, skipped = 0;
   rows.forEach((r) => {
+    if (piDmSkip(r)) { skipped++; return; }
+    const res = {};   // cat -> { v, why }
+    let myB = [];
+    (() => {
     const keys = piDmRowKeys(r.a);
     const kw = new Set(piDmWords(r.k));
-    const res = {};   // cat -> { v, why }
     // stessa stagione della bolla (le stagioni neutre come PES, AJOUTS, MAIN o vuote vanno bene con tutte)
     const rst = piStag(r);
     const okSt = (b) => !rst || !b.st.size || b.st.has(rst) || piStagTime(rst) === null;
     const allB = bolle.filter((b) => keys.has(b.mod));
-    const myB = allB.filter(okSt);
+    myB = allB.filter(okSt);
     if (allB.length && !myB.length) return;   // il modello ha la bolla di un'altra stagione: non tocco la riga
     if (myB.length) {
       // variante: codice finale della riga (es. "... AD") = inizio della variante della bolla; altrimenti parole del colore; altrimenti tutte
@@ -4114,14 +4127,24 @@ async function piDateMateriali(files, rows) {
         else res[cat] = { v: "OK", why };
       });
     }
-    Object.entries(res).forEach(([cat, { v, why }]) => {
+    })();
+    const label = `${r.b} · ${r.a} · ${r.k || ""}`.trim();
+    PI_DM_COLS.forEach((cat) => {
       const old = String(r.m?.[cat] ?? "").trim();
-      if (old.toUpperCase() === v.toUpperCase()) return;
-      upd[`righe/${r.id}/m/${cat}`] = v;
-      changes.push({ id: r.id, row: `${r.b} · ${r.a} · ${r.k || ""}`.trim(), cat, old, v, why: why.join(" · "), src: myB.length ? "bolla" : "modelli collegati" });
+      const nw = res[cat] ? res[cat].v : opts.clear ? "" : null;
+      if (nw === null || old.toUpperCase() === nw.toUpperCase()) return;
+      upd[`righe/${r.id}/m/${cat}`] = nw || null;
+      if (!nw) cleared++;
+      changes.push({ id: r.id, row: label, cat, old, v: nw, why: res[cat] ? res[cat].why.join(" · ") : "svuotata: nessun ordine per questo materiale nel file" });
     });
+    // Tot. forme: solo se vuota (una volta scritta non si tocca più) = paia di forme ordinate per il modello
+    if (String(r.m?.fm ?? "").trim() === "") {
+      const keys = piDmRowKeys(r.a), fl = forme.filter((f) => f.mods.some((m) => keys.has(m)));
+      const tot = fl.reduce((t, f) => t + f.n, 0);
+      if (tot > 0) { upd[`righe/${r.id}/m/fm`] = String(tot); changes.push({ id: r.id, row: label, cat: "fm", old: "", v: String(tot), why: fl.map((f) => `${f.desc}: ${f.n} paia`).join(" · ") }); }
+    }
   });
-  return { upd, changes, matched, viaBolle, lines: lines.length, bolle: bolleMods.size, used };
+  return { upd, changes, matched, viaBolle, lines: lines.length, bolle: bolleMods.size, used, cleared, skipped, clear: !!opts.clear };
 }
 
 /* ── Cartella SOLLECITI FORNITORI collegata al Piano (solo Chrome/Edge sul PC) ──
@@ -4287,14 +4310,15 @@ function PianoTab({ pia, vers, wide }) {
   const [dm, setDm] = useState(null);         // anteprima date materiali da applicare
   const dmFile = useRef(null);
   const [dmDir, setDmDir] = useState(null);    // cartella collegata (handle) in questo browser
-  const [dmAsk, setDmAsk] = useState(false);   // giorno di aggiornamento ma serve il "Consenti" del browser
+  const [dmAsk, setDmAsk] = useState(false);
+  const [dmClear, setDmClear] = useState(false);   // "svuota e riscrivi" (una tantum, con versione di sicurezza)   // giorno di aggiornamento ma serve il "Consenti" del browser
   const dmRows = useRef([]);
   const dmDone = useRef("");
   useEffect(() => { if (PI_DIR_OK) piDirGet().then((h) => h && setDmDir(h)); }, []);
   const dmRun = async (h, auto) => {
     setBusy("dm"); setDmAsk(false);
     try {
-      const res = await piDateMateriali(await piDirFiles(h), dmRows.current);
+      const res = await piDateMateriali(await piDirFiles(h), dmRows.current, { clear: !auto && dmClear });
       if (auto) {
         if (Object.keys(res.upd).length) await update(ref(db, "piano"), res.upd);
         await set(ref(db, "piano/cfg/dmLast"), { d: piDayStr(), n: res.changes.length, ts: Date.now() });
@@ -4584,7 +4608,7 @@ function PianoTab({ pia, vers, wide }) {
         <IBtn ic="sliders" title="Limiti e giorni" onClick={() => setShowCfg(true)} />
         <IBtn ic="history" title="Versioni e confronto" onClick={() => setShowVers(true)} />
         {!ro && rows.length > 0 && <><IBtn ic="truck" title={busy === "dm" ? "Leggo i file…" : "Date materiali (TO, FO, SO, SU, TA) da SITUAZIONE ORDINI FORNITORI e BOLLE"} onClick={() => { if (!busy) setDm({ menu: true }); }}>{busy === "dm" ? "…" : null}</IBtn>
-        <input ref={dmFile} type="file" accept=".xlsx" multiple style={{ display: "none" }} onChange={async (e) => { const fs = [...(e.target.files || [])]; if (!fs.length) return; setDm(null); setBusy("dm"); try { setDm(await piDateMateriali(fs, liveRows)); } catch (er) { console.error(er); setDm({ err: er.message || String(er) }); } finally { setBusy(""); } }} /></>}
+        <input ref={dmFile} type="file" accept=".xlsx" multiple style={{ display: "none" }} onChange={async (e) => { const fs = [...(e.target.files || [])]; if (!fs.length) return; setDm(null); setBusy("dm"); try { setDm(await piDateMateriali(fs, liveRows, { clear: dmClear })); } catch (er) { console.error(er); setDm({ err: er.message || String(er) }); } finally { setBusy(""); } }} /></>}
         {rows.length > 0 && <IBtn ic="sheet" title={busy === "xls" ? "Preparo il file…" : shown.length !== rows.length ? `Esporta Excel (${shown.length} righe)` : "Esporta Excel"}
           onClick={async () => { if (busy) return; setBusy("xls"); try { await exportPianoXlsx({ name: meta.name || wName(baseKey), rows: shown, calzs, weeks, info, daysOf, capOf, filtered: shown.length !== rows.length }); } catch (e) { console.error(e); window.alert("Esportazione non riuscita: " + e.message); } finally { setBusy(""); } }}>{busy === "xls" ? "…" : null}</IBtn>}
         {!ro && <><IBtn ic="calPlus" title={`Salva ${meta.name || wName(baseKey)} e apri ${wName(nextKey)}`} onClick={newWeek} />
@@ -4616,11 +4640,15 @@ function PianoTab({ pia, vers, wide }) {
                       </div>
                     </div>
                   ) : <div style={{ fontSize: 12 }}>Questo browser non può collegare una cartella (serve Chrome o Edge sul PC): scegli i file a mano.</div>}
+                  <label style={{ display: "flex", gap: 8, alignItems: "flex-start", background: dmClear ? "#FFF1E6" : "transparent", border: `1px solid ${dmClear ? "#FDBA74" : BRD}`, borderRadius: 12, padding: "8px 12px", cursor: "pointer" }}>
+                    <input type="checkbox" checked={dmClear} onChange={(e) => setDmClear(e.target.checked)} style={{ marginTop: 3 }} />
+                    <span><b style={{ color: TXT }}>Svuota e riscrivi:</b> prima cancella TO, FO, SO, SU, TA su tutte le righe (non le Hermes AH26 e PE27), poi scrive le date dei file. Prima di applicare salvo una versione di sicurezza del piano.</span>
+                  </label>
                   <div><IBtn title="Scegli i file a mano" onClick={() => { if (dmFile.current) { dmFile.current.value = ""; dmFile.current.click(); } }}>Scegli i file a mano…</IBtn></div>
                 </div>
               ) : dm.err ? <div style={{ color: RED, fontSize: 13, marginTop: 6 }}>Non riesco a leggere il file: {dm.err}</div> : (
                 <div style={{ fontSize: 12, color: T2, marginTop: 4 }}>
-                  {dm.lines} righe ordine · bolle di {dm.bolle} modelli · {dm.matched} righe del piano trovate ({dm.viaBolle} con la bolla) · <b style={{ color: M }}>{dm.changes.length} celle {dm.auto ? "aggiornate" : "da aggiornare"}</b>
+                  {dm.lines} righe ordine · bolle di {dm.bolle} modelli · {dm.matched} righe del piano trovate ({dm.viaBolle} con la bolla) · <b style={{ color: M }}>{dm.changes.length} celle {dm.auto ? "aggiornate" : "da aggiornare"}</b>{dm.clear ? <> (di cui <b style={{ color: "#9A3412" }}>{dm.cleared} svuotate</b>)</> : null} · Hermes AH26 e PE27 non toccate ({dm.skipped} righe)
                   <div style={{ marginTop: 4 }}>File letti: {dm.used.map((u) => `${u.name} (${u.kind})`).join(", ")}</div>
                   <div style={{ marginTop: 4 }}>TO = pellami e tessuti, FO = fodere, SO = sottopiedi, SU = suole, TA = tacchi e sottotacchi. Data comunicata dal fornitore se c'è, altrimenti scadenza ordine; con più ordini la più lontana; tutto ricevuto = OK.</div>
                 </div>
@@ -4637,7 +4665,7 @@ function PianoTab({ pia, vers, wide }) {
                           <td style={{ padding: "5px 6px", fontWeight: 700 }}>{c.row}</td>
                           <td style={{ padding: "5px 6px", fontWeight: 800, color: M }}>{PI_DM_LAB[c.cat]}</td>
                           <td style={{ padding: "5px 6px", fontFamily: MONO, color: T3 }}>{c.old || "—"}</td>
-                          <td style={{ padding: "5px 6px", fontFamily: MONO, fontWeight: 800 }}>{c.v}</td>
+                          <td style={{ padding: "5px 6px", fontFamily: MONO, fontWeight: 800, color: c.v ? TXT : "#9A3412" }}>{c.v || "vuota"}</td>
                           <td style={{ padding: "5px 6px", color: T2, fontSize: 11 }}>{c.why}</td>
                         </tr>
                       ))}
@@ -4648,7 +4676,14 @@ function PianoTab({ pia, vers, wide }) {
             )}
             <div style={{ padding: "12px 18px", borderTop: `1px solid ${BRD}`, display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <IBtn title="Chiudi" onClick={() => setDm(null)} disabled={dm.saving}>{dm.err || dm.menu || dm.auto || !dm.changes.length ? "Chiudi" : "Annulla"}</IBtn>
-              {!dm.err && !dm.menu && !dm.auto && dm.changes.length > 0 && <IBtn primary title="Scrivi le date nel piano" disabled={dm.saving} onClick={async () => { setDm({ ...dm, saving: true }); try { await update(ref(db, "piano"), dm.upd); setDm(null); } catch (er) { setDm({ ...dm, saving: false }); window.alert("Salvataggio non riuscito: " + er.message); } }}>{dm.saving ? "Salvo…" : `Applica ${dm.changes.length} date`}</IBtn>}
+              {!dm.err && !dm.menu && !dm.auto && dm.changes.length > 0 && <IBtn primary title="Scrivi le date nel piano" disabled={dm.saving} onClick={async () => { setDm({ ...dm, saving: true }); try {
+                if (dm.clear) {   // versione di sicurezza prima di svuotare
+                  const n = new Date(), nm = `Prima di svuota date ${piDayStr(n).split("-").reverse().join("/")} ${String(n.getHours()).padStart(2, "0")}.${String(n.getMinutes()).padStart(2, "0")}`, vid = piSlug(nm);
+                  const clean = {}; liveRows.forEach((r) => { const { id, _st, ...rest } = r; clean[id] = rest; });
+                  await set(ref(db, `pianoVersRighe/${vid}`), clean);
+                  await set(ref(db, `pianoVers/${vid}`), { name: nm, week: baseKey, weekStart: piMonday(baseKey).toISOString().slice(0, 10), savedAt: Date.now(), n: liveRows.length });
+                }
+                await update(ref(db, "piano"), dm.upd); setDm(null); setDmClear(false); } catch (er) { setDm({ ...dm, saving: false }); window.alert("Salvataggio non riuscito: " + er.message); } }}>{dm.saving ? "Salvo…" : dm.clear ? `Salva versione, svuota e scrivi (${dm.changes.length})` : `Applica ${dm.changes.length} date`}</IBtn>}
             </div>
           </div>
         </div>
