@@ -4073,6 +4073,25 @@ function piFormaHit(desc, mats) {
   // se i materiali del modello dicono la variante (SA/INF/SC...), deve essere la stessa della forma
   return !suf || !sufs.size || sufs.has(suf) || (suf === "SAB" && sufs.has("SA"));
 }
+// Alcuni file (es. salvati con note/commenti da programmi esterni) mandano in errore ExcelJS sui commenti:
+// in quel caso tolgo note e commenti dal file (solo in memoria, il file sul PC non cambia) e lo rileggo.
+async function piXlsxLoad(wb, buf) {
+  try { await wb.xlsx.load(buf); return; } catch (er) {
+    if (!/comment/i.test(String(er && er.message))) throw er;
+  }
+  const JSZip = (await import("jszip")).default;
+  const zip = await JSZip.loadAsync(buf);
+  for (const name of Object.keys(zip.files)) {
+    if (/^xl\/worksheets\/_rels\/.*\.rels$/.test(name)) {
+      const x = await zip.file(name).async("string");
+      zip.file(name, x.replace(/<Relationship\b[^>]*Type="[^"]*\/(comments|vmlDrawing)"[^>]*\/>/g, ""));
+    } else if (/^xl\/worksheets\/[^/]+\.xml$/.test(name)) {
+      const x = await zip.file(name).async("string");
+      zip.file(name, x.replace(/<legacyDrawing\b[^>]*\/>/g, ""));
+    } else if (/^xl\/(comments|drawings\/commentsDrawing|threadedComments)/.test(name) || /^xl\/comments\d*\.xml$/.test(name)) zip.remove(name);
+  }
+  await wb.xlsx.load(await zip.generateAsync({ type: "arraybuffer" }));
+}
 // righe che non si toccano mai: Hermes AH26 e PE27 (le compila l'ufficio a mano)
 const piDmSkip = (r) => /HERMES/i.test(String(r.b || "")) && ["AH26", "PE27"].includes(piStag(r));
 // opts.clear = prima svuota TO, FO, SO, SU, TA (le righe escluse restano come sono)
@@ -4081,7 +4100,7 @@ async function piDateMateriali(files, rows, opts = {}) {
   const lines = [], closed = [], bolle = [], used = [], forme = [];
   for (const file of files) {
     const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(await file.arrayBuffer());
+    await piXlsxLoad(wb, await file.arrayBuffer());
     let kind = "";
     for (const ws of wb.worksheets) {
       const sit = piDmSheet(ws, ["FORNITORE", "DESCRIZIONE ARTICOLO", "DA RICEVERE", "MODELLI COLLEGATI"]);
