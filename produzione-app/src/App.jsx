@@ -2196,6 +2196,18 @@ const manBrand = (secId, r) => {
 const manBrandKey = (secId, r) => manBrand(secId, r).trim().toUpperCase();
 
 // "5 + 5", "=17+11", "12" → numero; vuoto → 0; testo non valido → NaN
+// calcolo come in Excel nelle celle numeriche: "=120+30", "3*40", "(500-120)/2", "1,5*10" (niente eval)
+function calcExpr(v) {
+  const src = String(v ?? "").trim().replace(/^=+/, "").replace(/\s+/g, "").replace(/[x×X]/g, "*").replace(/[÷:]/g, "/").replace(/,/g, ".");
+  if (src === "") return 0;
+  if (!/^[\d.+\-*/()%]+$/.test(src)) return NaN;
+  let i = 0;
+  const num = () => { const m = /^\d+(\.\d+)?|^\.\d+/.exec(src.slice(i)); if (!m) throw 0; i += m[0].length; let n = +m[0]; if (src[i] === "%") { i++; n /= 100; } return n; };
+  const fac = () => { if (src[i] === "-") { i++; return -fac(); } if (src[i] === "+") { i++; return fac(); } if (src[i] === "(") { i++; const n = add(); if (src[i] !== ")") throw 0; i++; return n; } return num(); };
+  const mul = () => { let n = fac(); while (src[i] === "*" || src[i] === "/") { const o = src[i++]; const b = fac(); n = o === "*" ? n * b : n / b; } return n; };
+  const add = () => { let n = mul(); while (src[i] === "+" || src[i] === "-") { const o = src[i++]; const b = mul(); n = o === "+" ? n + b : n - b; } return n; };
+  try { const n = add(); return i === src.length && Number.isFinite(n) ? n : NaN; } catch { return NaN; }
+}
 function manSum(v) {
   const s = String(v ?? "").trim().replace(/^[=+\s]+/, "").replace(/[+\s]+$/, "");
   if (s === "") return String(v ?? "").trim().replace(/[=+\s]/g, "") === "" ? 0 : NaN;
@@ -2837,14 +2849,16 @@ function RCell({ value, onCommit, kind = "num", g, bold, warn, width, align, pad
   };
   function apply(raw) {
     if (kind === "dec") {
-      const t = raw.trim().replace(",", ".");
-      if (t !== "" && !/^\d+(\.\d+)?$/.test(t)) return;
-      const nv = t === "" || +t === 0 ? null : +t;
+      const c = calcExpr(raw);
+      if (Number.isNaN(c) || c < 0) { if (raw.trim() !== "") window.alert("Calcolo non valido: usa numeri e + - * / ( )"); return; }
+      const t = Math.round(c * 100) / 100;
+      const nv = t === 0 ? null : t;
       if (nv === (base === "" ? null : +base.replace(",", "."))) return;
       onCommit(nv);
     } else if (kind === "num") {
-      const n = manSum(raw);
-      if (Number.isNaN(n)) return;
+      const c = calcExpr(raw);
+      if (Number.isNaN(c) || c < 0) { if (raw.trim() !== "") window.alert("Calcolo non valido: usa numeri e + - * / ( ) (le paia non possono essere negative)"); return; }
+      const n = Math.round(c);
       const nv = n === 0 ? null : n;
       if (nv === (base === "" ? null : +base)) return;
       onCommit(nv);
