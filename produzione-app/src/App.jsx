@@ -4834,7 +4834,8 @@ function PianoTab({ pia, vers, wide }) {
                           const newB = zi > 0 && list[zi - 1].b !== r.b;
                           const newS = !newB && zi > 0 && list[zi - 1]._st !== r._st;   // cambio stagione nello stesso marchio (PES, AJOUTS, UNIFOR non separano)
                           const isSel = !!sel[r.id];
-                          const bg = isSel ? "#C9DBFF" : zi % 2 === 0 ? "#EAF1FF" : "#FFFFFF";
+                          const isPes = String(r.a || "").replace(/\s+/g, "").toUpperCase().includes("OASISPES");   // Hermes Oasis PES: evidenziate in giallino
+                          const bg = isSel ? "#C9DBFF" : isPes ? (zi % 2 === 0 ? "#FFF3B0" : "#FFF8CC") : zi % 2 === 0 ? "#EAF1FF" : "#FFFFFF";
                           const bt = { background: bg, borderBottom: `1px solid ${BRD}`, borderRight: grid, ...(newB ? { borderTop: `3px double ${RED}` } : newS ? { borderTop: `3px solid ${RED}` } : {}) };
                           const cell = (n) => ({ ...bt, padding: 0, textAlign: "center" });
                           const nums = [["q", r.q, "num"], ["sp", r.sp, "num"], ["g", r.g, "num"], ["p", r.p, "dec"]];
