@@ -825,7 +825,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ maxWidth: wide ? Math.floor(window.innerWidth / zoom) : 900, zoom: zoom > 1 ? zoom : undefined, margin:"0 auto", minHeight: zoom > 1 ? `${100 / zoom}dvh` : "100dvh", display:"flex", flexDirection:"column", background:BG, fontFamily:FONT, paddingLeft: wide ? (navHide ? 36 : 52) : 0 }}>
+    <div className={wide && navHide ? "nav-hid" : undefined} style={{ maxWidth: wide ? Math.floor(window.innerWidth / zoom) : 900, zoom: zoom > 1 ? zoom : undefined, margin:"0 auto", minHeight: zoom > 1 ? `${100 / zoom}dvh` : "100dvh", display:"flex", flexDirection:"column", background:BG, fontFamily:FONT, paddingLeft: wide && !navHide ? 52 : 0 }}>
       <style>{`
         @keyframes cellFlash { 0%{background:rgba(0,184,122,0)} 30%{background:rgba(0,184,122,0.25)} 100%{background:rgba(0,184,122,0)} }
         .cell-flash { animation: cellFlash 1.5s ease-out forwards; }
@@ -833,6 +833,8 @@ export default function App() {
         ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-thumb{background:${BRD2};border-radius:2px}
         @media print{.no-print{display:none!important}.print-only{display:block!important}body{background:#fff}}
         .print-only{display:none}
+        .nav-spacer{display:none}
+        .nav-hid .nav-spacer{display:block;width:36px;flex:none}
       `}</style>
 
       {wide && navHide && (
@@ -859,6 +861,7 @@ export default function App() {
       )}
 
       {tab !== "piano" && tab !== "sblocchi" && <div className="no-print" style={{ position:"sticky", top:0, zIndex:20, background:S0, borderBottom:`1px solid ${BRD}`, padding:"8px 20px", flexShrink:0, display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+        <span className="nav-spacer" />
         <div style={{ flex:"1 1 200px", minWidth:0 }}>
           <div style={{ fontSize:10, fontWeight:600, letterSpacing:"0.14em", color:M }}>MOSAICON · EMOS / {(TABS.find((t) => t.id === tab) || {}).label?.toUpperCase()}</div>
         </div>
@@ -4640,6 +4643,7 @@ function PianoTab({ pia, vers, wide }) {
         </div>
       )}
       <div style={{ position: "sticky", top: 0, zIndex: 50, background: BG, padding: "6px 0", marginBottom: 6, display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 8px" }}>
+        <span className="nav-spacer" style={{ marginRight: -8 }} />
         <div style={{ flex: "1 1 200px", minWidth: 0 }}>
           <span style={{ fontSize: 15, fontWeight: 900, color: TXT }}>Piano <span style={{ color: M }}>{meta.name || ""}</span></span>
           <span style={{ fontSize: 11, color: T2, marginLeft: 8 }}>{rows.length} righe{meta.savedName ? ` · ultima versione: ${meta.savedName}` : ""}</span>
