@@ -7,7 +7,7 @@ import {
 } from "recharts";
 import { db, auth, ref, set, get, onValue, update } from "./firebase.js";
 import { signOut } from "firebase/auth";
-import { remove } from "firebase/database";
+import { remove, query, orderByKey, startAt } from "firebase/database";
 import SbloccoTab from "./SbloccoTab.jsx";
 import SaldiChTab from "./SaldiChTab.jsx";
 import AlertCard from "./AlertCard.jsx";
@@ -251,7 +251,11 @@ export default function App() {
   const toggleNav = () => setNavHide((v) => { try { localStorage.setItem("navHide", v ? "0" : "1"); } catch {} return !v; });
   const [date, setDate] = useState(() => todayStr());
   const [stations, setStations] = useState(DEF_STATIONS);
-  const [reports, setReports] = useState({});
+  // rapporti giornalieri: all'avvio si scaricano solo gli ultimi giorni; lo storico completo solo quando serve (Storico / Analisi)
+  const [repRecent, setRepRecent] = useState({});
+  const [repFull, setRepFull] = useState(null);
+  const [repOld, setRepOld] = useState({});
+  const [seen, setSeen] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
@@ -343,14 +347,11 @@ export default function App() {
   }, []);
 
   useEffect(() => onValue(ref(db, "sblocchi"), (snap) => setSbl(snap.exists() ? snap.val() : {})), []);
-  useEffect(() => onValue(ref(db, "sblocchiFoto"), (snap) => setSblFoto(snap.exists() ? snap.val() : {})), []);
-  useEffect(() => onValue(ref(db, "saldiCH"), (snap) => setSch(snap.exists() ? snap.val() : {})), []);
+  // foto, rientri e saldi CH pesano parecchio: si scaricano solo la prima volta che si apre la loro scheda
+  useEffect(() => (seen.sblocchi ? onValue(ref(db, "sblocchiFoto"), (snap) => setSblFoto(snap.exists() ? snap.val() : {})) : undefined), [seen.sblocchi]);
+  useEffect(() => (seen.saldich ? onValue(ref(db, "saldiCH"), (snap) => setSch(snap.exists() ? snap.val() : {})) : undefined), [seen.saldich]);
 
-  useEffect(() => {
-    return onValue(ref(db, "rientri"), (snap) => {
-      setRie(snap.exists() ? snap.val() : {});
-    });
-  }, []);
+  useEffect(() => (seen.rientri ? onValue(ref(db, "rientri"), (snap) => { setRie(snap.exists() ? snap.val() : {}); }) : undefined), [seen.rientri]);
 
   useEffect(() => {
     return onValue(ref(db, "piano"), (snap) => {
@@ -467,16 +468,31 @@ export default function App() {
     return () => { mounted = false; };
   }, []);
 
+  const repCutoff = useMemo(() => { const d = new Date(); d.setDate(d.getDate() - 31); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }, []);
   useEffect(() => {
-    return onValue(
-      ref(db, "reports"),
+    const t = setTimeout(() => setLoading(false), 5000);
+    const off = onValue(
+      query(ref(db, "reports"), orderByKey(), startAt(repCutoff)),
       (snap) => {
-        if (snap.exists()) setReports(snap.val());
+        setRepRecent(snap.exists() ? snap.val() : {});
         setLoading(false);
       },
       () => setLoading(false)
     );
-  }, []);
+    return () => { clearTimeout(t); off(); };
+  }, [repCutoff]);
+  useEffect(() => { setSeen((x) => (x[tab] ? x : { ...x, [tab]: true })); }, [tab]);
+  const needFull = !!(seen.storico || seen.analisi);
+  useEffect(() => {
+    if (!needFull) return undefined;
+    return onValue(ref(db, "reports"), (snap) => setRepFull(snap.exists() ? snap.val() : {}));
+  }, [needFull]);
+  // giorno vecchio aperto dal foglio: si scarica solo quel giorno
+  useEffect(() => {
+    if (repFull || date >= repCutoff) return undefined;
+    return onValue(ref(db, `reports/${date}`), (snap) => setRepOld(snap.exists() ? { [date]: snap.val() } : {}));
+  }, [date, repCutoff, repFull]);
+  const reports = useMemo(() => ({ ...repOld, ...(repFull || {}), ...repRecent }), [repOld, repFull, repRecent]);
 
   useEffect(() => {
     const activeBrands = Object.entries(anBrands).filter(([, ok]) => ok).map(([b]) => b);
