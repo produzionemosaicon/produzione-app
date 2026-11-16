@@ -1,5 +1,5 @@
 import { createPortal } from "react-dom";
-import { Fragment, useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from "react";
+import { Fragment, memo, useDeferredValue, useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from "react";
 import {
   BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -2847,6 +2847,9 @@ const rieFarDate = () => { const d = new Date(); d.setDate(d.getDate() + 60); re
 const rieSet = (path, v) => set(ref(db, `rientri/${path}`), v === undefined || v === "" ? null : v);
 
 // Casella: accetta somme (+5+5, =17+11) come nella Manovia; Invio/frecce per spostarsi
+// cella del Piano: si ridisegna solo se cambiano i dati visibili (onCommit e fmt cambiano a ogni render ma dipendono solo da riga/colonna, che già fanno parte di value/g)
+const PCELL_K = ["value", "kind", "g", "bold", "warn", "width", "align", "pad", "fs", "bg", "fg", "readOnly"];
+const PCell = memo(RCell, (a, b) => PCELL_K.every((k) => a[k] === b[k]));
 function RCell({ value, onCommit, kind = "num", g, bold, warn, width, align, pad, fs, bg, fg, fmt, readOnly }) {
   const [v, setV] = useState(null);
   const base = value === undefined || value === null ? "" : String(value);
@@ -4257,7 +4260,7 @@ function piParseCons(t) {
 }
 const piItDate = (d) => (d && /^\d{4}-\d\d-\d\d$/.test(d) ? `${d.slice(8)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : d || "");
 
-function PianoTab({ pia, vers, wide }) {
+const PianoTab = memo(function PianoTab({ pia, vers, wide }) {
   const [view, setView] = useState(null);   // versione aperta in sola lettura (non tocca il piano di lavoro)
   const ro = !!view;
   // selezione stile Excel: trascinamento = rettangolo, Ctrl/Cmd+clic = aggiunge/toglie celle, Maiusc+clic = estende
@@ -4287,7 +4290,7 @@ function PianoTab({ pia, vers, wide }) {
         } else el.removeAttribute("data-sel");
       });
       selRef.current = cur;
-      setSelTot(cur.size ? { sum, n, cells: cur.size } : null);
+      setSelTot((pv) => { if (!cur.size) return pv ? null : pv; return pv && pv.sum === sum && pv.n === n && pv.cells === cur.size ? pv : { sum, n, cells: cur.size }; });
     };
     const clear = () => { cur = new Set(); base = new Set(); paint(); };
     const rect = (a, b) => {
@@ -4547,7 +4550,8 @@ function PianoTab({ pia, vers, wide }) {
   const matRows = rows.filter((r) => info.get(r.id).plan > 0).length;
   const matBad = rows.filter((r) => info.get(r.id).plan > 0 && info.get(r.id).miss > 0).length;
 
-  const ql = q.trim().toUpperCase();
+  const dq = useDeferredValue(q);
+  const ql = dq.trim().toUpperCase();
   const shown = rows.filter((r) => {
     if (onlyMiss && !(info.get(r.id).plan > 0 && info.get(r.id).miss > 0)) return false;
     if (ql && ![r.b, r.c, r.s, r.a, r.k, r.bl].some((x) => String(x || "").toUpperCase().includes(ql))) return false;
@@ -4854,7 +4858,7 @@ function PianoTab({ pia, vers, wide }) {
                   let gi = 0;
                   return calzs.map((c) => {
                     const list = shown.filter((r) => r.c === c);
-                    if (!list.length && (q || onlyMiss)) return null;
+                    if (!list.length && (dq || onlyMiss)) return null;
                     const tot = totBy[c] || new Array(NW).fill(0), fat = fatBy[c] || new Array(NW).fill(0);
                     const cap = capOf(c);
                     const sumCell = { textAlign: "center", padding: "5px 2px", fontFamily: MONO, fontWeight: 700, fontSize: 12, borderRight: grid };
@@ -4878,14 +4882,14 @@ function PianoTab({ pia, vers, wide }) {
                               <td style={{ ...bt, textAlign: "center", padding: "0 4px", position: "relative" }}><div onMouseDown={(e) => startRowDrag(e, r.id)} title="Trascina per cambiare l'altezza (Maiusc = tutte le righe)" style={{ position: "absolute", left: 0, right: 0, bottom: -3, height: 7, cursor: "row-resize", zIndex: 2 }} /><input type="checkbox" checked={isSel} onChange={(e) => setSel((p) => ({ ...p, [r.id]: e.target.checked }))} aria-label={`Seleziona ${r.a} ${r.k}`} style={{ width: 16, height: 16, accentColor: M }} /></td>
                               <td style={{ ...bt, padding: "2px 6px", fontWeight: 800, fontSize: 12, color: TXT }}>{r.b}</td>
                               <td style={cell()}>
-                                <RCell readOnly={ro} kind="txt" align="center" g={`${rg}:-1`} value={r.s} onCommit={(v) => piWrite(`righe/${r.id}/s`, v == null ? v : String(v).trim().toUpperCase())} pad="3px 1px" fs={11} bold />
+                                <PCell readOnly={ro} kind="txt" align="center" g={`${rg}:-1`} value={r.s} onCommit={(v) => piWrite(`righe/${r.id}/s`, v == null ? v : String(v).trim().toUpperCase())} pad="3px 1px" fs={11} bold />
                               </td>
                               <td style={{ ...bt, padding: "2px 6px", lineHeight: 1.15, cursor: "pointer" }} onClick={() => { if (!ro) setEdit({ id: r.id, ...r }); }} title="Modifica la riga">
                                 <div style={{ fontWeight: 800, fontSize: 12, color: TXT }}>{r.a}</div>
                                 <div style={{ fontSize: 10, color: T2 }}>{r.k}</div>
                               </td>
                               <td style={cell()} title="Consegna: scrivi gg/mm o gg/mm/aa">
-                                <RCell readOnly={ro} kind="txt" align="center" g={`${rg}:-0.5`} value={piItDate(r.d)} fmt={(x) => (/^\d\d\/\d\d\/\d{4}$/.test(x) ? x.slice(0, 5) : x)} onCommit={(v) => { const nv = piParseCons(v); if (nv === undefined) { window.alert("Data non valida: scrivi gg/mm oppure gg/mm/aa"); return; } if (nv !== (r.d ?? null)) piWrite(`righe/${r.id}/d`, nv); }} pad="3px 1px" fs={11} />
+                                <PCell readOnly={ro} kind="txt" align="center" g={`${rg}:-0.5`} value={piItDate(r.d)} fmt={(x) => (/^\d\d\/\d\d\/\d{4}$/.test(x) ? x.slice(0, 5) : x)} onCommit={(v) => { const nv = piParseCons(v); if (nv === undefined) { window.alert("Data non valida: scrivi gg/mm oppure gg/mm/aa"); return; } if (nv !== (r.d ?? null)) piWrite(`righe/${r.id}/d`, nv); }} pad="3px 1px" fs={11} />
                               </td>
                               <td style={{ ...bt, textAlign: "center", fontFamily: MONO, fontSize: 11, fontWeight: 700, padding: "2px 4px" }}>{r.bl}</td>
                               <td style={{ ...bt, textAlign: "center", fontFamily: MONO, fontSize: 12, fontWeight: 700, padding: "2px 2px" }}>{r.r}</td>
@@ -4894,7 +4898,7 @@ function PianoTab({ pia, vers, wide }) {
                                 const col = PI_MATCOL[st];
                                 return (
                                   <td key={k} style={cell()}>
-                                    <RCell readOnly={ro} kind="txt" align="center" g={`${rg}:${j}`} value={r.m?.[k]} onCommit={(v) => piWrite(`righe/${r.id}/m/${k}`, v)} pad="3px 1px" fs={11} bg={col ? col[0] : undefined} fg={col ? col[1] : undefined} bold />
+                                    <PCell readOnly={ro} kind="txt" align="center" g={`${rg}:${j}`} value={r.m?.[k]} onCommit={(v) => piWrite(`righe/${r.id}/m/${k}`, v)} pad="3px 1px" fs={11} bg={col ? col[0] : undefined} fg={col ? col[1] : undefined} bold />
                                   </td>
                                 );
                               })}
@@ -4903,7 +4907,7 @@ function PianoTab({ pia, vers, wide }) {
                               </td>
                               {nums.map(([f, v, kd], j) => (
                                 <td key={f} style={f === "g" ? { ...cell(), background: "#E4E7EC" } : cell()}>
-                                  <RCell readOnly={ro} kind={kd} align="center" g={`${rg}:${6 + j}`} bg={f === "g" ? "#E4E7EC" : undefined} fg={f === "g" ? "#4B5563" : undefined} value={kd === "dec" && v ? piFmtN(v) : v} fmt={kd === "dec" ? (x) => "€ " + x : undefined} onCommit={(nv) => piWrite(`righe/${r.id}/${f}`, nv)} pad="3px 1px" fs={12} bold />
+                                  <PCell readOnly={ro} kind={kd} align="center" g={`${rg}:${6 + j}`} bg={f === "g" ? "#E4E7EC" : undefined} fg={f === "g" ? "#4B5563" : undefined} value={kd === "dec" && v ? piFmtN(v) : v} fmt={kd === "dec" ? (x) => "€ " + x : undefined} onCommit={(nv) => piWrite(`righe/${r.id}/${f}`, nv)} pad="3px 1px" fs={12} bold />
                                 </td>
                               ))}
                               <td style={{ ...bt, background: "#DCE5F3", textAlign: "center", fontFamily: MONO, fontSize: 12, fontWeight: 700 }}>{piSaldo(r)}</td>
@@ -4915,7 +4919,7 @@ function PianoTab({ pia, vers, wide }) {
                                 const late = !!v && /^\d{4}-\d\d-\d\d$/.test(r.d || "") && piMonday(w.k).toISOString().slice(0, 10) > r.d;
                                 return (
                                   <td key={w.k} style={{ ...cell(), ...wlOf(i) }}>
-                                    <RCell readOnly={ro} kind="num" align="center" g={`${rg}:${10 + i}`} value={v || ""} onCommit={(nv) => piWrite(`righe/${r.id}/w/${w.k}`, nv)} pad="3px 0" fs={12} bold bg={v ? (late ? "#C62828" : "#BBD0FF") : undefined} fg={v ? (late ? "#FFFFFF" : "#1A3FA0") : undefined} />
+                                    <PCell readOnly={ro} kind="num" align="center" g={`${rg}:${10 + i}`} value={v || ""} onCommit={(nv) => piWrite(`righe/${r.id}/w/${w.k}`, nv)} pad="3px 0" fs={12} bold bg={v ? (late ? "#C62828" : "#BBD0FF") : undefined} fg={v ? (late ? "#FFFFFF" : "#1A3FA0") : undefined} />
                                   </td>
                                 );
                               })}
@@ -4970,7 +4974,7 @@ function PianoTab({ pia, vers, wide }) {
       {showVers && <PianoVersModal vers={vers || {}} rows={liveRows} righe={pia.righe || {}} meta={liveMeta} weeks={weeks} mode={showVers} onView={(v, rr) => { setSel({}); setView({ name: v.name, week: v.week, rows: rr }); }} onClose={() => setShowVers(false)} />}
     </div>
   );
-}
+});
 
 function PianoRowModal({ row, calzs, onSave, onDelete, onClose }) {
   const [f, setF] = useState({ b: row.b || "", c: row.c || (calzs[0] || "MOS"), s: row.s || "", a: row.a || "", k: row.k || "", bl: row.bl || "", r: row.r || "", d: row.d || "" });
