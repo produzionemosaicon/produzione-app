@@ -4092,12 +4092,16 @@ async function piXlsxLoad(wb, buf) {
   }
   await wb.xlsx.load(await zip.generateAsync({ type: "arraybuffer" }));
 }
+// il Piano guarda solo gli ordini di produzione (sezionale 5/ + numero): 4/ (riparazioni e reintegri), 2/ e 1/ non contano
+// per le date (il file SITUAZIONE ORDINI FORNITORI li tiene tutti). Riga senza numero d'ordine: resta dentro.
+const piDmRip = (ord) => { const t = String(ord ?? "").trim(); return /\d\s*\//.test(t) && !/^\D*5\s*\//.test(t); };
 // righe che non si toccano mai: Hermes AH26 e PE27 (le compila l'ufficio a mano)
 const piDmSkip = (r) => /HERMES/i.test(String(r.b || "")) && ["AH26", "PE27"].includes(piStag(r));
 // opts.clear = prima svuota TO, FO, SO, SU, TA (le righe escluse restano come sono)
 async function piDateMateriali(files, rows, opts = {}) {
   const ExcelJS = (await import("exceljs")).default;
   const lines = [], closed = [], bolle = [], used = [], forme = [];
+  let rip = 0;   // righe d'ordine non di produzione (4/, 2/, 1/) lasciate fuori
   for (const file of files) {
     const wb = new ExcelJS.Workbook();
     await piXlsxLoad(wb, await file.arrayBuffer());
@@ -4115,6 +4119,7 @@ async function piDateMateriali(files, rows, opts = {}) {
             return;
           }
           if (!cat) return;
+          if (piDmRip(o["ORDINE"])) { rip++; return; }
           const desc = String(o["DESCRIZIONE ARTICOLO"] || ""), colr = String(o["DESCRIZIONE COLORE"] || "");
           lines.push({ cat, desc, col: colr, d: piDmNorm(desc), full: piDmNorm(desc + colr), left: +o["DA RICEVERE"] || 0, ...piDmWhen(o["SCADENZA"], o["DATA DI CONSEGNA COMUNICATA"]),
             forn: String(o["FORNITORE"] || "").replace(/^\d+\s*-\s*/, ""),
@@ -4126,7 +4131,7 @@ async function piDateMateriali(files, rows, opts = {}) {
       if (chi) { chi.forEach((o) => {
         const desc = String(o["DESCRIZIONE ARTICOLO"] || ""), colr = String(o["DESCRIZIONE COLORE"] || "");
         if (!desc) return;
-        closed.push({ d: piDmNorm(desc), full: piDmNorm(desc + colr), col: colr });
+        if (!piDmRip(o["ORDINE"])) closed.push({ d: piDmNorm(desc), full: piDmNorm(desc + colr), col: colr });
         // forme già consegnate (righe chiuse): servono per Tot. forme
         if (/FORMIFICIO/i.test(String(o["FORNITORE"] || "")) || /^\s*FORMA\b/i.test(desc)) forme.push({ mods: [], n: +o["ORDINATO"] || 0, desc, ord: String(o["ORDINE"] || ""), chiusa: true });
       }); continue; }
@@ -4231,7 +4236,7 @@ async function piDateMateriali(files, rows, opts = {}) {
       if (tot > 0) { upd[`righe/${r.id}/m/fm`] = String(tot); changes.push({ id: r.id, row: label, cat: "fm", old: "", v: String(tot), why: fl.map((f) => `${f.desc}: ${f.n} paia${f.chiusa ? " (consegnata)" : ""}`).join(" · ") }); }
     }
   });
-  return { upd, changes, matched, viaBolle, lines: lines.length, bolle: bolleMods.size, used, cleared, skipped, clear: !!opts.clear };
+  return { upd, changes, matched, viaBolle, lines: lines.length, rip, bolle: bolleMods.size, used, cleared, skipped, clear: !!opts.clear };
 }
 
 /* ── Cartella SOLLECITI FORNITORI collegata al Piano (solo Chrome/Edge sul PC) ──
@@ -4750,7 +4755,7 @@ const PianoTab = memo(function PianoTab({ pia, vers, wide }) {
                 </div>
               ) : dm.err ? <div style={{ color: RED, fontSize: 13, marginTop: 6 }}>Non riesco a leggere il file: {dm.err}</div> : (
                 <div style={{ fontSize: 12, color: T2, marginTop: 4 }}>
-                  {dm.lines} righe ordine · bolle di {dm.bolle} modelli · {dm.matched} righe del piano trovate ({dm.viaBolle} con la bolla) · <b style={{ color: M }}>{dm.changes.length} celle {dm.auto ? "aggiornate" : "da aggiornare"}</b>{dm.clear ? <> (di cui <b style={{ color: "#9A3412" }}>{dm.cleared} svuotate</b>)</> : null} · Hermes AH26 e PE27 non toccate ({dm.skipped} righe)
+                  {dm.lines} righe ordine{dm.rip ? ` (${dm.rip} ordini non di produzione esclusi: 4/, 2/, 1/)` : ""} · bolle di {dm.bolle} modelli · {dm.matched} righe del piano trovate ({dm.viaBolle} con la bolla) · <b style={{ color: M }}>{dm.changes.length} celle {dm.auto ? "aggiornate" : "da aggiornare"}</b>{dm.clear ? <> (di cui <b style={{ color: "#9A3412" }}>{dm.cleared} svuotate</b>)</> : null} · Hermes AH26 e PE27 non toccate ({dm.skipped} righe)
                   <div style={{ marginTop: 4 }}>File letti: {dm.used.map((u) => `${u.name} (${u.kind})`).join(", ")}</div>
                   <div style={{ marginTop: 4 }}>TO = pellami e tessuti, FO = fodere, SO = sottopiedi, SU = suole, TA = tacchi e sottotacchi. Data comunicata dal fornitore se c'è, altrimenti scadenza ordine; con più ordini la più lontana; tutto ricevuto = OK.</div>
                 </div>
