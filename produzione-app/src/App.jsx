@@ -1914,6 +1914,8 @@ const PI_IC = {
   eye: "M10 12a2 2 0 1 0 4 0a2 2 0 0 0-4 0M21 12c-2.4 4-5.4 6-9 6c-3.6 0-6.6-2-9-6c2.4-4 5.4-6 9-6c3.6 0 6.6 2 9 6",
   help: "M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0M12 17v.01M12 13.5a1.5 1.5 0 0 1 1-1.5a2.6 2.6 0 1 0-3-4",
   refresh: "M19.95 11a8 8 0 1 0-.5 4m.5 5v-5h-5",
+  undo: "M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11",
+  redo: "M15 14l5-5l-5-5M20 9H9.5a5.5 5.5 0 0 0 0 11H13",
   truck: "M3 6h11v10H3zM14 9h4l3 3v4h-7M7 18.5a1.5 1.5 0 1 0 0-.01M17 18.5a1.5 1.5 0 1 0 0-.01",
 };
 function PIc({ n, s = 16 }) { return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flex: "none" }}><path d={PI_IC[n]} /></svg>; }
@@ -2894,7 +2896,7 @@ function RCell({ value, onCommit, kind = "num", g, bold, warn, width, align, pad
     <input
       ref={elRef}
       type={kind === "date" ? "date" : "text"} inputMode={kind === "num" ? "text" : undefined}
-      value={shown} data-g={g} readOnly={readOnly} size={pad ? 1 : undefined}
+      value={shown} data-g={g} data-dirty={v !== null ? "1" : undefined} readOnly={readOnly} size={pad ? 1 : undefined}
       onFocus={(e) => { if (v === null) setV(base); if (kind !== "date") e.target.select(); }}
       onChange={(e) => setV(e.target.value)} onBlur={commit}
       style={{ width: width || "100%", boxSizing: "border-box", border: "none", background: bg || (warn ? ACL : "transparent"), outline: "none", fontFamily: kind === "num" || kind === "dec" ? MONO : FONT, fontSize: fs || 13, fontWeight: bold ? 800 : 600, color: fg || (warn ? ACC : kind === "num" || kind === "dec" ? M : TXT), textAlign: align || (kind === "num" || kind === "dec" ? "right" : "left"), padding: pad || "8px 6px", minWidth: 0 }}
@@ -3771,7 +3773,51 @@ function piSort(a, b) {
   return a.localeCompare(b);
 }
 const piSlug = (s) => String(s).replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "");
-const piWrite = (path, v) => set(ref(db, `piano/${path}`), v === undefined || v === "" ? null : v);
+// ── Annulla / Ripeti (come Ctrl+Z / Ctrl+Y in Excel) per le modifiche fatte nel PIANO da questa pagina.
+// Ogni scrittura salva il valore precedente; le scritture ravvicinate (es. "Scrivi in tutte", Canc su più celle) diventano un passo solo.
+// La cronologia vale finché la pagina resta aperta (max 50 passi).
+const PI_HIST_MAX = 50;
+const piHist = { undo: [], redo: [], subs: new Set(), running: false };
+const piHistEmit = () => piHist.subs.forEach((f) => f());
+const piNorm = (v) => (v === undefined || v === "" ? null : v);
+const piSame = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+const piHistPush = (path, old, nv) => {
+  if (piHist.running || piSame(old, nv)) return;
+  const now = Date.now(), last = piHist.undo[piHist.undo.length - 1];
+  const ovl = (x, y) => x === y ? false : x.startsWith(y + "/") || y.startsWith(x + "/");
+  if (last && now - last.ts < 600 && !last.ops.some((op) => ovl(op.path, path))) { last.ops.push({ path, old, nv }); last.ts = now; }
+  else { piHist.undo.push({ ts: now, ops: [{ path, old, nv }] }); if (piHist.undo.length > PI_HIST_MAX) piHist.undo.shift(); }
+  piHist.redo = []; piHistEmit();
+};
+// scrittura con memoria per l'annulla: path relativo a "piano/"
+const piSetH = async (path, v) => {
+  const r = ref(db, `piano/${path}`), nv = piNorm(v);
+  let old = null; try { old = (await get(r)).val(); } catch (e) { old = undefined; }
+  await set(r, nv);
+  if (old !== undefined) piHistPush(path, old, nv);
+};
+const piWrite = (path, v) => piSetH(path, v);
+const piHistRun = async (dir) => {
+  const from = dir === "undo" ? piHist.undo : piHist.redo, to = dir === "undo" ? piHist.redo : piHist.undo;
+  const step = from[from.length - 1]; if (!step || piHist.running) return;
+  piHist.running = true; piHistEmit();
+  try {
+    // controllo: se nel frattempo qualcuno ha cambiato le stesse celle, chiedo prima di sovrascrivere
+    const exp = (op) => (dir === "undo" ? op.nv : op.old), put = (op) => (dir === "undo" ? op.old : op.nv);
+    const cur = await Promise.all(step.ops.map((op) => get(ref(db, `piano/${op.path}`)).then((s) => s.val())));
+    const changed = step.ops.filter((op, i) => !piSame(cur[i], exp(op))).length;
+    if (changed && !window.confirm(`${changed === 1 ? "Una cella è stata cambiata" : changed + " celle sono state cambiate"} da qualcun altro dopo la tua modifica. ${dir === "undo" ? "Annullo" : "Ripeto"} lo stesso?`)) return;
+    const upd = {}; (dir === "undo" ? [...step.ops].reverse() : step.ops).forEach((op) => { upd[op.path] = put(op); });
+    await update(ref(db, "piano"), upd);
+    from.pop(); to.push(step);
+  } catch (e) { console.error(e); window.alert((dir === "undo" ? "Annulla" : "Ripeti") + " non riuscito: " + e.message); }
+  finally { piHist.running = false; piHistEmit(); }
+};
+function usePiHist() {
+  const [, force] = useState(0);
+  useEffect(() => { const f = () => force((x) => x + 1); piHist.subs.add(f); return () => piHist.subs.delete(f); }, []);
+  return { nU: piHist.undo.length, nR: piHist.redo.length, running: piHist.running };
+}
 // materiale/data in forma da salvare: tolgo i vuoti
 const piCleanRow = (r) => {
   const o = { ...r }; delete o.id; delete o._st;
@@ -4287,6 +4333,25 @@ const piItDate = (d) => (d && /^\d{4}-\d\d-\d\d$/.test(d) ? `${d.slice(8)}/${d.s
 const PianoTab = memo(function PianoTab({ pia, vers, wide }) {
   const [view, setView] = useState(null);   // versione aperta in sola lettura (non tocca il piano di lavoro)
   const ro = !!view;
+  const hist = usePiHist();
+  // Ctrl+Z = annulla, Ctrl+Y (o Ctrl+Maiusc+Z) = ripeti; mentre si scrive in una cella vale l'annulla normale del testo
+  const roRef = useRef(ro); roRef.current = ro;
+  useEffect(() => {
+    const h = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const k = e.key.toLowerCase();
+      const isU = k === "z" && !e.shiftKey, isR = k === "y" || (k === "z" && e.shiftKey);
+      if (!isU && !isR) return;
+      const root = rootRef.current; if (!root || root.offsetParent === null || roRef.current) return;
+      const ae = document.activeElement;
+      const typing = ae && (ae.tagName === "TEXTAREA" || ae.isContentEditable || (ae.tagName === "INPUT" && (!ae.dataset.g || ae.dataset.dirty === "1")));
+      if (typing) return;
+      e.preventDefault();
+      piHistRun(isU ? "undo" : "redo");
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
   // selezione stile Excel: trascinamento = rettangolo, Ctrl/Cmd+clic = aggiunge/toglie celle, Maiusc+clic = estende
   const rootRef = useRef(null);
   const [selTot, setSelTot] = useState(null);
@@ -4658,12 +4723,12 @@ const PianoTab = memo(function PianoTab({ pia, vers, wide }) {
       else { const nx = all.find((v) => v > lastO); row.o = nx === undefined ? lastO + 1 : (lastO + nx) / 2; }
       row.ts = Date.now();
     }
-    try { await set(ref(db, `piano/righe/${nid}`), piCleanRow(row)); setEdit(null); }
+    try { await piSetH(`righe/${nid}`, piCleanRow(row)); setEdit(null); }
     catch (e) { console.error(e); window.alert("Salvataggio non riuscito: " + e.message); }
   };
   const delRow = async (id) => {
     if (!window.confirm("Eliminare questa riga dal piano?")) return;
-    try { await set(ref(db, `piano/righe/${id}`), null); setEdit(null); } catch (e) { window.alert("Eliminazione non riuscita: " + e.message); }
+    try { await piSetH(`righe/${id}`, null); setEdit(null); } catch (e) { window.alert("Eliminazione non riuscita: " + e.message); }
   };
 
   const th = { position: "relative", background: ML, padding: "7px 5px", fontSize: 13, color: "#1E293B", fontWeight: 800, borderBottom: `2px solid ${BRD2}`, borderRight: `1px solid ${BRD}`, whiteSpace: "nowrap", textAlign: "center", lineHeight: 1.15 };
@@ -4692,6 +4757,9 @@ const PianoTab = memo(function PianoTab({ pia, vers, wide }) {
           <span style={{ fontSize: 15, fontWeight: 900, color: TXT }}>Piano <span style={{ color: M }}>{meta.name || ""}</span></span>
           <span style={{ fontSize: 11, color: T2, marginLeft: 8 }}>{rows.length} righe{meta.savedName ? ` · ultima versione: ${meta.savedName}` : ""}</span>
         </div>
+        {!ro && <IBtn ic="undo" title={hist.nU ? `Annulla l'ultima modifica (Ctrl+Z) · ${hist.nU} ${hist.nU === 1 ? "passo" : "passi"}` : "Niente da annullare"} disabled={!hist.nU || hist.running} onClick={() => piHistRun("undo")}>Annulla</IBtn>}
+        {!ro && <IBtn ic="redo" title={hist.nR ? `Ripeti (Ctrl+Y) · ${hist.nR} ${hist.nR === 1 ? "passo" : "passi"}` : "Niente da ripetere"} disabled={!hist.nR || hist.running} onClick={() => piHistRun("redo")} />}
+        {!ro && <span style={{ width: 1, height: 20, background: BRD2 }} />}
         <IBtn ic="minus" title="Riduci zoom" onClick={() => setZoom(zm - 0.05)} />
         <input type="range" min={30} max={150} step={1} value={Math.round(zm * 100)} onChange={(e) => setZoom(+e.target.value / 100)} aria-label="Zoom" title="Zoom" style={{ width: 150, accentColor: M, cursor: "pointer" }} />
         <IBtn ic="plus" title="Aumenta zoom" onClick={() => setZoom(zm + 0.05)} />
